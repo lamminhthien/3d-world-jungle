@@ -10,6 +10,7 @@ export const SPAWN = { x: 10.5, z: 2 };
 export const SPEED = 4.6;
 
 export const DEFAULT_SEED = 'FOREST_123';
+export const DEFAULT_MAX_FPS = 60;
 
 export const MAX_TREES = 220;
 export const BUSH_COUNT = 120;

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DEFAULT_SEED, ENV, RIVER_HALF, SPEED, WORLD } from './config.js';
+import { DEFAULT_SEED, DEFAULT_MAX_FPS, ENV, RIVER_HALF, SPEED, WORLD } from './config.js';
 import { groundHeight, isOnBridge, obstacles, riverDist } from './utils.js';
 import { QUALITY, setupCore } from './core/setup.js';
 import { runPreGameCache } from './core/bootCache.js';
@@ -110,6 +110,14 @@ async function boot() {
   if (seedInput) {
     seedInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') applySeed(seedInput.value.trim() || randomSeedString());
+    });
+  }
+
+  const fpsSelect = document.getElementById('fpsSelect');
+  if (fpsSelect) {
+    fpsSelect.value = String(targetFps);
+    fpsSelect.addEventListener('change', (e) => {
+      targetFps = parseInt(e.target.value, 10);
     });
   }
 
@@ -369,13 +377,18 @@ async function boot() {
   }
 
   // ============ Loop ============
+  let targetFps = DEFAULT_MAX_FPS;
+  let lastFrameTime = 0;
   const prCap = Math.min(devicePixelRatio || 1, QUALITY.maxPixelRatio);
   let qualityCooldown = 0;
   let downVotes = 0;
   let upVotes = 0;
 
-  function animate() {
+  function animate(now) {
     requestAnimationFrame(animate);
+    if (lastFrameTime !== 0 && now - lastFrameTime < 1000 / targetFps) return;
+    lastFrameTime = now - ((now - lastFrameTime) % (1000 / targetFps));
+
     const dt = Math.min(clock.getDelta(), 0.05);
     update(dt);
     renderer.render(scene, camera);
@@ -402,13 +415,13 @@ async function boot() {
       if (qualityCooldown > cooldown) {
         qualityCooldown = 0;
         const pr = renderer.getPixelRatio();
-        if (avg < 45 && pr > QUALITY.minPixelRatio) {
+        if (avg < targetFps * 0.75 && pr > QUALITY.minPixelRatio) {
           upVotes = 0;
           if (++downVotes >= 2) {
             downVotes = 0;
             renderer.setPixelRatio(Math.max(QUALITY.minPixelRatio, pr - 0.25));
           }
-        } else if (avg > 57 && pr < prCap) {
+        } else if (avg > targetFps * 0.95 && pr < prCap) {
           downVotes = 0;
           if (++upVotes >= 2) {
             upVotes = 0;
