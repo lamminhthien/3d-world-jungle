@@ -14,6 +14,7 @@ import { createPlayer } from './entities/player.js';
 import { setupControls } from './input/controls.js';
 import { setupPwaUi } from './core/pwa.js';
 import { randomSeedString } from './world/noise.js';
+import { AutoPlayAgent } from './core/autoPlay.js';
 
 // ============ Seed (docs section 4.1): ?seed= in URL, else default ============
 const params = new URLSearchParams(location.search);
@@ -175,6 +176,55 @@ async function boot() {
     });
   }
 
+  // ============ Auto Play Agent ============
+  const autoPlay = new AutoPlayAgent({ core, player, env });
+  const btnAutoPlay = document.getElementById('btnAutoPlay');
+  const btnTitleAutoPlay = document.getElementById('btnTitleAutoPlay');
+  const autoPlayBadge = document.getElementById('autoPlayBadge');
+  const btnStopAutoPlay = document.getElementById('btnStopAutoPlay');
+
+  function updateAutoPlayUI(isActive) {
+    if (btnAutoPlay) {
+      btnAutoPlay.classList.toggle('active', isActive);
+      btnAutoPlay.title = isActive ? 'Stop Auto Play' : 'Start Auto Play';
+    }
+    if (autoPlayBadge) {
+      autoPlayBadge.hidden = !isActive;
+    }
+  }
+
+  function startAutoPlay() {
+    if (!started) {
+      startGame();
+    }
+    autoPlay.setEnabled(true);
+    updateAutoPlayUI(true);
+    closeMenu();
+  }
+
+  function stopAutoPlay() {
+    autoPlay.setEnabled(false);
+    updateAutoPlayUI(false);
+  }
+
+  function toggleAutoPlay() {
+    if (autoPlay.enabled) {
+      stopAutoPlay();
+    } else {
+      startAutoPlay();
+    }
+  }
+
+  if (btnAutoPlay) btnAutoPlay.addEventListener('click', toggleAutoPlay);
+  if (btnTitleAutoPlay) btnTitleAutoPlay.addEventListener('click', startAutoPlay);
+  if (btnStopAutoPlay) btnStopAutoPlay.addEventListener('click', stopAutoPlay);
+
+  // Global hook for debugging or console
+  if (typeof window !== 'undefined') {
+    window.__autoPlay = autoPlay;
+    window.__toggleAutoPlay = toggleAutoPlay;
+  }
+
   // ============ HUD ============
   const posEl = document.getElementById('pos');
   const fpsEl = document.getElementById('fps');
@@ -194,16 +244,35 @@ async function boot() {
   function update(dt) {
     let ix = 0;
     let iz = 0;
+    let sprinting = false;
+
     if (!started) {
       // Attract mode behind the title screen: slow orbit, no movement.
       state.azimuth += dt * 0.08;
     } else {
-      if (keys.KeyW || keys.ArrowUp) iz -= 1;
-      if (keys.KeyS || keys.ArrowDown) iz += 1;
-      if (keys.KeyA || keys.ArrowLeft) ix -= 1;
-      if (keys.KeyD || keys.ArrowRight) ix += 1;
-      ix += joy.x;
-      iz += joy.y;
+      let manualInput = false;
+      if (keys.KeyW || keys.ArrowUp) { iz -= 1; manualInput = true; }
+      if (keys.KeyS || keys.ArrowDown) { iz += 1; manualInput = true; }
+      if (keys.KeyA || keys.ArrowLeft) { ix -= 1; manualInput = true; }
+      if (keys.KeyD || keys.ArrowRight) { ix += 1; manualInput = true; }
+      if (Math.hypot(joy.x, joy.y) > 0.1) {
+        ix += joy.x;
+        iz += joy.y;
+        manualInput = true;
+      }
+      sprinting = keys.ShiftLeft || keys.ShiftRight || touch?.sprintHeld || joy.mag > 0.92;
+
+      // If player manually interacts with movement controls while auto play is active, pause auto play
+      if (manualInput && autoPlay.enabled) {
+        stopAutoPlay();
+      }
+
+      if (autoPlay.enabled) {
+        autoPlay.update(dt);
+        ix = autoPlay.simulatedInput.ix;
+        iz = autoPlay.simulatedInput.iz;
+        sprinting = autoPlay.simulatedInput.sprint;
+      }
     }
 
     const moving = Math.hypot(ix, iz) > 0.1;
@@ -219,8 +288,6 @@ async function boot() {
       iz /= Math.max(1, len);
       _move.set(0, 0, 0).addScaledVector(_fwd, -iz).addScaledVector(_right, ix).normalize();
 
-      // Sprint: hold Shift (desktop) / 🏃 / push the joystick fully (mobile).
-      const sprinting = keys.ShiftLeft || keys.ShiftRight || touch?.sprintHeld || joy.mag > 0.92;
       // Analog: light push = walk slowly, hard push = walk fast.
       const speed = SPEED * (sprinting ? 1.6 : 1) * (0.35 + 0.65 * inputMag);
 

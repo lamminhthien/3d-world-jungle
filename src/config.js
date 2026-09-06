@@ -7,7 +7,7 @@ export const BRIDGES = [-10, 12];
 
 export const SPAWN = { x: 10.5, z: 2 };
 
-export const SPEED = 6;
+export const SPEED = 4.6;
 
 export const DEFAULT_SEED = 'FOREST_123';
 

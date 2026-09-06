@@ -158,17 +158,71 @@ body.is-standalone #btnFullscreen { display: none; }
   border-radius: 50%; cursor: pointer; line-height: 1;
 }
 .title-seed button:hover { background: #c8e6c9; }
+.title-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
 #btnPlay {
-  margin-top: 18px; border: none; cursor: pointer;
+  margin-top: 0; border: none; cursor: pointer;
   background: linear-gradient(180deg, #66bb6a, #43a047); color: #fff;
-  font-size: 20px; font-weight: 800; letter-spacing: .5px;
-  padding: 14px 56px; border-radius: 999px;
+  font-size: 18px; font-weight: 800; letter-spacing: .5px;
+  padding: 12px 34px; border-radius: 999px;
   box-shadow: 0 10px 24px rgba(46,125,50,.4);
   transition: transform .12s ease, box-shadow .12s ease;
   touch-action: manipulation;
 }
 #btnPlay:hover { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(46,125,50,.45); }
 #btnPlay:active { transform: scale(.96); }
+
+.title-auto-btn {
+  border: 1px solid #81c784; cursor: pointer;
+  background: rgba(255, 255, 255, 0.95); color: #2e7d32;
+  font-size: 16px; font-weight: 700;
+  padding: 12px 24px; border-radius: 999px;
+  box-shadow: 0 6px 16px rgba(46,125,50,.2);
+  transition: all .15s ease;
+  touch-action: manipulation;
+}
+.title-auto-btn:hover { background: #e8f5e9; transform: translateY(-1px); }
+.title-auto-btn:active { transform: scale(.96); }
+
+/* Auto Play HUD badge */
+.auto-play-badge {
+  position: absolute; top: 20px; right: 74px;
+  background: rgba(20, 32, 24, 0.88); backdrop-filter: blur(8px);
+  border: 1px solid rgba(129, 199, 132, 0.4); border-radius: 12px;
+  padding: 8px 14px; font-size: 13px; font-weight: 700;
+  color: #a5d6a7; display: flex; align-items: center; gap: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  pointer-events: auto; white-space: nowrap; z-index: 10;
+}
+.auto-play-badge[hidden] { display: none; }
+.auto-play-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #00e676; box-shadow: 0 0 10px #00e676;
+  animation: dot-pulse 1.2s infinite;
+}
+@keyframes dot-pulse {
+  0% { transform: scale(0.9); opacity: 0.8; }
+  50% { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.8; }
+}
+.auto-stop-btn {
+  border: none; background: rgba(255, 255, 255, 0.2); color: #fff;
+  border-radius: 50%; width: 20px; height: 20px; font-size: 11px;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; margin-left: 4px; line-height: 1; transition: background .12s;
+}
+.auto-stop-btn:hover { background: rgba(244, 67, 54, 0.8); }
+
+.auto-play-btn.active {
+  background: #43a047; color: #fff; border-color: #2e7d32;
+}
+
 .title-help { font-size: 12px; color: #689f38; margin-top: 14px; }
 
 /* ============ HUD visibility tied to game state ============ */

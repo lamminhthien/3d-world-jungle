@@ -23,6 +23,9 @@
       <div class="title mini">
         <h1>🌿 Jungle Stroll</h1>
       </div>
+      <div id="autoPlayBadge" class="auto-play-badge" hidden>
+        <span class="auto-play-dot"></span> Auto Playing <button id="btnStopAutoPlay" class="auto-stop-btn" title="Stop Auto Play">✕</button>
+      </div>
       <button id="menuBtn" class="icon-btn" title="Menu" aria-label="Open menu" aria-haspopup="true" aria-expanded="false">☰</button>
       <div id="menuPanel" class="menu-panel" hidden>
         <div class="menu-section">
@@ -30,6 +33,7 @@
           <div class="menu-row">
             <div id="fps">60 FPS</div>
             <div id="pos">x: 0, z: 0</div>
+            <button id="btnAutoPlay" class="icon-btn auto-play-btn" title="Toggle Auto Play" aria-label="Toggle Auto Play">🤖</button>
             <button id="btnInstall" class="icon-btn" title="Install app" aria-label="Install app" hidden>⬇️</button>
             <button id="btnFullscreen" class="icon-btn" title="Fullscreen" aria-label="Fullscreen">⛶</button>
           </div>
@@ -86,7 +90,10 @@
           <input id="titleSeed" spellcheck="false" autocomplete="off" />
           <button id="titleDice" title="Random seed">🎲</button>
         </div>
-        <button id="btnPlay">▶&nbsp; Play</button>
+        <div class="title-actions">
+          <button id="btnPlay">▶&nbsp; Play</button>
+          <button id="btnTitleAutoPlay" class="title-auto-btn" title="Auto Play Jungle Tour">🤖&nbsp; Auto Play</button>
+        </div>
         <p class="title-help">WASD / arrows to stroll &bull; drag to rotate &bull; scroll to zoom</p>
       </div>
     </div>
