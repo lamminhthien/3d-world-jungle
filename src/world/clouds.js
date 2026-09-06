@@ -13,7 +13,8 @@ export function createClouds(scene) {
     flatShading: true,
     roughness: 1,
     transparent: true,
-    opacity: 0.92,
+    opacity: 0.8,
+    depthWrite: false,
   });
   const clouds = [];
 
@@ -28,7 +29,11 @@ export function createClouds(scene) {
     }
     const ang = rand(0, Math.PI * 2);
     const rad = rand(30, 44);
-    g.position.set(Math.cos(ang) * rad, rand(24, 30), Math.sin(ang) * rad);
+    // Camera iso ở cao ~35 units (distance 60 * sin(35°)), nhìn xuống 35°.
+    // Mây PHẢI ở trên camera (42-48) thì mới lơ lửng ở rìa trên màn hình
+    // như bầu trời. Để ở 24-38 là ngang tầm camera -> bay xuyên qua
+    // trước mặt camera, che kín đất (đây chính là lỗi "mù mịt").
+    g.position.set(Math.cos(ang) * rad, rand(42, 48), Math.sin(ang) * rad);
     g.userData.speed = rand(0.2, 0.6);
     g.userData.driftZ = rand(-0.15, 0.15);
     g.userData.bobPhase = rand(0, Math.PI * 2);

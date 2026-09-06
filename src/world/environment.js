@@ -29,11 +29,14 @@ const STOPS = [
 ];
 
 // Weather modifiers applied on top of the time-of-day sample.
+// fogNear/fogFar multipliers are tuned for the isometric ortho camera
+// (camera sits ~60 units from the focus): even the densest 'fog' weather
+// keeps the focus at ~30% fog, never full whiteout.
 const WX = {
-  clear:    { sun: 1.0,  hemi: 1.0,  fogFar: 1.0,  fogTint: 0xffffff, cloud: 0.92, rain: 0, fogMul: 1.0, wet: 0 },
-  overcast: { sun: 0.55, hemi: 0.8,  fogFar: 0.72, fogTint: 0xc9d2d6, cloud: 1.0,  rain: 0, fogMul: 1.0, wet: 0.15 },
-  rain:     { sun: 0.32, hemi: 0.6,  fogFar: 0.55, fogTint: 0x8fa3ad, cloud: 1.0,  rain: 1, fogMul: 1.0, wet: 1 },
-  fog:      { sun: 0.7,  hemi: 0.85, fogFar: 0.32, fogTint: 0xdde7ea, cloud: 0.6,  rain: 0, fogMul: 1.0, wet: 0.3 },
+  clear:    { sun: 1.0,  hemi: 1.0,  fogNear: 1.0,  fogFar: 1.0,  fogTint: 0xffffff, cloud: 0.75, rain: 0, fogMul: 1.0, wet: 0 },
+  overcast: { sun: 0.55, hemi: 0.8,  fogNear: 0.85, fogFar: 0.85, fogTint: 0xc9d2d6, cloud: 0.85, rain: 0, fogMul: 1.0, wet: 0.15 },
+  rain:     { sun: 0.32, hemi: 0.6,  fogNear: 0.75, fogFar: 0.7,  fogTint: 0x8fa3ad, cloud: 0.85, rain: 1, fogMul: 1.0, wet: 1 },
+  fog:      { sun: 0.7,  hemi: 0.85, fogNear: 0.6,  fogFar: 0.55, fogTint: 0xdde7ea, cloud: 0.4,  rain: 0, fogMul: 1.0, wet: 0.3 },
 };
 
 const _ca = new THREE.Color();
@@ -63,7 +66,7 @@ function mixWx(prev, next, blend) {
   const A = WX[prev];
   const B = WX[next];
   const o = {};
-  for (const k of ['sun', 'hemi', 'fogFar', 'cloud', 'rain', 'wet']) o[k] = THREE.MathUtils.lerp(A[k], B[k], blend);
+  for (const k of ['sun', 'hemi', 'fogNear', 'fogFar', 'cloud', 'rain', 'wet']) o[k] = THREE.MathUtils.lerp(A[k], B[k], blend);
   o.fogTint = new THREE.Color(A.fogTint).lerp(_ca.set(B.fogTint), blend);
   return o;
 }
@@ -176,7 +179,7 @@ export function createEnvironment(scene, opts = {}) {
     sun = null, hemi = null, ambient = null, renderer = null,
     clouds = null, river = null,
     dayLengthSec = 600, startTime = 10.0, weatherIntervalSec = 75,
-    fogNear = 45, fogFar = 95,
+    fogNear = 80, fogFar = 160,
   } = opts;
 
   const state = {
@@ -294,19 +297,22 @@ export function createEnvironment(scene, opts = {}) {
   scene.add(moonLight); scene.add(moonLight.target);
 
   // ---- Rain particles (box around focus, wraps) ----
-  const RAIN_N = 1200;
+  // Giảm mật độ + size để không mù mịt che màn hình iso.
+  const RAIN_N = 700;
+  const RAIN_BOX = 36;
+  const RAIN_H = 18;
   const rainPos = new Float32Array(RAIN_N * 3);
   const rainVel = new Float32Array(RAIN_N);
   for (let i = 0; i < RAIN_N; i++) {
-    rainPos[i * 3] = (Math.random() - 0.5) * 44;
-    rainPos[i * 3 + 1] = Math.random() * 22;
-    rainPos[i * 3 + 2] = (Math.random() - 0.5) * 44;
+    rainPos[i * 3] = (Math.random() - 0.5) * RAIN_BOX;
+    rainPos[i * 3 + 1] = Math.random() * RAIN_H;
+    rainPos[i * 3 + 2] = (Math.random() - 0.5) * RAIN_BOX;
     rainVel[i] = 14 + Math.random() * 8;
   }
   const rainGeo = new THREE.BufferGeometry();
   rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
   const rainMat = new THREE.PointsMaterial({
-    color: 0xaec6d8, size: 0.14, transparent: true, opacity: 0,
+    color: 0xaec6d8, size: 0.12, transparent: true, opacity: 0,
     depthWrite: false,
   });
   const rain = new THREE.Points(rainGeo, rainMat);
@@ -471,15 +477,18 @@ export function createEnvironment(scene, opts = {}) {
       if (renderer) renderer.toneMappingExposure = sample.exp;
 
       // --- sky / fog / background ---
-      _cb.copy(sample.fog).lerp(wx.fogTint, state.weather === 'clear' ? 0 : 0.35);
+      // Giảm lerp về fogTint để không bị wash-out trắng xóa cả màn hình.
+      _cb.copy(sample.fog).lerp(wx.fogTint, state.weather === 'clear' ? 0 : 0.22);
       if (scene.fog) {
         scene.fog.color.copy(_cb);
-        scene.fog.near = state.fogNear * (state.weather === 'fog' ? 0.45 : 1);
+        scene.fog.near = state.fogNear * wx.fogNear;
         scene.fog.far = state.fogFar * wx.fogFar * nightFogMul;
+        // Guard: far luôn phải > near + margin, nếu không sẽ whiteout.
+        if (scene.fog.far < scene.fog.near + 30) scene.fog.far = scene.fog.near + 30;
       }
       if (scene.background?.isColor) scene.background.copy(_cb);
-      skyUniforms.topColor.value.copy(sample.top).lerp(_ca.set(wx.fogTint), state.weather === 'clear' ? 0 : 0.4);
-      skyUniforms.bottomColor.value.copy(sample.bot).lerp(_ca.set(wx.fogTint), state.weather === 'clear' ? 0 : 0.4);
+      skyUniforms.topColor.value.copy(sample.top).lerp(_ca.set(wx.fogTint), state.weather === 'clear' ? 0 : 0.25);
+      skyUniforms.bottomColor.value.copy(sample.bot).lerp(_ca.set(wx.fogTint), state.weather === 'clear' ? 0 : 0.25);
       skyUniforms.sunDir.value.copy(isDay ? sunDir : moonDir);
       skyUniforms.sunColor.value.copy(isDay ? sample.sunColor : new THREE.Color(0xdce8ff));
       skyUniforms.sunGlow.value = isDay ? 0.6 * wx.sun + 0.15 : 0.25;
@@ -502,29 +511,30 @@ export function createEnvironment(scene, opts = {}) {
 
       // --- clouds: thicker + grayer when overcast/rain, dark blue-grey at night ---
       if (cloudMat) {
-        cloudMat.color.copy(cloudBaseColor).lerp(_ca.set(wx.fogTint), state.weather === 'clear' ? 0 : 0.45);
+        cloudMat.color.copy(cloudBaseColor).lerp(_ca.set(wx.fogTint), state.weather === 'clear' ? 0 : 0.35);
         // Night tint (doc section 3): white/pink day -> somber blue-grey night.
         cloudMat.color.lerp(_ca.setHex(0x2e3a55), nightF * 0.78);
-        cloudMat.opacity = state.weather === 'fog' ? 0.55 : wx.cloud;
+        cloudMat.opacity = wx.cloud;
         cloudMat.transparent = true;
       }
 
       // --- rain ---
       const targetRain = wx.rain;
-      rainMat.opacity += ((targetRain * 0.75) - rainMat.opacity) * Math.min(1, dt * 2);
+      rainMat.opacity += ((targetRain * 0.55) - rainMat.opacity) * Math.min(1, dt * 2);
       rain.visible = rainMat.opacity > 0.02;
       if (rain.visible) {
         const p = rainGeo.attributes.position.array;
-        const slant = -2.2 * targetRain;
+        const slant = -1.2 * targetRain;
+        const half = RAIN_BOX / 2;
         for (let i = 0; i < RAIN_N; i++) {
           p[i * 3 + 1] -= rainVel[i] * dt;
           p[i * 3] += slant * dt;
           if (p[i * 3 + 1] < 0) {
-            p[i * 3 + 1] = 20 + Math.random() * 2;
-            p[i * 3] = (Math.random() - 0.5) * 44;
-            p[i * 3 + 2] = (Math.random() - 0.5) * 44;
+            p[i * 3 + 1] = RAIN_H + Math.random() * 2;
+            p[i * 3] = (Math.random() - 0.5) * RAIN_BOX;
+            p[i * 3 + 2] = (Math.random() - 0.5) * RAIN_BOX;
           }
-          if (p[i * 3] < -22) p[i * 3] += 44;
+          if (p[i * 3] < -half) p[i * 3] += RAIN_BOX;
         }
         rainGeo.attributes.position.needsUpdate = true;
         rain.position.set(focusV.x, 0, focusV.z);

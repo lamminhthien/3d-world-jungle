@@ -22,8 +22,11 @@ export const WORLD = {
   groundSegments: 64,
   playRadius: 37,
   fogColor: 0xa8dcf0,
-  fogNear: 45,
-  fogFar: 95,
+  // NOTE: Ortho camera đứng cách target ~60 units (CAMERA.distance),
+  // nên fog near/far phải lớn hơn 60 nếu không cả màn hình sẽ chìm trong sương.
+  // Clear: gần như không sương ở trung tâm, chỉ fade ở rìa xa.
+  fogNear: 80,
+  fogFar: 160,
 };
 
 // Day-night + weather tuning (docs/weather-day-night-cycles.md).
