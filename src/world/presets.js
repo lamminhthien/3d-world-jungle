@@ -13,7 +13,7 @@
 import * as THREE from 'three';
 import { QUALITY } from '../core/setup.js';
 import { dummy } from '../utils.js';
-import { getBarkTexture, getBarkBump, getCactusTexture, getCactusBump, getLeafTexture, getLeafBump, getRockTexture, getRockBump } from './textures.js';
+import { getBarkTexture, getBarkBump, getCactusTexture, getCactusBump, getRockTexture, getRockBump } from './textures.js';
 
 // ---- Palettes ----
 export const PALETTES = {
@@ -118,6 +118,8 @@ function createPalmFrondGeometry() {
     pos.setXYZ(i, wx, lift - droop, t * LEN);
   }
   geo.computeVertexNormals();
+  // Crown shadow at the stem -> sunlit blade (baked along the height).
+  bakeTopLight(geo, 0.82, 1.06);
   return geo;
 }
 
@@ -173,19 +175,48 @@ function jitterRadial(geo, amt, seed) {
   return geo;
 }
 
-// Pine crown: 8 sides (was 7 — the heptagon rim showed top-down) + droop lip
-// (bottom ring pulled in 6%, 0 extra tris, reads as layered needles).
+// Baked top-light: per-vertex grayscale (dark roots -> bright crown) that
+// multiplies with instanceColor. Gives canopies real depth — sunlit top,
+// shadowed underside — from geometry alone, no texture print needed.
+// Runs once at kit build; zero per-frame cost.
+function bakeTopLight(geo, bottom = 0.68, top = 1.1) {
+  geo.computeBoundingBox();
+  const bb = geo.boundingBox;
+  const span = Math.max(1e-4, bb.max.y - bb.min.y);
+  const pos = geo.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const t = THREE.MathUtils.clamp((pos.getY(i) - bb.min.y) / span, 0, 1);
+    // Smoothstepped so the shadowing pools at the base and lifts at the rim.
+    const f = bottom + (top - bottom) * (t * t * (3 - 2 * t));
+    colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = f;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  return geo;
+}
+
+// Pine crown: 8 sides, 3 height bands with alternating skirt widths (reads
+// as layered needle branches) + droop lip at the rim.
 function createPineGeometry() {
-  const geo = new THREE.ConeGeometry(1.25, 2.6, 8);
+  const geo = new THREE.ConeGeometry(1.25, 2.6, 8, 3);
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
-    if (pos.getY(i) < -1.2) {
+    const y = pos.getY(i);
+    const t = (y + 1.3) / 2.6; // 0 base .. 1 apex
+    // Alternate skirt fullness per band: even bands flare, odd tuck in.
+    if (t > 0.02 && t < 0.98) {
+      const band = Math.min(2, (t * 3) | 0);
+      const f = band % 2 === 0 ? 1.07 : 0.93;
+      pos.setX(i, pos.getX(i) * f);
+      pos.setZ(i, pos.getZ(i) * f);
+    }
+    if (y < -1.2) {
       pos.setX(i, pos.getX(i) * 0.94);
       pos.setZ(i, pos.getZ(i) * 0.94);
     }
   }
   geo.computeVertexNormals();
-  return geo;
+  return bakeTopLight(geo, 0.62, 1.12);
 }
 
 // Cartoon-realistic trunk: tapered, gently bent (baked S-curve), root flare
@@ -216,35 +247,45 @@ function createTrunkGeometry() {
 }
 
 // Canopy puff: faceted icosahedron (cartoon look) with a cushioned squash
-// (bottom vertices tucked in 15% so blobs stack like cotton instead of balls)
-// + baked asymmetric jitter for silhouette variety.
+// (bottom vertices tucked in 15% so blobs stack like cotton instead of balls),
+// baked asymmetric jitter for silhouette variety, and baked top-light so the
+// crown glows and the underside sits in soft shadow — no texture needed.
+// Desktop uses detail 1 (80 facets, rounder foliage); low tier keeps 20.
 function createCanopyGeometry() {
-  const g = new THREE.IcosahedronGeometry(1.25, 0);
+  const g = new THREE.IcosahedronGeometry(1.25, QUALITY.low ? 0 : 1);
   const pos = g.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     if (pos.getY(i) < 0) pos.setY(i, pos.getY(i) * 0.85);
   }
   g.computeVertexNormals();
-  return jitterRadial(g, 0.09, 'canopy');
+  jitterRadial(g, QUALITY.low ? 0.09 : 0.07, 'canopy');
+  return bakeTopLight(g, 0.66, 1.1);
 }
 
 // Flower stem: thin green spike, base at origin.
 function createFlowerStemGeometry() {
   const g = new THREE.CylinderGeometry(0.025, 0.045, 0.55, 5);
   g.translate(0, 0.275, 0);
-  return g;
+  return bakeTopLight(g, 0.75, 1.05);
 }
 
-// Flower head: squashed blossom puff (reads as petals from iso distance),
-// base at origin so the placer sits it exactly on the stem tip.
+// Flower head: squashed 5-petal cup (a short 5-sided cone reads as petals
+// top-down; the faceted rim catches the sun), base at origin so the placer
+// sits it exactly on the stem tip.
 function createFlowerHeadGeometry() {
-  const g = new THREE.IcosahedronGeometry(0.17, 0);
+  const g = new THREE.ConeGeometry(0.19, 0.16, 5, 1);
+  g.translate(0, 0.08, 0);
   const pos = g.attributes.position;
   for (let i = 0; i < pos.count; i++) {
-    pos.setY(i, pos.getY(i) * 0.7 + 0.05);
+    // Flare the rim outward like an open bloom.
+    if (pos.getY(i) > 0.1) {
+      pos.setX(i, pos.getX(i) * 1.18);
+      pos.setZ(i, pos.getZ(i) * 1.18);
+    }
   }
   g.computeVertexNormals();
-  return jitterRadial(g, 0.14, 'flower');
+  jitterRadial(g, 0.08, 'flower');
+  return bakeTopLight(g, 0.8, 1.12);
 }
 
 // Fruit: small round cartoon orb (mango/orange/apple/coconut/berry differ by
@@ -301,6 +342,8 @@ function createGrassTuftGeometry() {
   merged.setAttribute('uv', new THREE.BufferAttribute(mu, 2));
   merged.setIndex(new THREE.BufferAttribute(mi, 1));
   merged.computeVertexNormals();
+  // Dark roots -> bright tips, like sunlit grass.
+  bakeTopLight(merged, 0.62, 1.1);
   return merged;
 }
 
@@ -316,7 +359,7 @@ export function createVegetationKit() {
     pine: createPineGeometry(),
     blob: createCanopyGeometry(),
     palmLeaf: createPalmFrondGeometry(),
-    bush: jitterRadial(new THREE.IcosahedronGeometry(0.7, 0), 0.12, 'bush'),
+    bush: bakeTopLight(jitterRadial(new THREE.IcosahedronGeometry(0.7, 0), 0.12, 'bush'), 0.7, 1.08),
     // P0: 8 sides (was 7), flat caps kept.
     cactus: new THREE.CylinderGeometry(0.32, 0.4, 2.4, 8),
     rock: jitterRadial(new THREE.DodecahedronGeometry(1, 0), 0.12, 'rock'),
@@ -328,18 +371,25 @@ export function createVegetationKit() {
   const flatFruit = (extra = {}) => (QUALITY.low
     ? new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true, ...extra })
     : new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness: 0.55, metalness: 0, ...extra }));
+  // Foliage: NO color/bump maps — the leaflet print looked blotchy stretched
+  // over big canopy facets (see screenshot). Depth comes from the faceted
+  // geometry + baked top-light vertex colors × vivid instanceColor tints.
+  // vertexColors:true requires every foliage geometry to carry a 'color'
+  // attribute (baked via bakeTopLight above).
+  const foliageMat = (roughness = 0.9, extra = {}) => (QUALITY.low
+    ? new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true, vertexColors: true, ...extra })
+    : new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness, metalness: 0, vertexColors: true, ...extra }));
   const materials = {
     trunk: texturedMat(0xffffff, getBarkTexture(), getBarkBump(), 0.08),
-    pine: texturedMat(0xffffff, getLeafTexture(), getLeafBump(), 0.04),
-    blob: texturedMat(0xffffff, getLeafTexture(), getLeafBump(), 0.04),
-    palmLeaf: texturedMat(0xffffff, getLeafTexture(), getLeafBump(), 0.03, { side: THREE.DoubleSide }),
-    bush: texturedMat(0xffffff, getLeafTexture(), getLeafBump(), 0.04),
+    pine: foliageMat(0.9),
+    blob: foliageMat(0.9),
+    palmLeaf: foliageMat(0.85, { side: THREE.DoubleSide }),
+    bush: foliageMat(0.9),
     cactus: texturedMat(0xffffff, getCactusTexture(), getCactusBump(), 0.06),
     rock: texturedMat(0xffffff, getRockTexture(), getRockBump(), 0.07, { roughness: 1 }),
-    grass: texturedMat(0xffffff, getLeafTexture(), getLeafBump(), 0.03, { side: THREE.DoubleSide }),
-    flowerStem: texturedMat(0xffffff, getLeafTexture(), getLeafBump(), 0.03),
-    // Blossom heads: petal-vein grain from the leaf texture, bright tints.
-    flowerHead: texturedMat(0xffffff, getLeafTexture(), getLeafBump(), 0.02, { roughness: 0.7 }),
+    grass: foliageMat(0.9, { side: THREE.DoubleSide }),
+    flowerStem: foliageMat(0.9),
+    flowerHead: foliageMat(0.6),
     // Fruits: clean smooth cartoon orbs (no grain map — speckle would read as dirt).
     fruit: flatFruit(),
   };
