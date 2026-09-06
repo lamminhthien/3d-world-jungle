@@ -80,6 +80,18 @@ Sau khi chọn được hub:
 
 ## 4. Trình tự triển khai
 
+### Đã triển khai — village pad và collision nhà (2026-09)
+
+- `createVillage()` lưu `hubY` và dùng cùng cao độ cho toàn bộ feature của
+  village pad.
+- Expose `getSurfaceHeight(x, z)` để movement và preset spawn lấy đúng mặt
+  làng thay vì chỉ gọi `groundHeight()`.
+- Thêm collider AABB cho toàn bộ `houseLayout`; collision xử lý độc lập theo
+  hai trục để nhân vật có thể trượt dọc theo tường.
+- Build đã kiểm tra bằng `npm run build`.
+
+Các hạng mục terrain/vegetation bên dưới vẫn là phần kế hoạch tiếp theo.
+
 1. Thêm terrain classification + footprint sampler trong `procedural.js` hoặc module helper phù hợp.
 2. Viết unit-like deterministic checks cho các seed hiện có: sample river, jungle soil, mountain, snow và biên bậc.
 3. Refactor `collectChunk()` dùng policy mới; trước mắt loại tree khỏi rock/snow, giữ rock decoration.
@@ -104,4 +116,3 @@ Sau khi chọn được hub:
 - Village pad là cách ổn định nhất nhưng cần xử lý mép pad để không tạo một hình hộp nhân tạo.
 - Không nên sửa riêng từng asset bằng offset y; lỗi gốc nằm ở surface validation và village footprint.
 - `groundHeight()` và `sampleGround()` phải tiếp tục dùng chung một source of truth để tránh mesh terrain và placement lệch nhau.
-

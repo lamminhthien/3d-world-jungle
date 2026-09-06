@@ -153,7 +153,10 @@ async function boot() {
     adventure.regenerate(spawn);
     village.regenerate(spawn);
     const destination = config.focusVillage ? village.getHubPosition() : spawn;
-    if (config.focusVillage) player.position.set(destination.x, groundHeight(destination.x, destination.z), destination.z);
+    if (config.focusVillage) {
+      const villageY = village.getSurfaceHeight(destination.x, destination.z);
+      player.position.set(destination.x, villageY ?? groundHeight(destination.x, destination.z), destination.z);
+    }
     camTarget.set(player.position.x, 0.5, player.position.z);
     const url = new URL(location.href);
     url.searchParams.set('seed', actualSeed);
@@ -423,6 +426,12 @@ async function boot() {
       let nx = player.position.x + _move.x * speed * dt;
       let nz = player.position.z + _move.z * speed * dt;
 
+      // Village houses are static gameplay obstacles. Resolve before the
+      // generic world obstacles so the player can slide along their walls.
+      const villagePosition = village.resolveCollision(nx, nz, player.position.x, player.position.z);
+      nx = villagePosition.x;
+      nz = villagePosition.z;
+
       // Circle collision against trees / rocks / cacti (squared distances —
       // Math.hypot per obstacle per frame is needlessly slow).
       for (let i = 0; i < obstacles.length; i++) {
@@ -471,7 +480,8 @@ async function boot() {
     // Framerate-independent vertical: ground + walk bob (was: += 0.02/frame
     // hop fighting the ground lerp — hover height + jitter scaled with fps,
     // visibly glitchy on 120Hz screens and in the walk cycle).
-    const groundY = groundHeight(player.position.x, player.position.z);
+    const villageY = village.getSurfaceHeight(player.position.x, player.position.z);
+    const groundY = villageY ?? groundHeight(player.position.x, player.position.z);
     const bob = moving ? Math.abs(Math.cos(walkTime)) * 0.07 : 0;
     player.position.y += (groundY + bob - player.position.y) * Math.min(1, dt * 12);
 

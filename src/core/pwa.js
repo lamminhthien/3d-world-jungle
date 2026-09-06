@@ -8,6 +8,8 @@
 // - Install: listen for `beforeinstallprompt` (Android Chrome/Edge) to show the install button;
 //   iOS has no such event -> the button shows manual "Share > Add to Home Screen" guidance.
 
+import { version as APP_VERSION } from '../../package.json';
+
 function docEl() {
   return document.documentElement;
 }
@@ -66,8 +68,54 @@ export function isStandalone() {
 
 const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent || '');
 
+function setupBuildInfo() {
+  const versionEl = document.getElementById('app-version');
+  const sizeEl = document.getElementById('bundle-size');
+  const embeddedInfo = typeof window !== 'undefined' ? window.__JUNGLE_BUILD_INFO__ : null;
+  if (versionEl) versionEl.textContent = `v${APP_VERSION}`;
+  if (sizeEl && embeddedInfo?.bundleSize) sizeEl.textContent = `Bundle: ${embeddedInfo.bundleSize}`;
+  if (!sizeEl) return;
+  fetch(`${import.meta.env.BASE_URL}build-info.json`, { cache: 'no-store' })
+    .then((res) => (res.ok ? res.json() : Promise.reject(new Error('build-info unavailable'))))
+    .then((info) => { if (info?.bundleSize) sizeEl.textContent = `Bundle: ${info.bundleSize}`; })
+    .catch(() => {
+      if (!embeddedInfo?.bundleSize) sizeEl.textContent = 'Bundle: development';
+    });
+}
+
+function setupOfflineDownload() {
+  document.querySelectorAll('[data-download-game]').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = '⏳ Preparing…';
+      try {
+        const response = await fetch(`${import.meta.env.BASE_URL}offline/index.html`, { cache: 'no-store' });
+        if (!response.ok) throw new Error('offline build unavailable');
+        const url = URL.createObjectURL(await response.blob());
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'jungle-stroll-offline.html';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch {
+        alert('The offline download is available after a production build.');
+      } finally {
+        button.disabled = false;
+        button.textContent = original;
+      }
+    });
+  });
+}
+
 /** Wire up #btnFullscreen / #btnInstall. Call once at boot. */
 export function setupPwaUi() {
+  setupBuildInfo();
+  setupOfflineDownload();
   const fsBtn = document.getElementById('btnFullscreen');
   const installBtn = document.getElementById('btnInstall');
 

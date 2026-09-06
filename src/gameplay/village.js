@@ -128,7 +128,13 @@ export function createVillage(scene, spawn) {
   let currentHub = { x: spawn.x + 16, z: spawn.z + 14 };
   let hubY = 0;
   const features = [];
+  const houseColliders = [];
   const addFeature = (object, offset) => { features.push({ object, offset }); root.add(object); };
+
+  // Houses are deliberately a little larger than the visible walls so the
+  // player's 0.45u body radius cannot clip through corners or the doorway.
+  const HOUSE_HALF_X = 1.72;
+  const HOUSE_HALF_Z = 1.42;
 
   function findVillageHub(nextSpawn) {
     const baseX = nextSpawn.x + 16;
@@ -238,6 +244,10 @@ export function createVillage(scene, spawn) {
       // different terrain steps or sink into rock shelves.
       object.position.set(x, hubY, z);
     });
+    houseColliders.length = 0;
+    houseLayout.forEach(([ox, oz]) => {
+      houseColliders.push({ x: currentHub.x + ox, z: currentHub.z + oz });
+    });
     boardPosition = { x: currentHub.x + 3, z: currentHub.z + 3 };
     npcs.forEach((npc) => {
       const [ox, oz] = npc.route[0];
@@ -247,6 +257,34 @@ export function createVillage(scene, spawn) {
     });
   }
   place(spawn);
+
+  function isInsideHouse(x, z, radius = 0.45) {
+    return houseColliders.some((house) => (
+      Math.abs(x - house.x) < HOUSE_HALF_X + radius
+      && Math.abs(z - house.z) < HOUSE_HALF_Z + radius
+    ));
+  }
+
+  function resolveHouseCollision(x, z, previousX, previousZ) {
+    let nextX = x;
+    let nextZ = z;
+    // Resolve each axis independently. This prevents diagonal movement from
+    // getting stuck on a wall while still blocking the full house footprint.
+    if (isInsideHouse(nextX, previousZ)) nextX = previousX;
+    if (isInsideHouse(nextX, nextZ)) nextZ = previousZ;
+    if (isInsideHouse(nextX, nextZ)) {
+      nextX = previousX;
+      nextZ = previousZ;
+    }
+    return { x: nextX, z: nextZ };
+  }
+
+  function villageSurfaceHeight(x, z) {
+    return Math.abs(x - currentHub.x) <= VILLAGE_HALF_X
+      && Math.abs(z - currentHub.z) <= VILLAGE_HALF_Z
+      ? hubY
+      : null;
+  }
 
   return {
     update(dt, playerPos) {
@@ -283,5 +321,7 @@ export function createVillage(scene, spawn) {
     },
     regenerate: place,
     getHubPosition: () => ({ x: currentHub.x, z: currentHub.z }),
+    getSurfaceHeight: villageSurfaceHeight,
+    resolveCollision: resolveHouseCollision,
   };
 }

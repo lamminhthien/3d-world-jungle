@@ -36,6 +36,7 @@
             <button id="btnScreenshot" class="icon-btn" title="Take Screenshot" aria-label="Take Screenshot">📸</button>
             <button id="btnAutoPlay" class="icon-btn auto-play-btn" title="Toggle Auto Play" aria-label="Toggle Auto Play">🤖</button>
             <button id="btnInstall" class="icon-btn" title="Install app" aria-label="Install app" hidden>⬇️</button>
+            <button data-download-game class="icon-btn" title="Download game for offline play" aria-label="Download game for offline play">📥</button>
             <button id="btnFullscreen" class="icon-btn" title="Fullscreen" aria-label="Fullscreen">⛶</button>
           </div>
         </div>
@@ -154,6 +155,7 @@
         <div class="title-actions">
           <button id="btnPlay">▶&nbsp; Play</button>
           <button id="btnTitleAutoPlay" class="title-auto-btn" title="Auto Play Jungle Tour">🤖&nbsp; Auto Play</button>
+          <button data-download-game class="title-download-btn" title="Download a standalone game file">📥&nbsp; Download game</button>
         </div>
         <p class="title-help">WASD / arrows to stroll &bull; drag to rotate &bull; scroll to zoom</p>
         <div class="title-credits" style="font-size: 11px; color: #666; margin-top: 15px; opacity: 0.8;">
@@ -161,7 +163,10 @@
           <a href="mailto:lamminhthien02012000@gmail.com" style="color: #666; text-decoration: none;">Email: lamminhthien02012000@gmail.com</a> &bull;
           <a href="https://github.com/lamminhthien" target="_blank" style="color: #666; text-decoration: none;">Github: @lamminhthien</a>
         </div>
-        <div id="build-time" style="font-size: 10px; color: #888; margin-top: 20px; opacity: 0.7; font-family: monospace;"></div>
+        <div id="app-meta" aria-label="App version and bundle size">
+          <span id="app-version">v—</span><span aria-hidden="true"> · </span><span id="bundle-size">Bundle: checking…</span>
+        </div>
+        <div id="build-time" style="font-size: 10px; color: #888; margin-top: 5px; opacity: 0.7; font-family: monospace;"></div>
       </div>
     </div>
 

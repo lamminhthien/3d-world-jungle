@@ -132,6 +132,7 @@ body { user-select: none; -webkit-user-select: none; touch-action: none; positio
 .menu-panel .icon-btn:hover { background: #f1f8e9; }
 .menu-panel .icon-btn:active { transform: scale(.92); }
 .menu-panel .icon-btn[hidden] { display: none; }
+.menu-panel .icon-btn:disabled, .title-download-btn:disabled { opacity: .6; cursor: wait; }
 /* Fullscreen button is useless once standalone / already fullscreen */
 body.is-standalone #btnFullscreen { display: none; }
 
@@ -287,6 +288,19 @@ body.is-standalone #btnFullscreen { display: none; }
 }
 .title-auto-btn:hover { background: #e8f5e9; transform: translateY(-1px); }
 .title-auto-btn:active { transform: scale(.96); }
+
+.title-download-btn {
+  border: 1px solid #81c784; cursor: pointer;
+  background: rgba(255, 255, 255, 0.95); color: #2e7d32;
+  font-size: 14px; font-weight: 700; padding: 11px 18px; border-radius: 999px;
+  box-shadow: 0 6px 16px rgba(46,125,50,.15); transition: all .15s ease; touch-action: manipulation;
+}
+.title-download-btn:hover { background: #e8f5e9; transform: translateY(-1px); }
+.title-download-btn:active { transform: scale(.96); }
+
+#app-meta {
+  margin-top: 16px; color: #689f38; font: 600 11px/1.4 monospace; font-variant-numeric: tabular-nums;
+}
 
 /* Auto Play HUD badge */
 .auto-play-badge {
