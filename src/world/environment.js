@@ -372,12 +372,21 @@ export function createEnvironment(scene, opts = {}) {
   scene.add(moonHalo);
 
   // ---- Moonlight (doc section 2: icy-blue #a1c4fd, 180° opposite the sun) ----
-  // Second directional light on the mirrored orbit so trees / player cast faint
-  // moon-shadows. NOTE (perf): castShadow stays OFF — a second shadow map would
-  // double the geometry pass every frame; the sun map already gives depth.
-  // A pale halo billboard fakes god-ray glow through the low-poly canopy.
+  // The moon owns the shadow pass at night. It is mutually exclusive with the
+  // sun shadow pass, so desktop keeps real moon shadows without paying for two
+  // shadow maps in the same frame. Low-tier devices retain the cheaper glow
+  // fallback because a second shadow pass is too expensive there.
   const moonLight = new THREE.DirectionalLight(0xa1c4fd, 0);
   moonLight.castShadow = false;
+  moonLight.shadow.mapSize.set(QUALITY.shadowSize, QUALITY.shadowSize);
+  moonLight.shadow.camera.left = -30;
+  moonLight.shadow.camera.right = 30;
+  moonLight.shadow.camera.top = 30;
+  moonLight.shadow.camera.bottom = -30;
+  moonLight.shadow.camera.near = 1;
+  moonLight.shadow.camera.far = 130;
+  moonLight.shadow.bias = -0.0008;
+  moonLight.shadow.normalBias = 0.015;
   scene.add(moonLight); scene.add(moonLight.target);
 
   // ---- Rain particles (box around focus, wraps) ----
@@ -594,10 +603,11 @@ export function createEnvironment(scene, opts = {}) {
       if (sun) {
         if (isDay !== lastIsDay) {
           lastIsDay = isDay;
-          // One shader recompile per dawn/dusk; saves the whole shadow depth
-          // pass for the entire night in exchange.
+          // Transfer the single shadow pass between the sun and moon. This
+          // keeps the scene lit/shadowed in both halves of the day cycle.
           if (QUALITY.low) sun.castShadow = false;
           else sun.castShadow = isDay;
+          moonLight.castShadow = !isDay && QUALITY.shadowsEnabled;
         }
         if (isDay) {
           sun.color.copy(sample.sunColor).lerp(_ca.set(wx.fogTint), 1 - wx.sun * 0.5 - 0.25);
@@ -618,7 +628,7 @@ export function createEnvironment(scene, opts = {}) {
       state.nightFactor = nightF;
       state.isNight = !isDay;
       moonLight.color.setHex(0xa1c4fd);
-      moonLight.intensity = nightF * 1.3 * (0.55 + 0.45 * wx.sun);
+      moonLight.intensity = nightF * 1.55 * (0.55 + 0.45 * wx.sun);
       moonLight.position.set(focusV.x + moonDir.x * ORBIT_R, Math.max(6, moonDir.y * ORBIT_R), focusV.z + moonDir.z * ORBIT_R);
       moonLight.target.position.copy(focusV);
       moonLight.target.updateMatrixWorld();
@@ -665,10 +675,14 @@ export function createEnvironment(scene, opts = {}) {
       // Overcast / rain veils the moon; drifting clouds cross it for an
       // occluded-moon illusion (doc section 3: hazy veiled moon).
       const veil = (1 - wx.rain * 0.7) * (state.weather === 'overcast' ? 0.55 : 1) * (state.weather === 'fog' ? 0.3 : 1);
-      moonMesh.material.opacity = THREE.MathUtils.clamp(moonDir.y * 4 + 0.3, 0, 0.9) * veil;
+      // A restrained pulse keeps the moon from reading as a flat billboard,
+      // while the actual directional light remains stable enough for shadows.
+      const moonPulse = 0.94 + 0.06 * Math.sin(performance.now() * 0.0014);
+      moonMesh.material.opacity = THREE.MathUtils.clamp(moonDir.y * 4 + 0.3, 0, 0.9) * veil * moonPulse;
       moonHalo.position.copy(moonMesh.position);
       moonHalo.visible = moonMesh.visible;
-      moonHalo.material.opacity = nightF * 0.2 * veil;
+      moonHalo.material.opacity = nightF * (0.18 + moonPulse * 0.04) * veil;
+      moonHalo.scale.setScalar(1 + (1 - moonPulse) * 0.3);
 
       // --- Sunset CSS overlay: warm orange radial glow near horizon ---
       if (sunsetOverlay) {
