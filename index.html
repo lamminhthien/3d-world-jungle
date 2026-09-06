@@ -51,9 +51,17 @@
           </div>
         </div>
         <div class="menu-section">
-          <div class="menu-title">🌍 World seed</div>
-          <div class="menu-row">
-            <input id="seed" spellcheck="false" autocomplete="off" />
+          <div class="menu-title">🌍 World Type</div>
+          <div class="menu-world-btns" id="menuWorldGrid">
+            <button class="menu-world-btn active" data-seed="JUNGLE_PRIME">🌴 Jungle</button>
+            <button class="menu-world-btn" data-seed="DESERT_WINDS">🏜️ Desert</button>
+            <button class="menu-world-btn" data-seed="MOUNTAIN_PEAKS">🏔️ Mountain</button>
+            <button class="menu-world-btn" data-seed="BEACH_COVE">🏖️ Beach</button>
+            <button class="menu-world-btn" data-seed="NIGHT_FOREST">🌙 Night</button>
+            <button class="menu-world-btn" data-seed="__random__">🎲 Random</button>
+          </div>
+          <div class="menu-row" style="margin-top:6px">
+            <input id="seed" spellcheck="false" autocomplete="off" placeholder="Custom seed…" />
             <button id="newWorld" title="Generate a new world">🎲</button>
           </div>
           <div id="chunks" class="chunks"></div>
@@ -97,10 +105,24 @@
         <div class="game-logo">🌴</div>
         <h1>🌿 Jungle Stroll</h1>
         <p class="subtitle">Low Poly &bull; Isometric &bull; Three.js</p>
-        <div class="title-seed">
-          <span class="seed-label">🌍 Seed</span>
-          <input id="titleSeed" spellcheck="false" autocomplete="off" />
-          <button id="titleDice" title="Random seed">🎲</button>
+        <div class="title-world-type">
+          <div class="world-type-label">🌍 Choose Your World</div>
+          <div class="world-type-grid" id="worldTypeGrid">
+            <button class="world-type-btn active" data-seed="JUNGLE_PRIME" data-time="">🌴<span>Jungle</span></button>
+            <button class="world-type-btn" data-seed="DESERT_WINDS" data-time="">🏜️<span>Desert</span></button>
+            <button class="world-type-btn" data-seed="MOUNTAIN_PEAKS" data-time="">🏔️<span>Mountain</span></button>
+            <button class="world-type-btn" data-seed="BEACH_COVE" data-time="">🏖️<span>Beach</span></button>
+            <button class="world-type-btn" data-seed="NIGHT_FOREST" data-time="0">🌙<span>Night</span></button>
+            <button class="world-type-btn" data-seed="__random__" data-time="">🎲<span>Random</span></button>
+          </div>
+          <details class="custom-seed-toggle">
+            <summary>✏️ Custom seed…</summary>
+            <div class="title-seed">
+              <span class="seed-label">🌱 Seed</span>
+              <input id="titleSeed" spellcheck="false" autocomplete="off" />
+              <button id="titleDice" title="Random seed">🎲</button>
+            </div>
+          </details>
         </div>
         <div class="title-actions">
           <button id="btnPlay">▶&nbsp; Play</button>

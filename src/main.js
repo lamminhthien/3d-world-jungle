@@ -11,10 +11,15 @@ import { createEnvironment } from './world/environment.js';
 import { createFireflies } from './world/fireflies.js';
 import { createCampsites } from './world/campfire.js';
 import { createPlayer } from './entities/player.js';
+import { createAnimals } from './entities/animals.js';
 import { setupControls } from './input/controls.js';
 import { setupPwaUi } from './core/pwa.js';
 import { randomSeedString } from './world/noise.js';
 import { AutoPlayAgent } from './core/autoPlay.js';
+
+// ============ Loop State ============
+let targetFps = DEFAULT_MAX_FPS;
+let lastFrameTime = 0;
 
 // ============ Seed (docs section 4.1): ?seed= in URL, else default ============
 const params = new URLSearchParams(location.search);
@@ -76,11 +81,23 @@ async function boot() {
 
   const fireflies = createFireflies(scene);
   const camps = createCampsites(scene, initialSeed);
+  const animals = createAnimals(scene);
 
   const { player, parts } = createPlayer(scene);
   player.position.set(spawn.x, groundHeight(spawn.x, spawn.z), spawn.z);
   camTarget.set(spawn.x, 0.5, spawn.z);
   const { keys, joy, touch } = setupControls(canvas, core);
+
+  // ============ World type presets ============
+  // Maps preset seed strings to optional time-of-day overrides.
+  const WORLD_PRESETS = {
+    JUNGLE_PRIME:   { timeOverride: null },
+    DESERT_WINDS:   { timeOverride: null },
+    MOUNTAIN_PEAKS: { timeOverride: null },
+    BEACH_COVE:     { timeOverride: null },
+    NIGHT_FOREST:   { timeOverride: 0.5 }, // start at midnight
+    __random__:     { timeOverride: null },
+  };
 
   // ============ Seed UI ============
   const seedInput = document.getElementById('seed');
@@ -88,30 +105,53 @@ async function boot() {
   const chunkEl = document.getElementById('chunks');
   if (seedInput) seedInput.value = initialSeed;
 
-  function applySeed(newSeed) {
-    spawn = world.regenerate(newSeed);
+  function setAllWorldBtnActive(seed) {
+    // Sync active state on both the title and menu grids.
+    document.querySelectorAll('.world-type-btn, .menu-world-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.seed === seed);
+    });
+  }
+
+  function applySeed(newSeed, timeOverride = null) {
+    const actualSeed = newSeed === '__random__' ? randomSeedString() : newSeed;
+    spawn = world.regenerate(actualSeed);
     removeBridges(scene, bridgeGroups);
     bridgeGroups = createBridges(scene);
-    camps.regenerate(newSeed);
+    camps.regenerate(actualSeed);
     player.position.set(spawn.x, groundHeight(spawn.x, spawn.z), spawn.z);
     camTarget.set(spawn.x, 0.5, spawn.z);
     const url = new URL(location.href);
-    url.searchParams.set('seed', newSeed);
+    url.searchParams.set('seed', actualSeed);
     history.replaceState(null, '', url);
-    if (seedInput) seedInput.value = newSeed;
+    if (seedInput) seedInput.value = actualSeed;
+    // Apply time override if the preset specifies one (e.g. Night = midnight).
+    if (timeOverride !== null && env?.setTime) env.setTime(timeOverride);
+    setAllWorldBtnActive(newSeed);
   }
 
-  if (seedBtn) {
-    seedBtn.addEventListener('click', () => {
-      const v = (seedInput && seedInput.value.trim()) || randomSeedString();
-      applySeed(v);
-    });
-  }
-  if (seedInput) {
-    seedInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') applySeed(seedInput.value.trim() || randomSeedString());
-    });
-  }
+  // Wire up title-screen world type grid
+  document.getElementById('worldTypeGrid')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.world-type-btn');
+    if (!btn) return;
+    const seed = btn.dataset.seed;
+    const preset = WORLD_PRESETS[seed] || {};
+    // Resolve time override from data-time attr or preset map
+    const timeAttr = btn.dataset.time;
+    const timeOverride = timeAttr !== '' ? Number(timeAttr) : preset.timeOverride;
+    if (titleSeedInput) titleSeedInput.value = seed === '__random__' ? randomSeedString() : seed;
+    applySeed(seed, timeOverride);
+  });
+
+  // Wire up in-game menu world type grid
+  document.getElementById('menuWorldGrid')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.menu-world-btn');
+    if (!btn) return;
+    const seed = btn.dataset.seed;
+    const preset = WORLD_PRESETS[seed] || {};
+    applySeed(seed, preset.timeOverride);
+    closeMenu();
+  });
+
 
   const fpsSelect = document.getElementById('fpsSelect');
   if (fpsSelect) {
@@ -377,8 +417,6 @@ async function boot() {
   }
 
   // ============ Loop ============
-  let targetFps = DEFAULT_MAX_FPS;
-  let lastFrameTime = 0;
   const prCap = Math.min(devicePixelRatio || 1, QUALITY.maxPixelRatio);
   let qualityCooldown = 0;
   let downVotes = 0;

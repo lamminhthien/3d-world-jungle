@@ -234,3 +234,67 @@ body:not(.playing) #joystick { display: none; }
    (full help lives in the ☰ menu). */
 body.playing .controls-hint { animation: hint-hide 1s ease 7s forwards; }
 @keyframes hint-hide { to { opacity: 0; visibility: hidden; } }
+
+/* ============ World type preset picker (title screen) ============ */
+.title-world-type { margin-top: 18px; }
+.world-type-label { font-size: 12px; font-weight: 700; color: #558b2f; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+.world-type-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+}
+.world-type-btn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; padding: 10px 6px; border-radius: 14px;
+  border: 2px solid #c8e6c9; background: #f1f8e9; cursor: pointer;
+  font-size: 22px; color: #2e7d32; font-weight: 700;
+  transition: all .15s ease; touch-action: manipulation;
+}
+.world-type-btn span { font-size: 11px; font-weight: 700; color: #558b2f; }
+.world-type-btn:hover { background: #e8f5e9; border-color: #81c784; transform: translateY(-2px); }
+.world-type-btn:active { transform: scale(.95); }
+.world-type-btn.active {
+  background: linear-gradient(160deg, #43a047, #2e7d32); color: #fff;
+  border-color: #1b5e20; box-shadow: 0 6px 16px rgba(46,125,50,.38);
+}
+.world-type-btn.active span { color: #c8e6c9; }
+
+/* Custom seed details disclosure */
+.custom-seed-toggle {
+  margin-top: 10px;
+}
+.custom-seed-toggle summary {
+  font-size: 12px; color: #558b2f; cursor: pointer; user-select: none;
+  display: inline-flex; align-items: center; gap: 4px; list-style: none;
+}
+.custom-seed-toggle summary::-webkit-details-marker { display: none; }
+.custom-seed-toggle .title-seed { margin-top: 8px; }
+
+/* ============ World type buttons inside ☰ menu ============ */
+.menu-world-btns {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px;
+}
+.menu-world-btn {
+  border: 1px solid #c8e6c9; background: #f1f8e9; color: #2e7d32;
+  border-radius: 20px; padding: 5px 10px; font-size: 12px; font-weight: 700;
+  cursor: pointer; white-space: nowrap; touch-action: manipulation;
+  transition: all .12s;
+}
+.menu-world-btn:hover { background: #e8f5e9; }
+.menu-world-btn.active {
+  background: #43a047; color: #fff; border-color: #2e7d32;
+}
+
+/* ============ Sunset CSS overlay ============ */
+#sunset-overlay {
+  position: fixed; inset: 0; pointer-events: none; z-index: 5;
+  opacity: 0;
+  background: radial-gradient(
+    ellipse 120% 60% at 50% 110%,
+    rgba(255, 100, 0, 0.75) 0%,
+    rgba(255, 140, 0, 0.45) 30%,
+    rgba(255, 60, 0, 0.15) 60%,
+    transparent 80%
+  );
+  transition: opacity 1.5s ease;
+  mix-blend-mode: screen;
+}
+
