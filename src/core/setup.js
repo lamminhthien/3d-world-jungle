@@ -42,6 +42,7 @@ export function setupCore(canvas) {
     antialias: !isMobileDevice,
     powerPreference: 'high-performance',
     stencil: false,
+    preserveDrawingBuffer: true,
   });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, QUALITY.maxPixelRatio));
   renderer.setSize(innerWidth, innerHeight);

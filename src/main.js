@@ -257,6 +257,7 @@ async function boot() {
   const btnTitleAutoPlay = document.getElementById('btnTitleAutoPlay');
   const autoPlayBadge = document.getElementById('autoPlayBadge');
   const btnStopAutoPlay = document.getElementById('btnStopAutoPlay');
+  const btnScreenshot = document.getElementById('btnScreenshot');
 
   function updateAutoPlayUI(isActive) {
     if (btnAutoPlay) {
@@ -293,6 +294,17 @@ async function boot() {
   if (btnAutoPlay) btnAutoPlay.addEventListener('click', toggleAutoPlay);
   if (btnTitleAutoPlay) btnTitleAutoPlay.addEventListener('click', startAutoPlay);
   if (btnStopAutoPlay) btnStopAutoPlay.addEventListener('click', stopAutoPlay);
+
+  if (btnScreenshot) {
+    btnScreenshot.addEventListener('click', () => {
+      const dataUrl = renderer.domElement.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = `jungle-stroll-${Date.now()}.png`;
+      link.href = dataUrl;
+      link.click();
+      closeMenu();
+    });
+  }
 
   // Global hook for debugging or console
   if (typeof window !== 'undefined') {

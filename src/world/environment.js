@@ -89,7 +89,7 @@ function rollNextWeather(rng = Math.random) {
 // ---- Minimal procedural ambience (no assets, starts on user gesture) ----
 function createAmbience() {
   let ctx = null;
-  let windGain, rainGain, master, musicBus;
+  let windGain, rainGain, master, musicBus, sfxBus;
   let cozy = null;
   let chirpTimer = 0;
   let crackleTimer = 0;
@@ -102,20 +102,25 @@ function createAmbience() {
       ctx = new (window.AudioContext || window.webkitAudioContext)();
     } catch { return false; }
     master = ctx.createGain();
-    master.gain.value = 0.5;
+    master.gain.value = 0.8;
     master.connect(ctx.destination);
     // Looped noise buffer shared by wind + rain.
     const len = ctx.sampleRate * 2;
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+
+    sfxBus = ctx.createGain();
+    sfxBus.gain.value = 0.7;
+    sfxBus.connect(master);
+
     const mkLoop = (freq, q, gain0) => {
       const src = ctx.createBufferSource();
       src.buffer = buf; src.loop = true;
       const f = ctx.createBiquadFilter();
       f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q;
       const g = ctx.createGain(); g.gain.value = gain0;
-      src.connect(f).connect(g).connect(master);
+      src.connect(f).connect(g).connect(sfxBus);
       src.start();
       return g;
     };
@@ -124,7 +129,7 @@ function createAmbience() {
     // Cozy generative music box (Stardew-like) on its own sub-bus so the
     // melody sits under wind/rain/critters instead of fighting them.
     musicBus = ctx.createGain();
-    musicBus.gain.value = 0.5;
+    musicBus.gain.value = 0.7;
     musicBus.connect(master);
     cozy = createCozyMusic(ctx, musicBus);
     cozy.setMuted(!musicOn);
@@ -142,7 +147,7 @@ function createAmbience() {
     g.gain.setValueAtTime(0, t0);
     g.gain.linearRampToValueAtTime(vol, t0 + 0.02);
     g.gain.exponentialRampToValueAtTime(1e-4, t0 + dur);
-    o.connect(g).connect(master);
+    o.connect(g).connect(sfxBus);
     o.start(t0); o.stop(t0 + dur + 0.05);
   }
 
@@ -206,7 +211,7 @@ function createAmbience() {
     get musicOn() { return musicOn; },
     enable() {
       enabled = true;
-      if (ensure() && master) master.gain.value = 0.5;
+      if (ensure() && master) master.gain.value = 0.8;
       else enabled = false;
       syncMuteBtn();
       return enabled;
@@ -214,7 +219,7 @@ function createAmbience() {
     toggle() {
       enabled = !enabled;
       if (enabled) enabled = ensure();
-      if (master) master.gain.value = enabled ? 0.5 : 0.0;
+      if (master) master.gain.value = enabled ? 0.8 : 0.0;
       syncMuteBtn();
       return enabled;
     },
@@ -231,6 +236,12 @@ function createAmbience() {
         return next;
       }
       return null;
+    },
+    setMusicVolume(v) {
+      if (musicBus) musicBus.gain.value = v;
+    },
+    setSfxVolume(v) {
+      if (sfxBus) sfxBus.gain.value = v;
     },
     getCurrentTrack() {
       return cozy?.getCurrentTrack ? cozy.getCurrentTrack() : null;
@@ -407,19 +418,34 @@ export function createEnvironment(scene, opts = {}) {
       <span id="env-time">☀️ 10:00</span>
       <span id="env-wx">☀️ Clear</span>
       <div class="env-btns">
+        <input type="time" id="env-time-input" style="border: 1px solid #c8e6c9; border-radius: 8px; padding: 2px 4px; font-size: 12px; font-weight: 600; color: #33691e; background: #fff; outline: none; cursor: pointer;">
         <button id="env-pause" title="Pause / resume time">⏸</button>
         <button id="env-skip" title="Jump to morning / night">⏭</button>
         <button id="env-wxbtn" title="Change weather">🌧️</button>
         <button id="env-music" title="Mute music">🎵</button>
         <button id="env-mute" title="Ambient sound">🔇</button>
+        <div class="env-vol-ctrl" style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; font-size: 11px; color: #33691e; font-weight: 600;">
+          <span>🎵</span><input type="range" id="env-vol-music" min="0" max="1" step="0.05" value="0.7" style="width: 50px; cursor: pointer;">
+          <span>🔊</span><input type="range" id="env-vol-sfx" min="0" max="1" step="0.05" value="0.7" style="width: 50px; cursor: pointer;">
+        </div>
       </div>`;
     timeEl = root.querySelector('#env-time');
     wxEl = root.querySelector('#env-wx');
+    const timeInput = root.querySelector('#env-time-input');
     const pauseBtn = root.querySelector('#env-pause');
     const skipBtn = root.querySelector('#env-skip');
     const wxBtn = root.querySelector('#env-wxbtn');
     const muteBtn = root.querySelector('#env-mute');
     const musicBtn = root.querySelector('#env-music');
+    const volMusic = root.querySelector('#env-vol-music');
+    const volSfx = root.querySelector('#env-vol-sfx');
+
+    timeInput.onchange = (e) => {
+      const [h, m] = e.target.value.split(':').map(Number);
+      api.setTime(h + m / 60);
+    };
+    timeInput.value = fmtTime(state.timeOfDay);
+
     pauseBtn.onclick = () => {
       state.paused = !state.paused;
       pauseBtn.textContent = state.paused ? '▶️' : '⏸';
@@ -447,6 +473,8 @@ export function createEnvironment(scene, opts = {}) {
         ambience.toggleMusic();
       };
     }
+    if (volMusic) volMusic.oninput = (e) => ambience.setMusicVolume(parseFloat(e.target.value));
+    if (volSfx) volSfx.oninput = (e) => ambience.setSfxVolume(parseFloat(e.target.value));
     // First click anywhere unlocks audio if the user enabled it — nothing to do
     // until toggle; AudioContext is created lazily inside toggle().
   }
