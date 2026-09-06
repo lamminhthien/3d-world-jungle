@@ -222,7 +222,7 @@ export function createWorldManager(scene, seedStr) {
       // as one settlement instead of props hidden inside the jungle.
       const vdx = x - (sx + 16);
       const vdz = z - (sz + 14);
-      if (vdx * vdx + vdz * vdz < 18 * 18) continue;
+      if (vdx * vdx + vdz * vdz < 29 * 29) continue;
       if (nearBridge(x, z)) continue;
       const y = s.y;
       const roll = rng();

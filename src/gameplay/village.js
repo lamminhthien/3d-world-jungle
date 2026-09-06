@@ -7,22 +7,40 @@ const NPCS = [
   { id: 'fisher', name: 'Bình · Ngư dân', color: 0x4c83ad, text: 'Mình thường đi dọc con đường phía đông để kiểm tra bờ sông.', route: [[5, -1], [10, -1], [10, 5], [5, 5]] },
   { id: 'farmer', name: 'An · Nông dân', color: 0x8a6b3f, text: 'Mùa này ruộng được mùa! Cứ tự nhiên đi quanh làng nhé.', route: [[-9, -8], [-4, -8], [-4, -4], [-9, -4]] },
   { id: 'child', name: 'Na · Trẻ trong làng', color: 0xd15f88, text: 'Mình thích chạy chơi trên con đường làng!', route: [[-1, 0], [3, 0], [3, 4], [-1, 4]] },
-  { id: 'elder', name: 'Ông Tư · Trưởng làng', color: 0x7560a3, text: 'Làng cần một nơi bình yên cho mọi người. Cảm ơn bạn đã ghé thăm.', route: [[5, 6], [9, 6], [9, 9], [5, 9]] },
+  { id: 'elder', name: 'Ông Tư · Trưởng làng', color: 0x7560a3, text: 'Làng cần một nơi bình yên cho mọi người. Cảm ơn bạn đã ghé thăm.', route: [[5, 6], [15, 6], [15, 12], [5, 12]] },
+  { id: 'baker', name: 'Hà · Thợ làm bánh', color: 0xb56b47, text: 'Bánh mì nóng đây! Mùi lúa từ ruộng làm cả làng vui hơn.', route: [[-14, 5], [-10, 5], [-10, 9], [-14, 9]] },
+  { id: 'woodworker', name: 'Sơn · Thợ mộc', color: 0x587c68, text: 'Mình sửa hàng rào và làm đồ gỗ cho mọi nhà.', route: [[12, -8], [17, -8], [17, -3], [12, -3]] },
+  { id: 'herbalist', name: 'Vy · Người chữa bệnh', color: 0x9c5c88, text: 'Ruộng sạch và đường làng thông thoáng giúp mọi người khỏe mạnh.', route: [[-14, -2], [-10, -2], [-10, 2], [-14, 2]] },
+  { id: 'trader', name: 'Khoa · Người giao hàng', color: 0x667f9d, text: 'Mình đem hàng từ ngoài rừng vào qua cổng phía nam.', route: [[-3, -16], [3, -16], [3, -12], [-3, -12]] },
 ];
 
 const mat = (color) => new THREE.MeshLambertMaterial({ color });
 
 function makePerson(color) {
   const group = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.82, 0.42), mat(color));
-  body.position.y = 0.58;
-  group.add(body);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 6), mat(0xc98962));
-  head.position.y = 1.18;
-  group.add(head);
-  const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.36, 0.14, 6), mat(color));
-  hat.position.y = 1.42;
-  group.add(hat);
+  const skin = mat(0xffd8a8);
+  const shirt = mat(color);
+  const pants = mat(0x4d78b5);
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.42, 0.85, 7), shirt);
+  body.position.y = 1.15;
+  const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.34, 0), skin);
+  head.position.y = 1.95;
+  const hat = new THREE.Mesh(new THREE.ConeGeometry(0.55, 0.35, 8), mat(0xe9c46a));
+  hat.position.y = 2.28;
+  const mkLimb = (w, h, material, x, y) => {
+    const limb = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), material);
+    limb.geometry.translate(0, -h / 2, 0);
+    limb.position.set(x, y, 0);
+    return limb;
+  };
+  const parts = {
+    legL: mkLimb(0.2, 0.75, pants, -0.16, 0.75),
+    legR: mkLimb(0.2, 0.75, pants, 0.16, 0.75),
+    armL: mkLimb(0.16, 0.65, shirt, -0.5, 1.5),
+    armR: mkLimb(0.16, 0.65, shirt, 0.5, 1.5),
+  };
+  group.add(body, head, hat, parts.legL, parts.legR, parts.armL, parts.armR);
+  group.userData.parts = parts;
   return group;
 }
 
@@ -96,29 +114,35 @@ export function createVillage(scene, spawn) {
   const features = [];
   const addFeature = (object, offset) => { features.push({ object, offset }); root.add(object); };
 
-  addFeature(makeHouse(0xe6c28f, 0x9a513d), [-6, 7]);
-  addFeature(makeHouse(0xd9b47e, 0x4e7753), [6, 7]);
-  addFeature(makeFarm(), [-5, -7]);
-  addFeature(makeFarm(), [5, -7]);
-  addFeature(makePath(2.2, 18, false), [0, 0]);
-  addFeature(makePath(1.6, 11), [0, 6]);
-  addFeature(makePath(1.4, 10), [0, -7]);
+  const houseColors = [[0xe6c28f, 0x9a513d], [0xd9b47e, 0x4e7753], [0xe2b989, 0x6e5948], [0xcfae7e, 0x76533c], [0xe8c99b, 0x7b4d56]];
+  const houseLayout = [[-16, 12], [-8, 12], [0, 12], [8, 12], [16, 12], [-16, 3], [16, 3], [-16, -7], [16, -7], [0, 8]];
+  houseLayout.forEach((offset, index) => {
+    const colors = houseColors[index % houseColors.length];
+    addFeature(makeHouse(colors[0], colors[1]), offset);
+  });
+  addFeature(makeFarm(), [-9, -12]);
+  addFeature(makeFarm(), [9, -12]);
+  addFeature(makePath(2.4, 42, false), [0, 0]);
+  addFeature(makePath(1.7, 34), [0, 5]);
+  addFeature(makePath(1.5, 28), [0, -8]);
+  addFeature(makePath(1.3, 22, false), [-9, -4]);
+  addFeature(makePath(1.3, 22, false), [9, -4]);
   addFeature(makeBoard(), [3, 3]);
 
   // Fence with an open gate at the south entrance.
-  addFeature(makeFence(9), [-7.5, -11]);
-  addFeature(makeFence(9), [7.5, -11]);
-  addFeature(makeFence(24), [0, 11]);
-  addFeature(makeFence(22, false), [-11, 0]);
-  addFeature(makeFence(8, false), [11, -7]);
-  addFeature(makeFence(8, false), [11, 7]);
+  addFeature(makeFence(19), [-12.5, -19]);
+  addFeature(makeFence(19), [12.5, -19]);
+  addFeature(makeFence(50), [0, 19]);
+  addFeature(makeFence(38, false), [-21, 0]);
+  addFeature(makeFence(14, false), [21, -12]);
+  addFeature(makeFence(14, false), [21, 12]);
   const gate = new THREE.Group();
   [-1.5, 1.5].forEach((x) => {
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 1.7, 6), mat(0x5d3a26));
     post.position.set(x, 0.85, 0);
     gate.add(post);
   });
-  addFeature(gate, [0, -11]);
+  addFeature(gate, [0, -19]);
   const camp = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.12, 12), mat(0x9b6b35));
   addFeature(camp, [0, 2]);
 
@@ -186,7 +210,15 @@ export function createVillage(scene, spawn) {
         const oldX = npc.object.position.x;
         const oldZ = npc.object.position.z;
         npc.object.position.set(x, groundHeight(x, z), z);
-        if (Math.hypot(x - oldX, z - oldZ) > 0.001) npc.object.rotation.y = Math.atan2(x - oldX, z - oldZ);
+        if (Math.hypot(x - oldX, z - oldZ) > 0.001) {
+          npc.object.rotation.y = Math.atan2(x - oldX, z - oldZ);
+          const walk = Math.sin((npc.routeTime + npc.routeIndex) * Math.PI * 2) * 0.55;
+          const parts = npc.object.userData.parts;
+          parts.legL.rotation.x = walk;
+          parts.legR.rotation.x = -walk;
+          parts.armL.rotation.x = -walk * 0.8;
+          parts.armR.rotation.x = walk * 0.8;
+        }
         const distance = Math.hypot(playerPos.x - x, playerPos.z - z);
         if (distance < best) { best = distance; nearest.value = { type: 'npc', ...npc }; }
       });

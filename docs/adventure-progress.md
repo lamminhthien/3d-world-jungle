@@ -53,6 +53,14 @@ Implemented:
 - Added a gated fence perimeter, dirt roads, two crop fields with visible rows and a more readable village core.
 - Expanded the population to six villagers; each follows a fixed, seed-stable waypoint route around the village.
 
+## 2026-09-06 — Village scale and character pass
+
+Implemented:
+
+- Rebuilt villagers from the player character proportions, including head, hat, torso, arms, legs and walking animation.
+- Expanded the settlement to 10 houses and 10 residents with a wider road network, larger fenced perimeter and two farm zones.
+- Enlarged the vegetation clearing to keep the larger village readable and prevent forest props from growing through the settlement.
+
 ## How to test the current slice
 
 1. Run `npm run dev` and press **Play**.

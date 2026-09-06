@@ -35,7 +35,9 @@ Tạo một nơi an toàn để người chơi nhận quest, giao dịch, chăm 
 - Vùng làng có clearing riêng, giảm cây procedural trong bán kính 18 đơn vị.
 - Làng có cổng mở, hàng rào bao quanh, đường đất chính/phụ và khu campfire.
 - Hai khu ruộng gồm các luống đất và cây trồng; cây rừng chỉ bắt đầu lại ở ngoài làng.
-- Sáu NPC có waypoint riêng và tự đi tuần quanh nhà, đường và ruộng.
+- Mười NPC có waypoint riêng và tự đi tuần quanh nhà, đường và ruộng.
+- Quy mô village hiện có 10 căn nhà, phù hợp cho khu dân cư lớn hơn thay vì một cụm NPC nhỏ.
+- Dân làng dùng cùng kiểu low-poly có đầu, thân, hai tay và hai chân như nhân vật người chơi; tay chân vung theo nhịp bước khi di chuyển.
 
 ## Mở rộng
 
