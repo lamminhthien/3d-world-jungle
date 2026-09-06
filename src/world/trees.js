@@ -4,7 +4,7 @@
 // For the infinite world, main.js uses createWorldManager (chunks.js).
 
 import * as THREE from 'three';
-import { BUSH_COUNT, MAX_TREES, SPAWN } from '../config.js';
+import { BUSH_COUNT, MAX_TREES, SPAWN, VEGETATION } from '../config.js';
 import { groundHeight, obstacles } from '../utils.js';
 import {
   createVegetationKit,
@@ -48,7 +48,7 @@ export function createTrees(scene) {
 
   function addTree(x, z) {
     const y = groundHeight(x, z);
-    const s = rand(0.8, 1.5);
+    const s = rand(0.8, 1.5) * VEGETATION.treeScale;
     const kind = rng();
     if (bucket.ti + 4 > MAX_TREES * 4) return;
     if (kind < 0.2) {
@@ -62,11 +62,11 @@ export function createTrees(scene) {
     } else if (kind < 0.58) {
       if (bucket.bi + 3 <= MAX_TREES * 4) placeBlossomTree(meshes, bucket, obstacles, x, y, z, s, rng);
     } else if (kind < 0.62) {
-      if (bucket.bi + 4 <= MAX_TREES * 4) placeRainbowTree(meshes, bucket, obstacles, x, y, z, s, rng);
+      if (bucket.bi + 4 <= MAX_TREES * 4) placeRainbowTree(meshes, bucket, obstacles, x, y, z, rand(0.9, 1.4) * VEGETATION.treeScale, rng);
     } else if (kind < 0.66) {
       if (bucket.bi + 3 <= MAX_TREES * 4) placeGoldenTree(meshes, bucket, obstacles, x, y, z, s, rng);
     } else if (kind < 0.7) {
-      if (bucket.bi + 5 <= MAX_TREES * 4) placeKapok(meshes, bucket, obstacles, x, y, z, rand(1.0, 1.5), rng);
+      if (bucket.bi + 5 <= MAX_TREES * 4) placeKapok(meshes, bucket, obstacles, x, y, z, rand(1.0, 1.5) * VEGETATION.treeScale, rng);
     } else if (kind < 0.78) {
       if (bucket.palmi + PALM_FRONDS <= MAX_TREES * PALM_FRONDS) {
         placeBanana(meshes, bucket, obstacles, x, y, z, s, rng);
@@ -77,7 +77,7 @@ export function createTrees(scene) {
   }
 
   // Scatter trees, keeping the river and spawn point clear.
-  for (let n = 0; n < MAX_TREES; n++) {
+  for (let n = 0; n < Math.round(MAX_TREES * VEGETATION.treeDensity); n++) {
     const x = rand(-38, 38);
     const z = rand(-42, 42);
     if (Math.abs(x) < 7.5) { n--; continue; }

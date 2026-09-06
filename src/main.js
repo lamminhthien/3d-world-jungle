@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DEFAULT_SEED, DEFAULT_MAX_FPS, ENV, RIVER_HALF, SPEED, WORLD } from './config.js';
+import { DEFAULT_SEED, DEFAULT_MAX_FPS, ENV, RIVER_HALF, SPEED, VEGETATION, WORLD } from './config.js';
 import { groundHeight, isOnBridge, obstacles, riverDist } from './utils.js';
 import { QUALITY, setupCore } from './core/setup.js';
 import { runPreGameCache } from './core/bootCache.js';
@@ -196,6 +196,35 @@ async function boot() {
       targetFps = parseInt(e.target.value, 10);
     });
   }
+
+  // Vegetation settings rebuild the currently visible chunks so the change is
+  // immediate and does not require regenerating the terrain or changing seed.
+  const treeDensitySelect = document.getElementById('treeDensitySelect');
+  const treeDensityValue = document.getElementById('treeDensityValue');
+  const treeScaleSelect = document.getElementById('treeScaleSelect');
+  const treeScaleValue = document.getElementById('treeScaleValue');
+  const syncVegetationLabels = () => {
+    if (treeDensityValue) treeDensityValue.textContent = `${Math.round(VEGETATION.treeDensity * 100)}%`;
+    if (treeScaleValue) treeScaleValue.textContent = `${Math.round(VEGETATION.treeScale * 100)}%`;
+  };
+  const refreshVegetation = () => world.refreshVegetation();
+  if (treeDensitySelect) {
+    treeDensitySelect.value = String(VEGETATION.treeDensity);
+    treeDensitySelect.addEventListener('input', (e) => {
+      VEGETATION.treeDensity = Number(e.target.value);
+      syncVegetationLabels();
+    });
+    treeDensitySelect.addEventListener('change', refreshVegetation);
+  }
+  if (treeScaleSelect) {
+    treeScaleSelect.value = String(VEGETATION.treeScale);
+    treeScaleSelect.addEventListener('input', (e) => {
+      VEGETATION.treeScale = Number(e.target.value);
+      syncVegetationLabels();
+    });
+    treeScaleSelect.addEventListener('change', refreshVegetation);
+  }
+  syncVegetationLabels();
 
   // ============ Title screen + dropdown menu ============
   // The world renders behind the title as a living backdrop; movement only

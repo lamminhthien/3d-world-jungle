@@ -18,6 +18,16 @@ export const ROCK_COUNT = 150;
 export const CLOUD_COUNT = 9;
 export const FOAM_COUNT = 26;
 
+// Vegetation tuning. These two values are intentionally centralized because
+// the active world is chunk-streamed (src/world/chunks.js), while trees.js is
+// still used by a few legacy/static previews.
+// 0.65 leaves more open sight lines around the player without making the
+// jungle feel empty. Set to 1 for the previous density, or lower for a park.
+export const VEGETATION = {
+  treeDensity: 0.65,
+  treeScale: 0.9,
+};
+
 export const WORLD = {
   size: 90,
   groundSegments: 64,

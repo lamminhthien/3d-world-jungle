@@ -112,6 +112,12 @@ body { user-select: none; -webkit-user-select: none; touch-action: none; positio
 .menu-title { font-size: 12px; font-weight: 700; color: #2e7d32; margin-bottom: 6px; }
 .menu-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .menu-row.help-row { align-items: center; }
+.menu-setting { display: grid; gap: 4px; margin-top: 8px; }
+.menu-setting:first-of-type { margin-top: 0; }
+.menu-setting label { display: flex; justify-content: space-between; gap: 8px; color: #33691e; font-size: 12px; font-weight: 700; }
+.menu-setting output { color: #689f38; font-variant-numeric: tabular-nums; }
+.menu-setting input[type="range"] { width: 100%; accent-color: #43a047; cursor: pointer; }
+.menu-setting-hint { margin-top: 6px; color: #78909c; font-size: 11px; }
 .menu-panel #fps, .menu-panel #pos {
   background: #f1f8e9; padding: 8px 12px; border-radius: 10px; font-size: 12px;
   font-weight: 600; color: #33691e; font-variant-numeric: tabular-nums; flex: 1; white-space: nowrap;

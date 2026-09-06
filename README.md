@@ -84,6 +84,11 @@ export const ENV = {
 };
 ```
 
+Vegetation can be tuned in the same file via `VEGETATION`: `treeDensity` is a
+multiplier for tree placement (default `0.65`) and `treeScale` controls tree
+size (default `0.9`). Use `1` for the original density/size, or lower values
+for a more open, park-like world.
+
 ## 🚀 Quickstart
 
 ```bash

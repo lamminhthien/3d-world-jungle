@@ -5,7 +5,7 @@
 // visible chunk set changes (seed + chunk key => stable placement, no popping).
 
 import * as THREE from 'three';
-import { BRIDGES } from '../config.js';
+import { BRIDGES, VEGETATION } from '../config.js';
 import { QUALITY } from '../core/setup.js';
 import { obstacles } from '../utils.js';
 import { rngFromString } from './noise.js';
@@ -227,11 +227,12 @@ export function createWorldManager(scene, seedStr) {
       const y = s.y;
       const roll = rng();
 
-      // All shapes come from static presets (see ./presets.js) — same
-      // densities as before, now with textured materials.
+      // All shapes come from static presets (see ./presets.js). Tree density
+      // and scale are controlled centrally in config.js so the streamed world
+      // and legacy/static previews can be tuned together.
       if (biome === BIOMES.JUNGLE) {
-        if (roll < 0.44 && bucket.ti + 4 <= POOL.trees) {
-          const s = rand(rng, 0.8, 1.5);
+        if (roll < 0.44 * VEGETATION.treeDensity && bucket.ti + 4 <= POOL.trees) {
+          const s = rand(rng, 0.8, 1.5) * VEGETATION.treeScale;
           const kind = rng();
           // Canopy tree lottery: classic pine/broadleaf + fruit, blossom,
           // kapok giants, banana clumps, coconut palms + rare rainbow/golden.
@@ -245,14 +246,14 @@ export function createWorldManager(scene, seedStr) {
             placeBlossomTree(meshes, bucket, obstacles, x, y, z, s, rng);
           } else if (kind < 0.64 && bucket.bi + 4 <= POOL.crowns) {
             // Rare rainbow showpiece.
-            placeRainbowTree(meshes, bucket, obstacles, x, y, z, rand(rng, 0.9, 1.4), rng);
+            placeRainbowTree(meshes, bucket, obstacles, x, y, z, rand(rng, 0.9, 1.4) * VEGETATION.treeScale, rng);
           } else if (kind < 0.69 && bucket.bi + 3 <= POOL.crowns) {
             // Rare golden accent.
             placeGoldenTree(meshes, bucket, obstacles, x, y, z, s, rng);
           } else if (kind < 0.74 && bucket.bi + 5 <= POOL.crowns) {
-            placeKapok(meshes, bucket, obstacles, x, y, z, rand(rng, 1.0, 1.5), rng);
+            placeKapok(meshes, bucket, obstacles, x, y, z, rand(rng, 1.0, 1.5) * VEGETATION.treeScale, rng);
           } else if (kind < 0.84 && bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
-            placeBanana(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.2), rng);
+            placeBanana(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.2) * VEGETATION.treeScale, rng);
           } else if (bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
             placePalm(meshes, bucket, obstacles, x, y, z, s, rng);
           }
@@ -282,8 +283,8 @@ export function createWorldManager(scene, seedStr) {
         }
       } else if (biome === BIOMES.MOUNTAIN || biome === BIOMES.SNOW) {
         const snowy = biome === BIOMES.SNOW;
-        if (roll < 0.34 && bucket.ti + 1 <= POOL.trees && bucket.pi + 3 <= POOL.crowns) {
-          placePine(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.2), rng,
+        if (roll < 0.34 * VEGETATION.treeDensity && bucket.ti + 1 <= POOL.trees && bucket.pi + 3 <= POOL.crowns) {
+          placePine(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.2) * VEGETATION.treeScale, rng,
             snowy ? PALETTES.snowPine : PALETTES.pine);
         } else if (roll < 0.6 && bucket.ri < POOL.rocks) {
           placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.6, 1.6), rng,
@@ -291,11 +292,11 @@ export function createWorldManager(scene, seedStr) {
         }
       } else {
         // BEACH: tropical palms, seashells (cream rocks), dune grass.
-        if (roll < 0.15 && bucket.ti + 2 <= POOL.trees && bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
+        if (roll < 0.15 * VEGETATION.treeDensity && bucket.ti + 2 <= POOL.trees && bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
           // Beach palms: shorter, wider spread
-          placePalm(meshes, bucket, obstacles, x, y, z, rand(rng, 0.65, 1.1), rng);
-        } else if (roll < 0.2 && bucket.ti + 2 <= POOL.trees && bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
-          placeBanana(meshes, bucket, obstacles, x, y, z, rand(rng, 0.6, 0.95), rng);
+          placePalm(meshes, bucket, obstacles, x, y, z, rand(rng, 0.65, 1.1) * VEGETATION.treeScale, rng);
+        } else if (roll < 0.2 * VEGETATION.treeDensity && bucket.ti + 2 <= POOL.trees && bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
+          placeBanana(meshes, bucket, obstacles, x, y, z, rand(rng, 0.6, 0.95) * VEGETATION.treeScale, rng);
         } else if (roll < 0.28 && bucket.ri < POOL.rocks) {
           // Seashells: tiny cream-tinted rocks
           placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.18, 0.45), rng, 0xf5f0e8);
@@ -425,6 +426,12 @@ export function createWorldManager(scene, seedStr) {
       return ensureAround(px, pz);
     },
     flush,
+    refreshVegetation() {
+      // The terrain chunks remain intact; only rebuild instance transforms and
+      // collision obstacles using the current vegetation settings.
+      if (pendingBuild.length > 0) flush();
+      rebuildVegetation(new Set(groundChunks.keys()));
+    },
     regenerate,
     getSpawn: () => ({ ...spawn }),
     getBridgePoints: () => bridgePts.map((b) => ({ ...b })),
