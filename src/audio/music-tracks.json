@@ -1,239 +1,238 @@
 {
   "tracks": [
     {
-      "id": "jungle-sunrise",
-      "name": "Jungle Sunrise",
-      "description": "Warm, bright Stardew-like music box with a nostalgic morning stroll feel.",
-      "bpm": 74,
+      "id": "tropical-sunrise",
+      "name": "Tropical Sunrise",
+      "description": "Upbeat, sunny morning vibe with bright, popping melodies and high energy.",
+      "bpm": 124,
       "delay": {
-        "time": 0.42,
-        "feedback": 0.32,
-        "dampen": 2200,
-        "wet": 0.35
+        "time": 0.32,
+        "feedback": 0.25,
+        "dampen": 3000,
+        "wet": 0.20
       },
       "timbre": {
         "leadWave": "triangle",
         "shimmerWave": "sine",
         "shimmerRatio": 2.0,
-        "shimmerGain": 0.25,
-        "leadFilterCutoff": 2400
+        "shimmerGain": 0.30,
+        "leadFilterCutoff": 3500
       },
       "dayChords": [
         [48, 55, 60, 64],
-        [47, 55, 59, 62],
-        [45, 52, 57, 60],
-        [41, 48, 53, 57]
+        [41, 48, 53, 57],
+        [43, 50, 55, 59],
+        [48, 55, 60, 64]
       ],
       "nightChords": [
+        [48, 55, 60, 64],
         [45, 52, 57, 60],
         [41, 48, 53, 57],
-        [48, 55, 60, 64],
         [43, 50, 55, 59]
       ],
-      "pentaDay": [72, 74, 76, 79, 81, 84, 86],
-      "pentaMoody": [69, 72, 74, 76, 79, 81, 84],
+      "pentaDay": [60, 62, 64, 67, 69, 72, 74],
+      "pentaMoody": [58, 60, 62, 65, 67, 70, 72],
       "density": {
-        "day": 0.55,
-        "night": 0.35,
-        "rain": 0.28
+        "day": 0.70,
+        "night": 0.50,
+        "rain": 0.40
       },
       "chordCycles": 4
     },
     {
-      "id": "deep-emerald-canopy",
-      "name": "Deep Emerald Canopy",
-      "description": "Lush, mystical forest atmosphere with rich 7th chords and deep spacious echoes.",
-      "bpm": 64,
+      "id": "summer-canopy",
+      "name": "Summer Canopy",
+      "description": "Bright, warm forest atmosphere with bouncy rhythms and a cheerful summer glow.",
+      "bpm": 118,
       "delay": {
-        "time": 0.52,
-        "feedback": 0.38,
-        "dampen": 1900,
-        "wet": 0.40
+        "time": 0.38,
+        "feedback": 0.28,
+        "dampen": 2800,
+        "wet": 0.25
       },
       "timbre": {
         "leadWave": "triangle",
         "shimmerWave": "triangle",
         "shimmerRatio": 1.5,
-        "shimmerGain": 0.20,
-        "leadFilterCutoff": 2100
+        "shimmerGain": 0.25,
+        "leadFilterCutoff": 3200
       },
       "dayChords": [
-        [41, 48, 53, 57, 64],
         [48, 55, 60, 64],
-        [45, 50, 57, 60, 65],
-        [46, 53, 58, 62]
+        [43, 50, 55, 59],
+        [45, 52, 57, 60],
+        [41, 48, 53, 57]
       ],
       "nightChords": [
-        [45, 50, 57, 60, 64],
-        [43, 50, 55, 58, 65],
-        [46, 53, 57, 62],
-        [45, 52, 55, 60]
+        [48, 55, 60, 64],
+        [41, 48, 53, 57],
+        [43, 50, 55, 59],
+        [45, 52, 57, 60]
       ],
-      "pentaDay": [65, 69, 72, 74, 77, 81, 84],
-      "pentaMoody": [62, 65, 69, 72, 74, 77, 81],
+      "pentaDay": [60, 62, 64, 67, 69, 72, 74],
+      "pentaMoody": [57, 60, 62, 65, 67, 70, 72],
       "density": {
-        "day": 0.45,
-        "night": 0.30,
-        "rain": 0.25
+        "day": 0.65,
+        "night": 0.45,
+        "rain": 0.35
       },
       "chordCycles": 4
     },
     {
-      "id": "sunlit-ruins",
-      "name": "Sunlit Ruins",
-      "description": "Playful, buoyant discovery theme with bright overtone chimes and energetic pace.",
-      "bpm": 82,
+      "id": "playful-ruins",
+      "name": "Playful Ruins",
+      "description": "High-energy, bouncy discovery theme with popping chimes and a funny, curious pace.",
+      "bpm": 136,
       "delay": {
-        "time": 0.36,
-        "feedback": 0.28,
-        "dampen": 2600,
-        "wet": 0.30
+        "time": 0.28,
+        "feedback": 0.20,
+        "dampen": 3500,
+        "wet": 0.20
       },
       "timbre": {
         "leadWave": "sine",
         "shimmerWave": "triangle",
         "shimmerRatio": 2.0,
-        "shimmerGain": 0.30,
-        "leadFilterCutoff": 2800
+        "shimmerGain": 0.35,
+        "leadFilterCutoff": 4000
       },
       "dayChords": [
+        [48, 55, 60, 64],
         [43, 50, 55, 59],
-        [42, 49, 54, 57, 62],
-        [40, 47, 52, 55, 59],
+        [41, 48, 53, 57],
         [48, 55, 60, 64]
       ],
       "nightChords": [
-        [40, 47, 52, 55, 59],
-        [48, 52, 55, 60],
+        [48, 55, 60, 64],
+        [41, 48, 53, 57],
         [43, 50, 55, 59],
-        [47, 50, 54, 59]
+        [45, 52, 57, 60]
       ],
-      "pentaDay": [71, 74, 76, 79, 83, 86, 88],
-      "pentaMoody": [67, 71, 74, 76, 79, 83, 86],
+      "pentaDay": [60, 62, 64, 67, 69, 72, 74],
+      "pentaMoody": [55, 58, 60, 63, 65, 68, 70],
       "density": {
-        "day": 0.60,
-        "night": 0.40,
-        "rain": 0.30
+        "day": 0.80,
+        "night": 0.60,
+        "rain": 0.50
       },
       "chordCycles": 5
     },
     {
-      "id": "whispering-river",
-      "name": "Whispering River",
-      "description": "Fluid, reflective stream atmosphere with shimmering high bells and rippling delay.",
-      "bpm": 70,
+      "id": "sparkling-river",
+      "name": "Sparkling River",
+      "description": "Fast, shimmering stream atmosphere with bright high bells and a refreshing summer flow.",
+      "bpm": 126,
       "delay": {
-        "time": 0.44,
-        "feedback": 0.35,
-        "dampen": 2300,
-        "wet": 0.38
+        "time": 0.34,
+        "feedback": 0.30,
+        "dampen": 3200,
+        "wet": 0.30
       },
       "timbre": {
         "leadWave": "sine",
         "shimmerWave": "sine",
         "shimmerRatio": 3.0,
-        "shimmerGain": 0.22,
-        "leadFilterCutoff": 2500
+        "shimmerGain": 0.30,
+        "leadFilterCutoff": 3800
       },
       "dayChords": [
-        [45, 50, 54, 57, 62],
-        [45, 49, 52, 57],
-        [47, 50, 54, 59],
-        [43, 47, 50, 55, 59]
+        [48, 55, 60, 64],
+        [41, 48, 53, 57],
+        [43, 50, 55, 59],
+        [48, 55, 60, 64]
       ],
       "nightChords": [
-        [47, 50, 54, 59],
-        [43, 47, 50, 55],
-        [45, 50, 54, 57],
-        [42, 49, 54, 57]
+        [48, 55, 60, 64],
+        [45, 52, 57, 60],
+        [41, 48, 53, 57],
+        [43, 50, 55, 59]
       ],
-      "pentaDay": [74, 76, 78, 81, 83, 86, 90],
-      "pentaMoody": [71, 74, 76, 78, 81, 83, 86],
+      "pentaDay": [60, 62, 64, 67, 69, 72, 74],
+      "pentaMoody": [58, 60, 62, 65, 67, 70, 72],
       "density": {
-        "day": 0.52,
-        "night": 0.33,
-        "rain": 0.28
+        "day": 0.75,
+        "night": 0.55,
+        "rain": 0.45
       },
       "chordCycles": 4
     },
     {
-      "id": "ancient-totem",
-      "name": "Ancient Totem",
-      "description": "Sacred, woodland Dorian harmony with hollow kalimba-like tones and calm mystery.",
-      "bpm": 66,
+      "id": "tribal-celebration",
+      "name": "Tribal Celebration",
+      "description": "Energetic, festive woodland harmony with popping tones and a joyful jungle beat.",
+      "bpm": 130,
       "delay": {
-        "time": 0.48,
-        "feedback": 0.34,
-        "dampen": 2000,
-        "wet": 0.36
+        "time": 0.30,
+        "feedback": 0.25,
+        "dampen": 3000,
+        "wet": 0.25
       },
       "timbre": {
         "leadWave": "triangle",
         "shimmerWave": "triangle",
         "shimmerRatio": 2.0,
-        "shimmerGain": 0.18,
-        "leadFilterCutoff": 2000
+        "shimmerGain": 0.25,
+        "leadFilterCutoff": 3500
       },
       "dayChords": [
-        [45, 52, 55, 60],
-        [45, 50, 54, 57],
-        [45, 52, 55, 60],
-        [40, 47, 52, 55]
+        [48, 55, 60, 64],
+        [41, 48, 53, 57],
+        [43, 50, 55, 59],
+        [48, 55, 60, 64]
       ],
       "nightChords": [
-        [45, 52, 55, 59, 64],
-        [41, 48, 52, 57],
-        [40, 47, 52, 55],
-        [45, 50, 53, 57]
+        [48, 55, 60, 64],
+        [45, 52, 57, 60],
+        [41, 48, 53, 57],
+        [43, 50, 55, 59]
       ],
-      "pentaDay": [69, 72, 74, 76, 79, 81, 84],
-      "pentaMoody": [67, 69, 72, 74, 76, 79, 81],
+      "pentaDay": [60, 62, 64, 67, 69, 72, 74],
+      "pentaMoody": [58, 60, 62, 65, 67, 70, 72],
       "density": {
-        "day": 0.48,
-        "night": 0.30,
-        "rain": 0.26
+        "day": 0.85,
+        "night": 0.65,
+        "rain": 0.55
       },
       "chordCycles": 4
     },
     {
-      "id": "moonlit-glade",
-      "name": "Moonlit Glade",
-      "description": "Dreamy, nocturnal star-gazing lullaby with velvet sine pads and slow lazy stroll.",
-      "bpm": 60,
+      "id": "starlit-beach",
+      "name": "Starlit Beach",
+      "description": "Upbeat, dreamy nocturnal stroll with bright sine pads and a breezy summer night feel.",
+      "bpm": 112,
       "delay": {
-        "time": 0.50,
-        "feedback": 0.36,
-        "dampen": 1800,
-        "wet": 0.42
+        "time": 0.40,
+        "feedback": 0.32,
+        "dampen": 2500,
+        "wet": 0.35
       },
       "timbre": {
         "leadWave": "sine",
         "shimmerWave": "sine",
         "shimmerRatio": 2.0,
-        "shimmerGain": 0.20,
-        "leadFilterCutoff": 2200
+        "shimmerGain": 0.25,
+        "leadFilterCutoff": 3000
       },
       "dayChords": [
-        [40, 47, 52, 55, 59],
-        [36, 43, 48, 52, 55],
+        [48, 55, 60, 64],
+        [41, 48, 53, 57],
         [43, 50, 55, 59],
-        [45, 50, 54, 57]
+        [48, 55, 60, 64]
       ],
       "nightChords": [
-        [40, 47, 52, 55, 59],
-        [47, 54, 57, 62],
-        [48, 52, 55, 59],
-        [45, 52, 55, 60]
+        [48, 55, 60, 64],
+        [45, 52, 57, 60],
+        [41, 48, 53, 57],
+        [43, 50, 55, 59]
       ],
-      "pentaDay": [67, 71, 74, 76, 79, 83, 86],
-      "pentaMoody": [64, 67, 71, 74, 76, 79, 83],
+      "pentaDay": [60, 62, 64, 67, 69, 72, 74],
+      "pentaMoody": [58, 60, 62, 65, 67, 70, 72],
       "density": {
-        "day": 0.42,
-        "night": 0.28,
-        "rain": 0.22
+        "day": 0.60,
+        "night": 0.40,
+        "rain": 0.30
       },
       "chordCycles": 4
     }
   ]
 }
-
