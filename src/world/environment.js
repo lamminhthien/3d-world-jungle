@@ -9,6 +9,7 @@
 // - Audio: tiny procedural WebAudio ambience (wind / rain / birds / crickets).
 import * as THREE from 'three';
 import { QUALITY } from '../core/setup.js';
+import { createCozyMusic } from '../audio/cozy.js';
 
 export const WEATHERS = ['clear', 'overcast', 'rain', 'fog'];
 const WEATHER_LABEL = { clear: 'Clear', overcast: 'Overcast', rain: 'Rain', fog: 'Fog' };
@@ -83,10 +84,12 @@ function rollNextWeather(rng = Math.random) {
 // ---- Minimal procedural ambience (no assets, starts on user gesture) ----
 function createAmbience() {
   let ctx = null;
-  let windGain, rainGain, master;
+  let windGain, rainGain, master, musicBus;
+  let cozy = null;
   let chirpTimer = 0;
   let crackleTimer = 0;
   let enabled = false;
+  let musicOn = true;
 
   function ensure() {
     if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return true; }
@@ -113,6 +116,13 @@ function createAmbience() {
     };
     windGain = mkLoop(400, 0.6, 0.03);
     rainGain = mkLoop(4000, 0.4, 0.0);
+    // Cozy generative music box (Stardew-like) on its own sub-bus so the
+    // melody sits under wind/rain/critters instead of fighting them.
+    musicBus = ctx.createGain();
+    musicBus.gain.value = 0.5;
+    musicBus.connect(master);
+    cozy = createCozyMusic(ctx, musicBus);
+    cozy.setMuted(!musicOn);
     return true;
   }
 
@@ -129,10 +139,27 @@ function createAmbience() {
     o.start(t0); o.stop(t0 + dur + 0.05);
   }
 
+  // HUD button labels live in buildHud's closure; these sync helpers update
+  // them if the buttons exist yet (safe to call before the HUD is built).
+  function syncMuteBtn() {
+    const b = document.getElementById('env-mute');
+    if (b) b.textContent = enabled ? '🔊' : '🔇';
+  }
+  function syncMusicBtn() {
+    const b = document.getElementById('env-music');
+    if (b) {
+      b.textContent = '🎵';
+      b.classList.toggle('off', !musicOn);
+      b.title = musicOn ? 'Mute music' : 'Unmute music';
+    }
+  }
+
   // dt-driven critter scheduler: birds by day, crickets by night,
   // campfire crackle when the player camps nearby.
   function update(dt, { isNight, rain, fire = 0 }) {
     if (!ctx || !enabled) return;
+    // Generative cozy music sits alongside the wind/rain/critters.
+    if (cozy) cozy.update(dt, { isNight, rain });
     windGain.gain.value += ((rain > 0.5 ? 0.05 : 0.03) - windGain.gain.value) * Math.min(1, dt * 2);
     rainGain.gain.value += (rain * 0.14 - rainGain.gain.value) * Math.min(1, dt * 2);
     chirpTimer -= dt;
@@ -165,11 +192,26 @@ function createAmbience() {
 
   return {
     get enabled() { return enabled; },
+    get musicOn() { return musicOn; },
+    enable() {
+      enabled = true;
+      if (ensure() && master) master.gain.value = 0.5;
+      else enabled = false;
+      syncMuteBtn();
+      return enabled;
+    },
     toggle() {
       enabled = !enabled;
       if (enabled) enabled = ensure();
       if (master) master.gain.value = enabled ? 0.5 : 0.0;
+      syncMuteBtn();
       return enabled;
+    },
+    toggleMusic() {
+      musicOn = !musicOn;
+      if (cozy) cozy.setMuted(!musicOn);
+      syncMusicBtn();
+      return musicOn;
     },
     update,
   };
@@ -346,6 +388,7 @@ export function createEnvironment(scene, opts = {}) {
         <button id="env-pause" title="Pause / resume time">⏸</button>
         <button id="env-skip" title="Jump to morning / night">⏭</button>
         <button id="env-wxbtn" title="Change weather">🌧️</button>
+        <button id="env-music" title="Mute music">🎵</button>
         <button id="env-mute" title="Ambient sound">🔇</button>
       </div>`;
     timeEl = root.querySelector('#env-time');
@@ -354,6 +397,7 @@ export function createEnvironment(scene, opts = {}) {
     const skipBtn = root.querySelector('#env-skip');
     const wxBtn = root.querySelector('#env-wxbtn');
     const muteBtn = root.querySelector('#env-mute');
+    const musicBtn = root.querySelector('#env-music');
     pauseBtn.onclick = () => {
       state.paused = !state.paused;
       pauseBtn.textContent = state.paused ? '▶️' : '⏸';
@@ -370,6 +414,13 @@ export function createEnvironment(scene, opts = {}) {
       const on = ambience.toggle();
       muteBtn.textContent = on ? '🔊' : '🔇';
     };
+    if (musicBtn) {
+      musicBtn.onclick = () => {
+        // Lazily unlock audio on first click (autoplay policy), then flip music.
+        if (!ambience.enabled) ambience.enable();
+        ambience.toggleMusic();
+      };
+    }
     // First click anywhere unlocks audio if the user enabled it — nothing to do
     // until toggle; AudioContext is created lazily inside toggle().
   }

@@ -136,6 +136,8 @@ async function boot() {
   function startGame() {
     if (started) return;
     started = true;
+    // Play is a user gesture: unlock cozy audio (ambience + chill music box).
+    try { env.ambience.enable(); } catch { /* audio unsupported: play silent */ }
     const v = (titleSeedInput && titleSeedInput.value.trim()) || initialSeed;
     if (seedInput && v !== seedInput.value) applySeed(v);
     if (titleScreen) titleScreen.hidden = true;

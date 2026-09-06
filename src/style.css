@@ -70,6 +70,7 @@ body.is-standalone #btnFullscreen { display: none; }
 #envbar .env-btns { display: flex; gap: 4px; }
 #envbar button { border: none; background: rgba(255,255,255,.14); color: #fff; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 14px; line-height: 1; }
 #envbar button:hover { background: rgba(255,255,255,.3); }
+#envbar button.off { opacity: .45; filter: grayscale(.7); }
 /* envbar docked inside the dropdown menu: static row, light theme */
 #menuEnvSlot #envbar {
   position: static; background: #f1f8e9; color: #33691e; border: 1px solid #c8e6c9;
