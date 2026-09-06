@@ -77,3 +77,6 @@ body { user-select: none; -webkit-user-select: none; touch-action: none; positio
 #loading.hidden { opacity: 0; pointer-events: none; }
 .loader { font-size: 52px; animation: bounce 1s infinite alternate; }
 @keyframes bounce { from { transform: translateY(0) rotate(-8deg);} to { transform: translateY(-14px) rotate(8deg);} }
+#loadmsg { margin: 0; min-height: 26px; }
+.loadbar { width: min(320px, 70vw); height: 10px; border-radius: 999px; background: rgba(46, 125, 50, 0.18); overflow: hidden; }
+#loadfill { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, #43a047, #7cc47f); transition: width 0.25s ease; }
