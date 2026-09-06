@@ -1,31 +1,67 @@
 import * as THREE from 'three';
-import { RIVER_HALF, SPAWN, SPEED, WORLD } from './config.js';
-import { groundHeight, isOnBridge, obstacles } from './utils.js';
+import { DEFAULT_SEED, RIVER_HALF, SPEED } from './config.js';
+import { groundHeight, isOnBridge, obstacles, riverDist } from './utils.js';
 import { setupCore } from './core/setup.js';
-import { createGround } from './world/ground.js';
+import { createWorldManager } from './world/chunks.js';
 import { createRiver } from './world/river.js';
-import { createRocks } from './world/rocks.js';
-import { createTrees } from './world/trees.js';
-import { createBridges } from './world/bridge.js';
+import { createBridges, removeBridges } from './world/bridge.js';
 import { createClouds } from './world/clouds.js';
 import { createPlayer } from './entities/player.js';
 import { setupControls } from './input/controls.js';
+import { randomSeedString } from './world/noise.js';
+
+// ============ Seed (docs section 4.1): ?seed= in URL, else default ============
+const params = new URLSearchParams(location.search);
+const initialSeed = params.get('seed') || DEFAULT_SEED;
 
 // ============ Boot ============
 const canvas = document.getElementById('scene');
 const core = setupCore(canvas);
 const { renderer, scene, camera, camTarget, sun, state, updateCameraPos } = core;
-camTarget.set(SPAWN.x, 0.5, SPAWN.z);
 
-createGround(scene);
+// Infinite chunked world (docs section 3): ground + biome vegetation stream
+// around the player; section 4.5 spawns at (0, ymax, 0).
+const world = createWorldManager(scene, initialSeed);
+let spawn = world.getSpawn();
+
 const river = createRiver(scene);
-createRocks(scene);
-createTrees(scene);
-createBridges(scene);
+let bridgeGroups = createBridges(scene);
 const sky = createClouds(scene);
 
 const { player, parts } = createPlayer(scene);
+player.position.set(spawn.x, groundHeight(spawn.x, spawn.z), spawn.z);
+camTarget.set(spawn.x, 0.5, spawn.z);
 const { keys, joy } = setupControls(canvas, core);
+
+// ============ Seed UI ============
+const seedInput = document.getElementById('seed');
+const seedBtn = document.getElementById('newWorld');
+const chunkEl = document.getElementById('chunks');
+if (seedInput) seedInput.value = initialSeed;
+
+function applySeed(newSeed) {
+  spawn = world.regenerate(newSeed);
+  removeBridges(scene, bridgeGroups);
+  bridgeGroups = createBridges(scene);
+  player.position.set(spawn.x, groundHeight(spawn.x, spawn.z), spawn.z);
+  camTarget.set(spawn.x, 0.5, spawn.z);
+  const url = new URL(location.href);
+  url.searchParams.set('seed', newSeed);
+  history.replaceState(null, '', url);
+  if (seedInput) seedInput.value = newSeed;
+}
+
+if (seedBtn) {
+  seedBtn.addEventListener('click', () => {
+    const v = (seedInput && seedInput.value.trim()) || randomSeedString();
+    applySeed(v);
+  });
+}
+if (seedInput) {
+  seedInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') applySeed(seedInput.value.trim() || randomSeedString());
+  });
+}
 
 // ============ HUD ============
 const posEl = document.getElementById('pos');
@@ -63,7 +99,7 @@ function update(dt) {
     let nx = player.position.x + move.x * SPEED * dt;
     let nz = player.position.z + move.z * SPEED * dt;
 
-    // Circle collision against trees / rocks.
+    // Circle collision against trees / rocks / cacti.
     for (const o of obstacles) {
       const dx = nx - o.x;
       const dz = nz - o.z;
@@ -74,14 +110,17 @@ function update(dt) {
         nz = o.z + (dz / d) * min;
       }
     }
-    // Block the river (unless on a bridge) + clamp to map bounds.
-    if (Math.abs(nx) < RIVER_HALF + 0.5 && !isOnBridge(nz)) {
-      nx = Math.sign(nx || 1) * (RIVER_HALF + 0.5);
+    // Block the winding river (unless on a bridge). No map edge: chunks stream.
+    // Simplest stable response: revert to previous position.
+    if (riverDist(nx, nz) < RIVER_HALF + 0.5 && !isOnBridge(nx, nz)) {
+      nx = player.position.x;
+      nz = player.position.z;
     }
+    // Safety bound against float precision, far beyond the visible area.
     const r = Math.hypot(nx, nz);
-    if (r > WORLD.playRadius) {
-      nx *= WORLD.playRadius / r;
-      nz *= WORLD.playRadius / r;
+    if (r > 500) {
+      nx *= 500 / r;
+      nz *= 500 / r;
     }
 
     player.position.x = nx;
@@ -105,7 +144,9 @@ function update(dt) {
   }
   player.position.y += (groundHeight(player.position.x, player.position.z) - player.position.y) * Math.min(1, dt * 10);
 
-  river.update(dt);
+  // Stream chunks around the player + keep water/foam nearby.
+  world.update(player.position.x, player.position.z);
+  river.update(dt, player.position);
   sky.update(dt);
 
   // Smooth camera follow + sun follows target for stable shadows.
@@ -114,6 +155,11 @@ function update(dt) {
   sun.target.position.copy(camTarget);
   sun.target.updateMatrixWorld();
   updateCameraPos();
+
+  if (chunkEl) {
+    const s = world.stats();
+    chunkEl.textContent = `${s.chunks} chunks · ${s.seed}`;
+  }
 }
 
 // ============ Loop ============

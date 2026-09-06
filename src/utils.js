@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { BRIDGES, RIVER_HALF } from './config.js';
+import { proceduralGroundHeight, riverDist as procRiverDist, riverXAt } from './world/procedural.js';
 
 // Shared mutable helpers to avoid circular imports.
 // `dummy` is reused for all InstancedMesh transforms.
-// `obstacles` is filled by rocks/trees and read by movement.
+// `obstacles` is filled by the chunk manager and read by movement.
 export const dummy = new THREE.Object3D();
 export const obstacles = []; // { x, z, r }
 
@@ -19,15 +20,28 @@ export function flatMat(color, opts = {}) {
   });
 }
 
-// River banks step down toward the water, creating natural stone tiers.
+// Procedural ground: stepped terrain carved by the winding river.
+// Delegates to world/procedural.js (seeded noise). Safe to call before
+// initProcedural — the generator lazily boots with the default seed.
 export function groundHeight(x, z) {
-  const ax = Math.abs(x);
-  if (ax < RIVER_HALF) return -0.55;
-  if (ax < 4.6) return -0.25;
-  if (ax < 6.2) return 0.05;
-  return 0;
+  return proceduralGroundHeight(x, z);
 }
 
-export function isOnBridge(z) {
-  return BRIDGES.some((bz) => Math.abs(z - bz) < 1.6);
+// Distance from (x, z) to the winding river centre line.
+export function riverDist(x, z) {
+  return procRiverDist(x, z);
+}
+
+// True when (x, z) is on (or right next to) a bridge deck.
+export function isOnBridge(x, z) {
+  // Backward-compat: old callers passed only z (straight river at x = 0).
+  if (z === undefined) {
+    const zz = x;
+    return BRIDGES.some((bz) => Math.abs(zz - bz) < 1.6);
+  }
+  return BRIDGES.some((bz) => Math.abs(z - bz) < 1.6 && Math.abs(x - riverXAt(bz)) < RIVER_HALF + 2.5);
+}
+
+export function bridgeCenter(bz) {
+  return { x: riverXAt(bz), z: bz };
 }
