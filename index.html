@@ -7,6 +7,12 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="theme-color" content="#2e7d32" />
+    <meta name="description" content="Dạo chơi trong rừng low-poly/isometric 3D — chơi offline, cài như app Android." />
+    <meta name="apple-mobile-web-app-title" content="Rừng 3D" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <title>Dạo Chơi Trong Rừng — Low Poly Isometric</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
@@ -27,6 +33,8 @@
       <div class="stats">
         <div id="fps">60 FPS</div>
         <div id="pos">x: 0, z: 0</div>
+        <button id="btnInstall" class="icon-btn" title="Cài app" aria-label="Cài app" hidden>⬇️</button>
+        <button id="btnFullscreen" class="icon-btn" title="Toàn màn hình" aria-label="Toàn màn hình">⛶</button>
       </div>
       <div class="seedbar">
         <span class="seed-label">🌍 Seed</span>

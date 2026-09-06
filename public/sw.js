@@ -21,7 +21,15 @@
 
 const VERSION = new URL(self.location.href).searchParams.get('v') || 'dev';
 const CACHE_NAME = `jungle-v${VERSION}`;
-const SHELL = ['./', './index.html'];
+const SHELL = [
+  './',
+  './index.html',
+  './manifest.webmanifest',
+  './favicon.svg',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/maskable-512.png',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

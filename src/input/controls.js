@@ -132,7 +132,7 @@ export function setupControls(canvas, rig) {
   }
 
   function isTouchUI(el) {
-    return el && typeof el.closest === 'function' && el.closest('#touch-ui, #hud .seedbar, #envbar');
+    return el && typeof el.closest === 'function' && el.closest('#touch-ui, #hud .seedbar, #hud .stats, #envbar, button');
   }
 
   // Chạm bắt đầu: nửa trái (55%) = joystick, còn lại = xoay camera.

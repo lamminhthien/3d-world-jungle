@@ -12,6 +12,7 @@ import { createFireflies } from './world/fireflies.js';
 import { createCampsites } from './world/campfire.js';
 import { createPlayer } from './entities/player.js';
 import { setupControls } from './input/controls.js';
+import { setupPwaUi } from './core/pwa.js';
 import { randomSeedString } from './world/noise.js';
 
 // ============ Seed (docs section 4.1): ?seed= in URL, else default ============
@@ -32,6 +33,8 @@ const tick = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 
 
 // ============ Boot (async để pipeline cache chạy trước khi chơi) ============
 async function boot() {
+  // Nút fullscreen / cài PWA phải bấm được ngay cả khi game đang load.
+  setupPwaUi();
   setProgress(0.01, '🌱 Đang khởi động…');
   await tick();
 

@@ -13,8 +13,21 @@ body { user-select: none; -webkit-user-select: none; touch-action: none; positio
 .or { opacity: .7; margin: 0 2px; }
 .label { margin-left: 6px; opacity: .9; }
 
-.stats { position: absolute; top: 20px; right: 24px; display: flex; gap: 8px; }
+.stats { position: absolute; top: 20px; right: 24px; display: flex; gap: 8px; align-items: center; }
 .stats div { background: rgba(255,255,255,.82); padding: 8px 12px; border-radius: 10px; font-size: 12px; font-weight: 600; color: #33691e; font-variant-numeric: tabular-nums; }
+/* PWA + fullscreen icon buttons (Android): con của #hud (pointer-events:none)
+// nên cần bật lại pointer-events để bấm được. */
+.stats .icon-btn {
+  pointer-events: auto; border: 1px solid rgba(255,255,255,.7); background: rgba(255,255,255,.82);
+  color: #2e7d32; width: 34px; height: 34px; border-radius: 10px; font-size: 16px; font-weight: 700;
+  cursor: pointer; line-height: 1; box-shadow: 0 8px 24px rgba(46,125,50,.18);
+  display: inline-flex; align-items: center; justify-content: center; touch-action: manipulation;
+}
+.stats .icon-btn:hover { background: #fff; }
+.stats .icon-btn:active { transform: scale(.92); }
+.stats .icon-btn[hidden] { display: none; }
+/* Khi đã là PWA standalone / đã fullscreen thì nút fullscreen không còn tác dụng */
+body.is-standalone #btnFullscreen { display: none; }
 
 .seedbar { position: absolute; bottom: 22px; left: 24px; display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,.85); backdrop-filter: blur(8px); padding: 8px 12px; border-radius: 999px; box-shadow: 0 8px 24px rgba(46,125,50,.18); border: 1px solid rgba(255,255,255,.7); pointer-events: auto; }
 .seed-label { font-size: 13px; font-weight: 700; color: #2e7d32; white-space: nowrap; }
