@@ -59,6 +59,7 @@
             <button class="menu-world-btn" data-seed="MOUNTAIN_PEAKS">🏔️ Mountain</button>
             <button class="menu-world-btn" data-seed="BEACH_COVE">🏖️ Beach</button>
             <button class="menu-world-btn" data-seed="NIGHT_FOREST">🌙 Night</button>
+            <button class="menu-world-btn" data-seed="VILLAGE_HUB">🏘️ Village</button>
             <button class="menu-world-btn" data-seed="__random__">🎲 Random</button>
           </div>
           <div class="menu-row" style="margin-top:6px">
@@ -93,6 +94,11 @@
       <div id="inventory">Túi đồ: 🌿 0  ·  ⭐ 0</div>
     </div>
     <div id="adventure-prompt" hidden></div>
+    <div id="village-dialogue" hidden role="dialog" aria-modal="true" aria-labelledby="village-speaker">
+      <div id="village-speaker">Dân làng</div>
+      <div id="village-dialogue-text"></div>
+      <button id="village-dialogue-close" type="button">Tiếp tục</button>
+    </div>
 
     <div id="joystick"><div id="stick"></div></div>
 
@@ -103,6 +109,7 @@
         <button id="zoomOut" aria-label="Zoom out">－</button>
       </div>
       <button id="btnSprint" aria-label="Sprint">🏃</button>
+      <button id="interact-button" aria-label="Interact">E</button>
       <div id="mobile-hint">👈 left touch to move &bull; 👉 right swipe to rotate &bull; pinch to zoom</div>
     </div>
 
@@ -120,6 +127,7 @@
             <button class="world-type-btn" data-seed="MOUNTAIN_PEAKS" data-time="">🏔️<span>Mountain</span></button>
             <button class="world-type-btn" data-seed="BEACH_COVE" data-time="">🏖️<span>Beach</span></button>
             <button class="world-type-btn" data-seed="NIGHT_FOREST" data-time="0">🌙<span>Night</span></button>
+            <button class="world-type-btn" data-seed="VILLAGE_HUB" data-time="">🏘️<span>Village</span></button>
             <button class="world-type-btn" data-seed="__random__" data-time="">🎲<span>Random</span></button>
           </div>
           <details class="custom-seed-toggle">

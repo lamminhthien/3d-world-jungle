@@ -37,6 +37,36 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: "Segoe UI
   pointer-events: none;
 }
 
+#interact-button {
+  position: fixed;
+  right: 18px;
+  bottom: 86px;
+  width: 58px;
+  height: 58px;
+  border: 2px solid rgba(255,255,255,.8);
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(49, 101, 57, .86);
+  box-shadow: 0 4px 14px rgba(0,0,0,.22);
+  font-size: 18px;
+  font-weight: 800;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+#interact-button:active { transform: scale(.92); background: rgba(73, 132, 77, .95); }
+
+#village-dialogue {
+  position: fixed; left: 50%; bottom: 78px; transform: translateX(-50%);
+  z-index: 12; width: min(460px, calc(100vw - 32px)); padding: 16px;
+  border: 1px solid rgba(255,255,255,.8); border-radius: 16px;
+  color: #263b28; background: rgba(255,255,255,.95); box-shadow: 0 12px 30px rgba(0,0,0,.25);
+  pointer-events: auto; backdrop-filter: blur(8px);
+}
+#village-dialogue[hidden] { display: none; }
+#village-speaker { color: #2e7d32; font-size: 15px; font-weight: 800; margin-bottom: 7px; }
+#village-dialogue-text { font-size: 14px; line-height: 1.5; }
+#village-dialogue-close { margin-top: 12px; border: 0; border-radius: 999px; padding: 8px 15px; color: #fff; background: #43a047; font-weight: 700; cursor: pointer; }
+
 @media (max-width: 600px) {
   #adventure-hud { bottom: 78px; font-size: 12px; }
   #adventure-prompt { bottom: 70px; }

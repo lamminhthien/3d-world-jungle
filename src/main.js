@@ -18,6 +18,7 @@ import { setupPwaUi } from './core/pwa.js';
 import { randomSeedString } from './world/noise.js';
 import { AutoPlayAgent } from './core/autoPlay.js';
 import { createAdventure } from './gameplay/adventure.js';
+import { createVillage } from './gameplay/village.js';
 
 // ============ Loop State ============
 let targetFps = DEFAULT_MAX_FPS;
@@ -88,6 +89,7 @@ async function boot() {
   const { player, parts } = createPlayer(scene);
   player.position.set(spawn.x, groundHeight(spawn.x, spawn.z), spawn.z);
   const adventure = createAdventure(scene, spawn);
+  const village = createVillage(scene, spawn);
   camTarget.set(spawn.x, 0.5, spawn.z);
   const { keys, joy, touch } = setupControls(canvas, core);
 
@@ -113,6 +115,11 @@ async function boot() {
     NIGHT_FOREST: {
       gen: {},
       timeOverride: 0.5, // start at midnight
+    },
+    VILLAGE_HUB: {
+      gen: {},
+      timeOverride: null,
+      focusVillage: true,
     },
     __random__: {
       gen: {},
@@ -144,7 +151,10 @@ async function boot() {
     camps.regenerate(actualSeed);
     player.position.set(spawn.x, groundHeight(spawn.x, spawn.z), spawn.z);
     adventure.regenerate(spawn);
-    camTarget.set(spawn.x, 0.5, spawn.z);
+    village.regenerate(spawn);
+    const destination = config.focusVillage ? village.getHubPosition() : spawn;
+    if (config.focusVillage) player.position.set(destination.x, groundHeight(destination.x, destination.z), destination.z);
+    camTarget.set(player.position.x, 0.5, player.position.z);
     const url = new URL(location.href);
     url.searchParams.set('seed', actualSeed);
     history.replaceState(null, '', url);
@@ -447,6 +457,7 @@ async function boot() {
     env.update(dt, player.position, { fire });
     animals.update(dt, player.position);
     adventure.update(dt, player.position);
+    village.update(dt, player.position);
 
     // Night systems (docs/enhance_for_night_screen.md section 5):
     // timeOfDay -> fireflies on, moon takes over, clouds darken, campfires glow.
