@@ -112,6 +112,50 @@ function makePath(width, length, horizontal = true) {
   return path;
 }
 
+function makeCandle() {
+  const group = new THREE.Group();
+  const wax = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.42, 7), mat(0xffe8b0));
+  wax.position.y = 0.25;
+  const holder = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.2, 0.08, 8), mat(0x6d4936));
+  holder.position.y = 0.05;
+  const flame = new THREE.Mesh(
+    new THREE.SphereGeometry(0.12, 7, 5),
+    new THREE.MeshBasicMaterial({ color: 0xffb52e, transparent: true, opacity: 0.95 }),
+  );
+  flame.scale.set(0.72, 1.45, 0.72);
+  flame.position.y = 0.58;
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(0.3, 8, 8),
+    new THREE.MeshBasicMaterial({
+      color: 0xffa52f, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }),
+  );
+  glow.position.y = 0.58;
+  const light = new THREE.PointLight(0xffa43a, 0, 4.5, 2);
+  light.position.y = 0.58;
+  group.add(holder, wax, flame, glow, light);
+  return { group, flame, glow, light, phase: Math.random() * Math.PI * 2 };
+}
+
+function makeVillageCandles() {
+  const group = new THREE.Group();
+  // Clustered around the central paths, board and entrances so the village
+  // reads as warm and inhabited from the isometric camera.
+  const offsets = [
+    [-3.4, 1.0], [3.4, 1.0], [-3.4, 5.1], [3.4, 5.1],
+    [-5.0, -3.5], [5.0, -3.5], [-3.0, -15.8], [3.0, -15.8],
+  ];
+  const candles = offsets.map(([x, z]) => {
+    const candle = makeCandle();
+    candle.group.position.set(x, 0, z);
+    group.add(candle.group);
+    return candle;
+  });
+  group.userData.candles = candles;
+  return group;
+}
+
 function makeVillagePad() {
   // Geometry is offset down so its top face lands exactly at the validated
   // hubY. It masks terrain steps beneath the settlement without changing the
@@ -182,6 +226,8 @@ export function createVillage(scene, spawn) {
   addFeature(makePath(1.3, 22, false), [-9, -4]);
   addFeature(makePath(1.3, 22, false), [9, -4]);
   addFeature(makeBoard(), [3, 3]);
+  const villageCandles = makeVillageCandles();
+  addFeature(villageCandles, [0, 0]);
 
   // Fence with an open gate at the south entrance.
   addFeature(makeFence(19), [-12.5, -19]);
@@ -287,7 +333,17 @@ export function createVillage(scene, spawn) {
   }
 
   return {
-    update(dt, playerPos) {
+    update(dt, playerPos, nightFactor = 0) {
+      const night = THREE.MathUtils.clamp(nightFactor, 0, 1);
+      const candleTime = performance.now() * 0.003;
+      villageCandles.userData.candles.forEach((candle, index) => {
+        const flicker = 0.82 + 0.18 * Math.sin(candleTime * (7 + index * 0.23) + candle.phase);
+        const glowStrength = night * flicker;
+        candle.light.intensity = glowStrength * 0.85;
+        candle.flame.material.opacity = 0.72 + glowStrength * 0.28;
+        candle.flame.scale.y = 1.25 + flicker * 0.28;
+        candle.glow.material.opacity = glowStrength * 0.2;
+      });
       nearest.value = null;
       let best = 2.5;
       npcs.forEach((npc) => {

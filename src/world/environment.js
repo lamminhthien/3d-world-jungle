@@ -362,7 +362,7 @@ export function createEnvironment(scene, opts = {}) {
   scene.add(sunMesh); scene.add(moonMesh);
   // Moon halo: additive glow shell for a misty moon-shaft look at night.
   const moonHalo = new THREE.Mesh(
-    new THREE.SphereGeometry(4.6, 16, 16),
+    new THREE.SphereGeometry(5.4, 16, 16),
     new THREE.MeshBasicMaterial({
       color: 0xa1c4fd, fog: false, transparent: true, opacity: 0,
       blending: THREE.AdditiveBlending, depthWrite: false,
@@ -618,7 +618,7 @@ export function createEnvironment(scene, opts = {}) {
       state.nightFactor = nightF;
       state.isNight = !isDay;
       moonLight.color.setHex(0xa1c4fd);
-      moonLight.intensity = nightF * 1.15 * (0.55 + 0.45 * wx.sun);
+      moonLight.intensity = nightF * 1.3 * (0.55 + 0.45 * wx.sun);
       moonLight.position.set(focusV.x + moonDir.x * ORBIT_R, Math.max(6, moonDir.y * ORBIT_R), focusV.z + moonDir.z * ORBIT_R);
       moonLight.target.position.copy(focusV);
       moonLight.target.updateMatrixWorld();
@@ -668,7 +668,7 @@ export function createEnvironment(scene, opts = {}) {
       moonMesh.material.opacity = THREE.MathUtils.clamp(moonDir.y * 4 + 0.3, 0, 0.9) * veil;
       moonHalo.position.copy(moonMesh.position);
       moonHalo.visible = moonMesh.visible;
-      moonHalo.material.opacity = nightF * 0.16 * veil;
+      moonHalo.material.opacity = nightF * 0.2 * veil;
 
       // --- Sunset CSS overlay: warm orange radial glow near horizon ---
       if (sunsetOverlay) {

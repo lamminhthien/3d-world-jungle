@@ -496,7 +496,7 @@ async function boot() {
     env.update(dt, player.position, { fire });
     animals.update(dt, player.position);
     adventure.update(dt, player.position);
-    village.update(dt, player.position);
+    village.update(dt, player.position, env.nightFactor);
 
     // Night systems (docs/enhance_for_night_screen.md section 5):
     // timeOfDay -> fireflies on, moon takes over, clouds darken, campfires glow.
