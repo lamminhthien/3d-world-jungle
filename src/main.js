@@ -448,8 +448,9 @@ async function boot() {
 
   function animate(now) {
     requestAnimationFrame(animate);
-    if (lastFrameTime !== 0 && now - lastFrameTime < 1000 / targetFps) return;
-    lastFrameTime = now - ((now - lastFrameTime) % (1000 / targetFps));
+    const frameDuration = 1000 / targetFps;
+    if (lastFrameTime !== 0 && now - lastFrameTime < frameDuration - 0.1) return;
+    lastFrameTime = now;
 
     const dt = Math.min(clock.getDelta(), 0.05);
     update(dt);
