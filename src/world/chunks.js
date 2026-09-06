@@ -12,6 +12,7 @@ import { getGroundBump, getGroundTexture } from './textures.js';
 import {
   createVegetationKit,
   PALETTES,
+  PALM_FRONDS,
   placeBroadleaf,
   placeBush,
   placeCactus,
@@ -38,7 +39,7 @@ export const CHUNK_RADIUS = 2; // (2*R+1)^2 = 25 chunks ~ 80x80 units visible
 const POOL = {
   trees: 800,
   crowns: 1600, // pine cones + round canopies + coconut blobs share nothing; split below
-  palms: 4000,
+  palms: 4800, // 800 trees × PALM_FRONDS (6) worst case, all palms
   bushes: 900,
   cacti: 450,
   rocks: 1000,
@@ -142,7 +143,7 @@ export function createWorldManager(scene, seedStr) {
             placePine(meshes, bucket, obstacles, x, y, z, s, rng);
           } else if (kind < 0.8 && bucket.bi + 2 <= POOL.crowns) {
             placeBroadleaf(meshes, bucket, obstacles, x, y, z, s, rng);
-          } else if (bucket.palmi + 5 < POOL.palms && bucket.bi + 1 <= POOL.crowns) {
+          } else if (bucket.palmi + PALM_FRONDS < POOL.palms && bucket.bi + 1 <= POOL.crowns) {
             placePalm(meshes, bucket, obstacles, x, y, z, s, rng);
           }
         } else if (roll < 0.62 && bucket.bu < POOL.bushes) {

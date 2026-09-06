@@ -8,6 +8,7 @@ import { BUSH_COUNT, MAX_TREES, SPAWN } from '../config.js';
 import { groundHeight, obstacles } from '../utils.js';
 import {
   createVegetationKit,
+  PALM_FRONDS,
   placeBroadleaf,
   placeBush,
   placePalm,
@@ -19,7 +20,7 @@ export function createTrees(scene) {
   const trunkMesh = new THREE.InstancedMesh(kit.geometries.trunk, kit.materials.trunk, MAX_TREES);
   const pineMesh = new THREE.InstancedMesh(kit.geometries.pine, kit.materials.pine, MAX_TREES * 2);
   const blobMesh = new THREE.InstancedMesh(kit.geometries.blob, kit.materials.blob, MAX_TREES * 2);
-  const palmMesh = new THREE.InstancedMesh(kit.geometries.palmLeaf, kit.materials.palmLeaf, MAX_TREES * 5);
+  const palmMesh = new THREE.InstancedMesh(kit.geometries.palmLeaf, kit.materials.palmLeaf, MAX_TREES * PALM_FRONDS);
   const bushMesh = new THREE.InstancedMesh(kit.geometries.bush, kit.materials.bush, BUSH_COUNT);
   const meshes = { trunk: trunkMesh, pine: pineMesh, blob: blobMesh, palm: palmMesh, bush: bushMesh };
   for (const m of [trunkMesh, pineMesh, blobMesh, palmMesh, bushMesh]) {
@@ -39,7 +40,7 @@ export function createTrees(scene) {
       if (bucket.pi + 2 <= MAX_TREES * 2) placePine(meshes, bucket, obstacles, x, y, z, s, rng);
     } else if (kind < 0.75) {
       if (bucket.bi + 2 <= MAX_TREES * 2) placeBroadleaf(meshes, bucket, obstacles, x, y, z, s, rng);
-    } else if (bucket.palmi + 5 <= MAX_TREES * 5) {
+    } else if (bucket.palmi + PALM_FRONDS <= MAX_TREES * PALM_FRONDS) {
       placePalm(meshes, bucket, obstacles, x, y, z, s, rng);
     }
   }

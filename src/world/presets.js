@@ -49,12 +49,42 @@ function texturedMat(color, map, bumpMap, bumpScale = 0.05, extra = {}) {
   });
 }
 
+// ---- Palm frond geometry: anchored bent blade (base at origin, extends +Z) ----
+// Replaces the old 4-sided cone spike. Cheap plane (8 tris) re-shaped per
+// vertex: tapered width, V-fold spine (catches sun), droop arc to the tip.
+// Base at origin => placer puts the base exactly at the crown, no float gap.
+function createPalmFrondGeometry() {
+  const LEN = 2.7;
+  const SEG = 4;
+  const geo = new THREE.PlaneGeometry(1.0, LEN, 1, SEG);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i); // -0.5 .. 0.5
+    const y = pos.getY(i); // -LEN/2 .. LEN/2
+    const t = (y + LEN / 2) / LEN; // 0 base .. 1 tip
+    // Width profile: narrow stem -> widest ~35% -> sharp tip.
+    const w = t < 0.35
+      ? 0.22 + 0.78 * (t / 0.35)
+      : Math.max(0.02, 1 - ((t - 0.35) / 0.65) * 0.98);
+    const wx = x * w;
+    // V-fold ridge + parabolic droop.
+    const lift = Math.abs(wx) * 0.45;
+    const droop = t * t * 0.85;
+    pos.setXYZ(i, wx, lift - droop, t * LEN);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// Fronds per palm — single source of truth for pool sizing (chunks/trees).
+export const PALM_FRONDS = 6;
+
 export function createVegetationKit() {
   const geometries = {
     trunk: new THREE.CylinderGeometry(0.18, 0.3, 1.4, 6),
     pine: new THREE.ConeGeometry(1.25, 2.6, 7),
     blob: new THREE.IcosahedronGeometry(1.25, 0),
-    palmLeaf: new THREE.ConeGeometry(0.4, 2.6, 4),
+    palmLeaf: createPalmFrondGeometry(),
     bush: new THREE.IcosahedronGeometry(0.7, 0),
     cactus: new THREE.CylinderGeometry(0.32, 0.4, 2.4, 7),
     rock: new THREE.DodecahedronGeometry(1, 0),
@@ -117,6 +147,7 @@ export function placePalm(meshes, bucket, obstacles, x, y, z, s, rng) {
   const ti = setTrunk(meshes, bucket, obstacles, x, y + 0.7 * s, z, s, rng);
   // taller, slightly tilted trunk for palms (overwrites previous matrix)
   dummy.position.set(x, y + 1.1 * s, z);
+  dummy.rotation.order = 'XYZ';
   dummy.rotation.set(0.15, rand(rng, 0, 6.28), 0.12);
   dummy.scale.setScalar(s * 1.15);
   dummy.updateMatrix();
@@ -124,20 +155,28 @@ export function placePalm(meshes, bucket, obstacles, x, y, z, s, rng) {
   const topY = y + 2.2 * s;
   const topX = x + 0.25;
   const topZ = z + 0.2;
-  for (let k = 0; k < 5; k++) {
+  // Two tiers: 3 outer skirt fronds (strong droop) + 3 inner spears (upright,
+  // azimuth-offset). Base-anchored geometry => base sits exactly at the crown.
+  for (let k = 0; k < PALM_FRONDS; k++) {
+    const outer = k < 3;
+    const j = k % 3;
+    const a = (j / 3) * Math.PI * 2 + (outer ? 0 : Math.PI / 3) + rand(rng, -0.15, 0.15);
+    const yaw = Math.PI / 2 - a;
+    const pitch = outer ? rand(rng, 0.45, 0.65) : rand(rng, 0.08, 0.26);
     meshes.palm.setColorAt(bucket.palmi, _col.set(PALETTES.palmLeaf).offsetHSL(0, 0, rand(rng, -0.03, 0.03)));
-    const a = (k / 5) * Math.PI * 2;
-    dummy.position.set(topX + Math.cos(a) * 1.05 * s, topY + rand(rng, -0.15, 0.25), topZ + Math.sin(a) * 1.05 * s);
-    dummy.rotation.set(Math.PI / 2.3, 0, -a + Math.PI / 2);
-    dummy.scale.set(1, 1, 0.28);
+    dummy.position.set(topX, topY + (outer ? -0.05 : 0.14) * s, topZ);
+    dummy.rotation.order = 'YXZ'; // yaw, then droop pitch
+    dummy.rotation.set(pitch, yaw, rand(rng, -0.12, 0.12));
+    dummy.scale.setScalar(s * rand(rng, 0.85, 1.0));
     dummy.updateMatrix();
     meshes.palm.setMatrixAt(bucket.palmi++, dummy.matrix);
   }
+  dummy.rotation.order = 'XYZ'; // restore for other placers sharing `dummy`
   // coconut cluster
   meshes.blob.setColorAt(bucket.bi, _col.set(PALETTES.coconut));
-  dummy.position.set(topX, topY - 0.15, topZ);
+  dummy.position.set(topX, topY - 0.05, topZ);
   dummy.rotation.set(0, 0, 0);
-  dummy.scale.setScalar(0.28 * s);
+  dummy.scale.setScalar(0.32 * s);
   dummy.updateMatrix();
   meshes.blob.setMatrixAt(bucket.bi++, dummy.matrix);
 }
@@ -197,13 +236,19 @@ export function buildPresetGroup(presetId, { materials } = {}) {
     add(geos.pine, mats.pine, pal[1], [0, 3.05, 0], [0, 1, 0], [0.68, 0.68, 0.68]);
   } else if (preset.kind === 'palm') {
     add(geos.trunk, mats.trunk, PALETTES.trunk, [0, 1.1, 0], [0.15, 0, 0.12], [1.15, 1.15, 1.15]);
-    for (let k = 0; k < 5; k++) {
-      const a = (k / 5) * Math.PI * 2;
-      add(geos.palmLeaf, mats.palmLeaf, PALETTES.palmLeaf,
-        [0.25 + Math.cos(a) * 1.05, 2.2, 0.2 + Math.sin(a) * 1.05],
-        [Math.PI / 2.3, 0, -a + Math.PI / 2], [1, 1, 0.28]);
+    for (let k = 0; k < PALM_FRONDS; k++) {
+      const outer = k < 3;
+      const j = k % 3;
+      const a = (j / 3) * Math.PI * 2 + (outer ? 0 : Math.PI / 3);
+      const yaw = Math.PI / 2 - a;
+      const pitch = outer ? 0.55 : 0.17;
+      const m = add(geos.palmLeaf, mats.palmLeaf, PALETTES.palmLeaf,
+        [0.25, 2.2 + (outer ? -0.05 : 0.14), 0.2],
+        [0, 0, 0], [1, 1, 1]);
+      m.rotation.order = 'YXZ';
+      m.rotation.set(pitch, yaw, 0);
     }
-    add(geos.blob, mats.blob, PALETTES.coconut, [0.25, 2.05, 0.2], [0, 0, 0], [0.28, 0.28, 0.28]);
+    add(geos.blob, mats.blob, PALETTES.coconut, [0.25, 2.15, 0.2], [0, 0, 0], [0.32, 0.32, 0.32]);
   } else if (preset.kind === 'cactus') {
     add(geos.cactus, mats.cactus, PALETTES.cactus, [0, 1.1, 0], [0, 0, 0], [s, s, s]);
   } else if (preset.kind === 'rock' || preset.kind === 'bush' || preset.kind === 'dryBush') {
