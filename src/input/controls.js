@@ -8,11 +8,16 @@ import { CAMERA } from '../config.js';
 // Mutates `rig.state` (azimuth / frustumSize) and calls rig helpers.
 export function setupControls(canvas, rig) {
   const keys = {};
+  // Ignore keystrokes typed into text fields (menu/title seed inputs) so
+  // typing e.g. "w" doesn't also move the player.
+  const isTyping = (e) => e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
   addEventListener('keydown', (e) => {
+    if (isTyping(e)) return;
     keys[e.code] = true;
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   });
   addEventListener('keyup', (e) => {
+    if (isTyping(e)) return;
     keys[e.code] = false;
   });
 
@@ -132,7 +137,7 @@ export function setupControls(canvas, rig) {
   }
 
   function isTouchUI(el) {
-    return el && typeof el.closest === 'function' && el.closest('#touch-ui, #hud .seedbar, #hud .stats, #envbar, button');
+    return el && typeof el.closest === 'function' && el.closest('#touch-ui, #menuPanel, #menuBtn, #title-screen, #envbar, button');
   }
 
   // Touch start: left half (55%) = joystick, rest = rotate camera.

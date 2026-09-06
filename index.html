@@ -20,27 +20,46 @@
     <canvas id="scene"></canvas>
 
     <div id="hud">
-      <div class="title">
+      <div class="title mini">
         <h1>🌿 Jungle Stroll</h1>
-        <p>Low Poly &bull; Isometric &bull; Three.js</p>
+      </div>
+      <button id="menuBtn" class="icon-btn" title="Menu" aria-label="Open menu" aria-haspopup="true" aria-expanded="false">☰</button>
+      <div id="menuPanel" class="menu-panel" hidden>
+        <div class="menu-section">
+          <div class="menu-title">📊 Stats</div>
+          <div class="menu-row">
+            <div id="fps">60 FPS</div>
+            <div id="pos">x: 0, z: 0</div>
+            <button id="btnInstall" class="icon-btn" title="Install app" aria-label="Install app" hidden>⬇️</button>
+            <button id="btnFullscreen" class="icon-btn" title="Fullscreen" aria-label="Fullscreen">⛶</button>
+          </div>
+        </div>
+        <div class="menu-section">
+          <div class="menu-title">🌍 World seed</div>
+          <div class="menu-row">
+            <input id="seed" spellcheck="false" autocomplete="off" />
+            <button id="newWorld" title="Generate a new world">🎲</button>
+          </div>
+          <div id="chunks" class="chunks"></div>
+        </div>
+        <div class="menu-section">
+          <div class="menu-title">🌤️ Time &amp; weather</div>
+          <div id="menuEnvSlot"></div>
+        </div>
+        <div class="menu-section menu-help">
+          <div class="menu-row help-row">
+            <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span>
+            <span class="or">or</span>
+            <span class="key">←</span><span class="key">↑</span><span class="key">↓</span><span class="key">→</span>
+            <span class="label">to stroll &bull; drag to rotate &bull; scroll to zoom</span>
+          </div>
+        </div>
       </div>
       <div class="controls-hint">
         <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span>
         <span class="or">or</span>
         <span class="key">←</span><span class="key">↑</span><span class="key">↓</span><span class="key">→</span>
         <span class="label">to stroll &bull; drag to rotate view &bull; scroll to zoom</span>
-      </div>
-      <div class="stats">
-        <div id="fps">60 FPS</div>
-        <div id="pos">x: 0, z: 0</div>
-        <button id="btnInstall" class="icon-btn" title="Install app" aria-label="Install app" hidden>⬇️</button>
-        <button id="btnFullscreen" class="icon-btn" title="Fullscreen" aria-label="Fullscreen">⛶</button>
-      </div>
-      <div class="seedbar">
-        <span class="seed-label">🌍 Seed</span>
-        <input id="seed" spellcheck="false" autocomplete="off" />
-        <button id="newWorld" title="Generate a new world">🎲</button>
-        <div id="chunks" class="chunks"></div>
       </div>
     </div>
 
@@ -54,6 +73,22 @@
       </div>
       <button id="btnSprint" aria-label="Sprint">🏃</button>
       <div id="mobile-hint">👈 left touch to move &bull; 👉 right swipe to rotate &bull; pinch to zoom</div>
+    </div>
+
+    <!-- Title screen: shown after loading, game starts on Play -->
+    <div id="title-screen">
+      <div class="title-card">
+        <div class="game-logo">🌴</div>
+        <h1>🌿 Jungle Stroll</h1>
+        <p class="subtitle">Low Poly &bull; Isometric &bull; Three.js</p>
+        <div class="title-seed">
+          <span class="seed-label">🌍 Seed</span>
+          <input id="titleSeed" spellcheck="false" autocomplete="off" />
+          <button id="titleDice" title="Random seed">🎲</button>
+        </div>
+        <button id="btnPlay">▶&nbsp; Play</button>
+        <p class="title-help">WASD / arrows to stroll &bull; drag to rotate &bull; scroll to zoom</p>
+      </div>
     </div>
 
     <div id="loading">

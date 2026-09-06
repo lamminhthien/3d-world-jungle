@@ -112,6 +112,67 @@ async function boot() {
     });
   }
 
+  // ============ Title screen + dropdown menu ============
+  // The world renders behind the title as a living backdrop; movement only
+  // starts after Play. All HUD buttons live in the ☰ dropdown menu.
+  let started = false;
+  const titleScreen = document.getElementById('title-screen');
+  const titleSeedInput = document.getElementById('titleSeed');
+  const titleDice = document.getElementById('titleDice');
+  const playBtn = document.getElementById('btnPlay');
+  const menuBtn = document.getElementById('menuBtn');
+  const menuPanel = document.getElementById('menuPanel');
+  if (titleSeedInput) titleSeedInput.value = initialSeed;
+
+  function closeMenu() {
+    if (menuPanel && !menuPanel.hidden) {
+      menuPanel.hidden = true;
+      if (menuBtn) {
+        menuBtn.setAttribute('aria-expanded', 'false');
+        menuBtn.textContent = '☰';
+      }
+    }
+  }
+  function startGame() {
+    if (started) return;
+    started = true;
+    const v = (titleSeedInput && titleSeedInput.value.trim()) || initialSeed;
+    if (seedInput && v !== seedInput.value) applySeed(v);
+    if (titleScreen) titleScreen.hidden = true;
+    document.body.classList.add('playing');
+    closeMenu();
+    if (playBtn) playBtn.blur();
+  }
+  if (playBtn) playBtn.addEventListener('click', startGame);
+  if (titleSeedInput) {
+    titleSeedInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') startGame();
+    });
+  }
+  if (titleDice) {
+    titleDice.addEventListener('click', () => {
+      if (titleSeedInput) {
+        titleSeedInput.value = randomSeedString();
+        titleSeedInput.focus();
+      }
+    });
+  }
+  if (menuBtn && menuPanel) {
+    menuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = menuPanel.hidden;
+      menuPanel.hidden = !open;
+      menuBtn.setAttribute('aria-expanded', String(open));
+      menuBtn.textContent = open ? '✕' : '☰';
+    });
+    document.addEventListener('click', (e) => {
+      if (!menuPanel.hidden && !menuPanel.contains(e.target)) closeMenu();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeMenu();
+    });
+  }
+
   // ============ HUD ============
   const posEl = document.getElementById('pos');
   const fpsEl = document.getElementById('fps');
@@ -131,12 +192,17 @@ async function boot() {
   function update(dt) {
     let ix = 0;
     let iz = 0;
-    if (keys.KeyW || keys.ArrowUp) iz -= 1;
-    if (keys.KeyS || keys.ArrowDown) iz += 1;
-    if (keys.KeyA || keys.ArrowLeft) ix -= 1;
-    if (keys.KeyD || keys.ArrowRight) ix += 1;
-    ix += joy.x;
-    iz += joy.y;
+    if (!started) {
+      // Attract mode behind the title screen: slow orbit, no movement.
+      state.azimuth += dt * 0.08;
+    } else {
+      if (keys.KeyW || keys.ArrowUp) iz -= 1;
+      if (keys.KeyS || keys.ArrowDown) iz += 1;
+      if (keys.KeyA || keys.ArrowLeft) ix -= 1;
+      if (keys.KeyD || keys.ArrowRight) ix += 1;
+      ix += joy.x;
+      iz += joy.y;
+    }
 
     const moving = Math.hypot(ix, iz) > 0.1;
     if (moving) {
@@ -284,7 +350,8 @@ async function boot() {
 
   setProgress(1, 'Ready — into the jungle! 🌴');
   animate();
-  // Hold one beat so players see 100% before the game opens.
+  // Hold one beat so players see 100%, then reveal the title screen.
+  // The world keeps rendering behind it (attract mode) until Play.
   setTimeout(() => loadingEl.classList.add('hidden'), 250);
 }
 

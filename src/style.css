@@ -13,34 +13,70 @@ body { user-select: none; -webkit-user-select: none; touch-action: none; positio
 .or { opacity: .7; margin: 0 2px; }
 .label { margin-left: 6px; opacity: .9; }
 
-.stats { position: absolute; top: 20px; right: 24px; display: flex; gap: 8px; align-items: center; }
-.stats div { background: rgba(255,255,255,.82); padding: 8px 12px; border-radius: 10px; font-size: 12px; font-weight: 600; color: #33691e; font-variant-numeric: tabular-nums; }
-/* PWA + fullscreen icon buttons (Android): children of #hud (pointer-events:none)
-// so re-enable pointer-events to keep them clickable. */
-.stats .icon-btn {
-  pointer-events: auto; border: 1px solid rgba(255,255,255,.7); background: rgba(255,255,255,.82);
-  color: #2e7d32; width: 34px; height: 34px; border-radius: 10px; font-size: 16px; font-weight: 700;
+.title.mini { padding: 8px 14px; }
+.title.mini h1 { font-size: 16px; }
+
+/* Dropdown menu button (top-right) + panel: replaces the old always-on
+// .stats / .seedbar bars. Re-enable pointer-events (parent #hud has none). */
+#menuBtn {
+  position: absolute; top: 20px; right: 24px;
+  pointer-events: auto; border: 1px solid rgba(255,255,255,.7); background: rgba(255,255,255,.85);
+  color: #2e7d32; width: 42px; height: 42px; border-radius: 12px; font-size: 20px; font-weight: 700;
   cursor: pointer; line-height: 1; box-shadow: 0 8px 24px rgba(46,125,50,.18);
   display: inline-flex; align-items: center; justify-content: center; touch-action: manipulation;
 }
-.stats .icon-btn:hover { background: #fff; }
-.stats .icon-btn:active { transform: scale(.92); }
-.stats .icon-btn[hidden] { display: none; }
+#menuBtn:hover { background: #fff; }
+#menuBtn:active { transform: scale(.92); }
+.menu-panel {
+  position: absolute; top: 72px; right: 24px; width: 300px; max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 160px); overflow-y: auto;
+  background: rgba(255,255,255,.94); backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,.7); border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(46,125,50,.25);
+  padding: 8px 12px 12px; pointer-events: auto;
+}
+.menu-panel[hidden] { display: none; }
+.menu-section { padding: 8px 2px; border-bottom: 1px solid #e0e0e0; }
+.menu-section:last-child { border-bottom: none; }
+.menu-title { font-size: 12px; font-weight: 700; color: #2e7d32; margin-bottom: 6px; }
+.menu-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.menu-row.help-row { align-items: center; }
+.menu-panel #fps, .menu-panel #pos {
+  background: #f1f8e9; padding: 8px 12px; border-radius: 10px; font-size: 12px;
+  font-weight: 600; color: #33691e; font-variant-numeric: tabular-nums; flex: 1; white-space: nowrap;
+}
+/* PWA + fullscreen icon buttons inside the menu */
+.menu-panel .icon-btn {
+  pointer-events: auto; border: 1px solid #c8e6c9; background: #fff;
+  color: #2e7d32; width: 34px; height: 34px; border-radius: 10px; font-size: 16px; font-weight: 700;
+  cursor: pointer; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center; touch-action: manipulation;
+}
+.menu-panel .icon-btn:hover { background: #f1f8e9; }
+.menu-panel .icon-btn:active { transform: scale(.92); }
+.menu-panel .icon-btn[hidden] { display: none; }
 /* Fullscreen button is useless once standalone / already fullscreen */
 body.is-standalone #btnFullscreen { display: none; }
 
-.seedbar { position: absolute; bottom: 22px; left: 24px; display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,.85); backdrop-filter: blur(8px); padding: 8px 12px; border-radius: 999px; box-shadow: 0 8px 24px rgba(46,125,50,.18); border: 1px solid rgba(255,255,255,.7); pointer-events: auto; }
-.seed-label { font-size: 13px; font-weight: 700; color: #2e7d32; white-space: nowrap; }
-.seedbar input { border: 1px solid #c8e6c9; border-radius: 8px; padding: 5px 10px; font-size: 13px; font-weight: 600; color: #33691e; width: 130px; outline: none; background: #fff; }
-.seedbar input:focus { border-color: #66bb6a; }
-.seedbar button { border: none; background: #43a047; color: #fff; font-size: 15px; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; line-height: 1; }
-.seedbar button:hover { background: #2e7d32; }
-.chunks { font-size: 11px; font-weight: 600; color: #558b2f; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+/* World seed row inside the menu */
+.menu-panel .seed-label { font-size: 13px; font-weight: 700; color: #2e7d32; white-space: nowrap; }
+.menu-panel #seed { border: 1px solid #c8e6c9; border-radius: 8px; padding: 6px 10px; font-size: 13px; font-weight: 600; color: #33691e; width: 130px; flex: 1; min-width: 0; outline: none; background: #fff; }
+.menu-panel #seed:focus { border-color: #66bb6a; }
+.menu-panel #newWorld { border: none; background: #43a047; color: #fff; font-size: 15px; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; line-height: 1; flex: none; }
+.menu-panel #newWorld:hover { background: #2e7d32; }
+.chunks { font-size: 11px; font-weight: 600; color: #558b2f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 6px; }
 
 #envbar { position: absolute; bottom: 22px; right: 24px; display: flex; align-items: center; gap: 10px; background: rgba(20,28,38,.78); color: #fff; padding: 8px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; pointer-events: auto; backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.18); font-variant-numeric: tabular-nums; }
 #envbar .env-btns { display: flex; gap: 4px; }
 #envbar button { border: none; background: rgba(255,255,255,.14); color: #fff; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 14px; line-height: 1; }
 #envbar button:hover { background: rgba(255,255,255,.3); }
+/* envbar docked inside the dropdown menu: static row, light theme */
+#menuEnvSlot #envbar {
+  position: static; background: #f1f8e9; color: #33691e; border: 1px solid #c8e6c9;
+  border-radius: 12px; flex-wrap: wrap; width: 100%; justify-content: space-between;
+}
+#menuEnvSlot #envbar button { background: #fff; color: #2e7d32; border: 1px solid #c8e6c9; }
+#menuEnvSlot #envbar button:hover { background: #e0e0e0; }
 
 #joystick { position: fixed; bottom: 90px; right: 30px; width: 110px; height: 110px; border-radius: 50%; background: rgba(255,255,255,.25); border: 2px solid rgba(255,255,255,.6); z-index: 20; display: none; touch-action: none; opacity: .55; transition: opacity .15s; }
 #stick { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,.9); transform: translate(-50%,-50%); box-shadow: 0 4px 12px rgba(0,0,0,.25); }
@@ -71,17 +107,15 @@ body.is-standalone #btnFullscreen { display: none; }
   .title { top: calc(10px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); padding: 8px 12px; border-radius: 12px; }
   .title h1 { font-size: 15px; }
   .title p { font-size: 10px; }
-  .stats { top: calc(10px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); }
-  .stats div { padding: 6px 9px; font-size: 11px; }
-  .seedbar { bottom: calc(44px + env(safe-area-inset-bottom)); left: calc(12px + env(safe-area-inset-left)); padding: 6px 10px; gap: 6px; }
-  .seedbar input { width: 84px; font-size: 12px; }
-  #envbar { display: none; }
+  .title.mini h1 { font-size: 14px; }
+  #menuBtn { top: calc(10px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); }
+  .menu-panel { top: calc(60px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); width: min(300px, calc(100vw - 24px)); }
+  .menu-panel #seed { width: 84px; font-size: 12px; }
 }
 /* Landscape: pack joystick + buttons so they never cover the map */
 @media (pointer: coarse) and (orientation: landscape) {
   #joystick { width: 104px; height: 104px; }
   .title p, #mobile-hint { display: none; }
-  .seedbar { bottom: calc(10px + env(safe-area-inset-bottom)); }
   #touch-ui .zoom-btns { bottom: calc(24px + env(safe-area-inset-bottom)); }
   #btnSprint { bottom: calc(24px + env(safe-area-inset-bottom)); }
 }
@@ -93,3 +127,55 @@ body.is-standalone #btnFullscreen { display: none; }
 #loadmsg { margin: 0; min-height: 26px; }
 .loadbar { width: min(320px, 70vw); height: 10px; border-radius: 999px; background: rgba(46, 125, 50, 0.18); overflow: hidden; }
 #loadfill { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, #43a047, #7cc47f); transition: width 0.25s ease; }
+
+/* ============ Title screen ============ */
+#title-screen {
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: linear-gradient(180deg, rgba(27,94,32,.45), rgba(27,94,32,.25) 45%, rgba(27,94,32,.5));
+}
+#title-screen[hidden] { display: none; }
+.title-card {
+  background: rgba(255,255,255,.9); backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,.8); border-radius: 24px;
+  box-shadow: 0 24px 64px rgba(27,94,32,.35);
+  padding: 36px 44px; text-align: center; max-width: min(420px, 92vw);
+  animation: title-pop .45s ease;
+}
+@keyframes title-pop { from { transform: scale(.92) translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+.game-logo { font-size: 56px; line-height: 1; }
+.title-card h1 { font-size: 32px; color: #2e7d32; margin-top: 8px; letter-spacing: .3px; }
+.title-card .subtitle { font-size: 13px; color: #558b2f; margin-top: 4px; }
+.title-seed { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 18px; }
+.title-seed input {
+  border: 1px solid #c8e6c9; border-radius: 10px; padding: 8px 12px; font-size: 14px;
+  font-weight: 600; color: #33691e; width: 150px; outline: none; background: #fff; text-align: center;
+}
+.title-seed input:focus { border-color: #66bb6a; }
+.title-seed button {
+  border: none; background: #e8f5e9; color: #2e7d32; font-size: 16px; width: 36px; height: 36px;
+  border-radius: 50%; cursor: pointer; line-height: 1;
+}
+.title-seed button:hover { background: #c8e6c9; }
+#btnPlay {
+  margin-top: 18px; border: none; cursor: pointer;
+  background: linear-gradient(180deg, #66bb6a, #43a047); color: #fff;
+  font-size: 20px; font-weight: 800; letter-spacing: .5px;
+  padding: 14px 56px; border-radius: 999px;
+  box-shadow: 0 10px 24px rgba(46,125,50,.4);
+  transition: transform .12s ease, box-shadow .12s ease;
+  touch-action: manipulation;
+}
+#btnPlay:hover { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(46,125,50,.45); }
+#btnPlay:active { transform: scale(.96); }
+.title-help { font-size: 12px; color: #689f38; margin-top: 14px; }
+
+/* ============ HUD visibility tied to game state ============ */
+/* Before Play: hide in-game HUD + touch controls (title covers the screen). */
+body:not(.playing) #hud,
+body:not(.playing) #touch-ui,
+body:not(.playing) #joystick { display: none; }
+/* Hint pill shows briefly after entering the game, then fades away
+   (full help lives in the ☰ menu). */
+body.playing .controls-hint { animation: hint-hide 1s ease 7s forwards; }
+@keyframes hint-hide { to { opacity: 0; visibility: hidden; } }

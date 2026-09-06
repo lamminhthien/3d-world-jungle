@@ -335,7 +335,9 @@ export function createEnvironment(scene, opts = {}) {
     if (!root) {
       root = document.createElement('div');
       root.id = 'envbar';
-      document.getElementById('hud')?.appendChild(root);
+      // Dock into the ☰ dropdown menu (fallback: legacy #hud position).
+      document.getElementById('menuEnvSlot')?.appendChild(root)
+        ?? document.getElementById('hud')?.appendChild(root);
     }
     root.innerHTML = `
       <span id="env-time">☀️ 10:00</span>
