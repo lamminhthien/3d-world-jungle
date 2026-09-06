@@ -26,6 +26,13 @@ export const WORLD = {
   fogFar: 95,
 };
 
+// Day-night + weather tuning (docs/weather-day-night-cycles.md).
+export const ENV = {
+  dayLengthSec: 600, // 1 game day = 10 real minutes
+  startTime: 10.0, // 10:00 morning
+  weatherIntervalSec: 75, // re-roll weather roughly every 75s
+};
+
 export const CAMERA = {
   frustumSize: 22,
   minZoom: 12,

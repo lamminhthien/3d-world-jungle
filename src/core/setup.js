@@ -55,8 +55,9 @@ export function setupCore(canvas) {
   }
   addEventListener('resize', onResize);
 
-  // Bright daylight look.
-  scene.add(new THREE.HemisphereLight(0xcdeffd, 0x7ec850, 0.95));
+  // Bright daylight look (driven per-frame by the environment system).
+  const hemi = new THREE.HemisphereLight(0xcdeffd, 0x7ec850, 0.95);
+  scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff1d6, 1.9);
   sun.position.set(14, 24, 10);
   sun.castShadow = true;
@@ -65,11 +66,12 @@ export function setupCore(canvas) {
   sun.shadow.camera.right = 30;
   sun.shadow.camera.top = 30;
   sun.shadow.camera.bottom = -30;
-  sun.shadow.camera.far = 80;
+  sun.shadow.camera.far = 120;
   sun.shadow.bias = -0.0006;
   scene.add(sun);
   scene.add(sun.target);
-  scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+  const ambient = new THREE.AmbientLight(0xffffff, 0.25);
+  scene.add(ambient);
 
-  return { renderer, scene, camera, camTarget, sun, state, updateCameraPos, onResize };
+  return { renderer, scene, camera, camTarget, sun, hemi, ambient, state, updateCameraPos, onResize };
 }

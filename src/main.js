@@ -1,11 +1,12 @@
 import * as THREE from 'three';
-import { DEFAULT_SEED, RIVER_HALF, SPEED } from './config.js';
+import { DEFAULT_SEED, ENV, RIVER_HALF, SPEED, WORLD } from './config.js';
 import { groundHeight, isOnBridge, obstacles, riverDist } from './utils.js';
 import { setupCore } from './core/setup.js';
 import { createWorldManager } from './world/chunks.js';
 import { createRiver } from './world/river.js';
 import { createBridges, removeBridges } from './world/bridge.js';
 import { createClouds } from './world/clouds.js';
+import { createEnvironment } from './world/environment.js';
 import { createPlayer } from './entities/player.js';
 import { setupControls } from './input/controls.js';
 import { randomSeedString } from './world/noise.js';
@@ -17,7 +18,7 @@ const initialSeed = params.get('seed') || DEFAULT_SEED;
 // ============ Boot ============
 const canvas = document.getElementById('scene');
 const core = setupCore(canvas);
-const { renderer, scene, camera, camTarget, sun, state, updateCameraPos } = core;
+const { renderer, scene, camera, camTarget, sun, hemi, ambient, state, updateCameraPos } = core;
 
 // Infinite chunked world (docs section 3): ground + biome vegetation stream
 // around the player; section 4.5 spawns at (0, ymax, 0).
@@ -27,6 +28,21 @@ let spawn = world.getSpawn();
 const river = createRiver(scene);
 let bridgeGroups = createBridges(scene);
 const sky = createClouds(scene);
+
+// Day-night cycle + dynamic weather (docs/weather-day-night-cycles.md).
+const env = createEnvironment(scene, {
+  sun,
+  hemi,
+  ambient,
+  renderer,
+  clouds: sky,
+  river,
+  dayLengthSec: ENV.dayLengthSec,
+  startTime: ENV.startTime,
+  weatherIntervalSec: ENV.weatherIntervalSec,
+  fogNear: WORLD.fogNear,
+  fogFar: WORLD.fogFar,
+});
 
 const { player, parts } = createPlayer(scene);
 player.position.set(spawn.x, groundHeight(spawn.x, spawn.z), spawn.z);
@@ -149,11 +165,11 @@ function update(dt) {
   river.update(dt, player.position);
   sky.update(dt);
 
-  // Smooth camera follow + sun follows target for stable shadows.
+  // Day-night + weather drive sun/fog/sky (sun follows target for shadows).
+  env.update(dt, player.position);
+
+  // Smooth camera follow (sun position itself is set by the environment).
   camTarget.lerp(new THREE.Vector3(player.position.x, 0.5, player.position.z), Math.min(1, dt * 4));
-  sun.position.set(camTarget.x + 14, 24, camTarget.z + 10);
-  sun.target.position.copy(camTarget);
-  sun.target.updateMatrixWorld();
   updateCameraPos();
 
   if (chunkEl) {
