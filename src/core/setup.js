@@ -29,7 +29,7 @@ export const QUALITY = {
   minPixelRatio: isLowTierDevice ? 0.85 : 1,
   shadowSize: isLowTierDevice ? 512 : isMobileDevice ? 1024 : 2048,
   shadowsEnabled: !isLowTierDevice,
-  // Anisotropy cap for procedural canvas textures (textures.js reads this).
+  // Anisotropy cap for generated material textures (textures.js reads this).
   maxAnisotropy: isLowTierDevice ? 1 : isMobileDevice ? 4 : 8,
 };
 

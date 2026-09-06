@@ -6,7 +6,8 @@
   "description": "Stroll through a low-poly / isometric 3D jungle with Three.js",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build:textures": "node scripts/generate-textures.mjs",
+    "build": "npm run build:textures && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

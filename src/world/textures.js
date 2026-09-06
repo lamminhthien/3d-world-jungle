@@ -15,9 +15,21 @@
 // materials get real relief under the sun (bumpMap, no extra geometry).
 
 import * as THREE from 'three';
+import { QUALITY } from '../core/setup.js';
 
 const cache = {};
+const staticTextureFiles = {
+  bark: ['bark-color.svg', 'bark-bump.svg'],
+  leaf: ['leaf-color.svg', 'leaf-bump.svg'],
+  rock: ['rock-color.svg', 'rock-bump.svg'],
+  cactus: ['cactus-color.svg', 'cactus-bump.svg'],
+  ground: ['ground-color.svg', 'ground-bump.svg'],
+  sand: ['sand-color.svg', 'sand-bump.svg'],
+  water: ['water-color.svg', 'water-bump.svg'],
+};
 const SIZE = 256;
+
+let staticTextureLoad = null;
 
 function maxAniso() {
   // Cheap UA check here to avoid a core/setup import cycle (setup is the
@@ -42,6 +54,59 @@ function makePair(colorCanvas, bumpCanvas) {
   const map = makeTex(colorCanvas, true);
   const bumpMap = makeTex(bumpCanvas, false);
   return { map, bumpMap };
+}
+
+function staticTextureUrl(filename) {
+  return `${import.meta.env.BASE_URL}generated/textures/${filename}`;
+}
+
+function configureStaticTexture(texture, key, isBump) {
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.colorSpace = isBump ? THREE.NoColorSpace : THREE.SRGBColorSpace;
+  texture.anisotropy = maxAniso();
+  const repeat = key === 'water' ? 7 : key === 'sand' ? 9 : key === 'ground' ? 10 : 1;
+  texture.repeat.set(repeat, repeat);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+/**
+ * Load build-time generated material textures before the world is created.
+ * The synchronous getters below intentionally retain their old API: if this
+ * preload fails, they fall back to the original CanvasTexture generators.
+ */
+export async function loadStaticTextures({ renderer = null, includeBump = !QUALITY.low } = {}) {
+  if (staticTextureLoad) return staticTextureLoad;
+  staticTextureLoad = (async () => {
+    if (typeof document === 'undefined') return { loaded: 0, fallback: true };
+    const loader = new THREE.TextureLoader();
+    let loaded = 0;
+    const jobs = [];
+    for (const [key, [mapFile, bumpFile]] of Object.entries(staticTextureFiles)) {
+      jobs.push(
+        loader.loadAsync(staticTextureUrl(mapFile)).then((texture) => {
+          cache[key] = cache[key] || {};
+          cache[key].map = configureStaticTexture(texture, key, false);
+          loaded += 1;
+          try { renderer?.initTexture?.(texture); } catch { /* first render can upload */ }
+        }),
+      );
+      if (includeBump) {
+        jobs.push(
+          loader.loadAsync(staticTextureUrl(bumpFile)).then((texture) => {
+            cache[key] = cache[key] || {};
+            cache[key].bumpMap = configureStaticTexture(texture, key, true);
+            loaded += 1;
+            try { renderer?.initTexture?.(texture); } catch { /* first render can upload */ }
+          }),
+        );
+      }
+    }
+    const results = await Promise.allSettled(jobs);
+    const failed = results.filter((result) => result.status === 'rejected').length;
+    return { loaded, failed, fallback: failed > 0 };
+  })();
+  return staticTextureLoad;
 }
 
 function newCanvas(size = SIZE) {
@@ -652,60 +717,70 @@ function cached(key, builder) {
   return cache[key];
 }
 
+function cachedMap(key, builder) {
+  if (!cache[key]?.map) cache[key] = { ...cache[key], ...builder() };
+  return cache[key].map;
+}
+
+function cachedBump(key, builder) {
+  if (!cache[key]?.bumpMap) cache[key] = { ...cache[key], ...builder() };
+  return cache[key].bumpMap;
+}
+
 /** Vertical bark streaks (trunks, brown tint comes from instanceColor). */
 export function getBarkTexture() {
-  return cached('bark', buildBark).map;
+  return cachedMap('bark', buildBark);
 }
 export function getBarkBump() {
-  return cached('bark', buildBark).bumpMap;
+  return cachedBump('bark', buildBark);
 }
 
 /** Soft leaf dither (canopies, palms, bushes — tinted green via instanceColor). */
 export function getLeafTexture() {
-  return cached('leaf', buildLeaf).map;
+  return cachedMap('leaf', buildLeaf);
 }
 export function getLeafBump() {
-  return cached('leaf', buildLeaf).bumpMap;
+  return cachedBump('leaf', buildLeaf);
 }
 
 /** Speckled granite (rocks — tinted grey/sand via instanceColor). */
 export function getRockTexture() {
-  return cached('rock', buildRock).map;
+  return cachedMap('rock', buildRock);
 }
 export function getRockBump() {
-  return cached('rock', buildRock).bumpMap;
+  return cachedBump('rock', buildRock);
 }
 
 /** Ribbed cactus skin. */
 export function getCactusTexture() {
-  return cached('cactus', buildCactus).map;
+  return cachedMap('cactus', buildCactus);
 }
 export function getCactusBump() {
-  return cached('cactus', buildCactus).bumpMap;
+  return cachedBump('cactus', buildCactus);
 }
 
 /** Tileable grass micro-detail (multiplies biome vertex colors). */
 export function getGroundTexture() {
-  return cached('ground', buildGround).map;
+  return cachedMap('ground', buildGround);
 }
 export function getGroundBump() {
-  return cached('ground', buildGround).bumpMap;
+  return cachedBump('ground', buildGround);
 }
 
 /** Tileable sand grains + wind ripples. */
 export function getSandTexture() {
-  return cached('sand', buildSand).map;
+  return cachedMap('sand', buildSand);
 }
 export function getSandBump() {
-  return cached('sand', buildSand).bumpMap;
+  return cachedBump('sand', buildSand);
 }
 
 /** Tileable water ripples + foam (animate .offset to flow). */
 export function getWaterTexture() {
-  return cached('water', buildWater).map;
+  return cachedMap('water', buildWater);
 }
 export function getWaterBump() {
-  return cached('water', buildWater).bumpMap;
+  return cachedBump('water', buildWater);
 }
 
 export function disposeTextures() {
@@ -714,4 +789,5 @@ export function disposeTextures() {
     cache[k]?.bumpMap?.dispose?.();
     delete cache[k];
   }
+  staticTextureLoad = null;
 }

@@ -9,8 +9,9 @@
 //   2. Request persistent storage -> stop the browser from evicting the cache.
 //   3. Warm the current bundle -> pre-fetch the js/css files this page uses
 //      so HTTP cache / SW already has them.
-//   4. Warm textures + GPU upload (renderer.initTexture) — procedural canvas
-//      generated on CPU then pushed straight to VRAM during loading.
+//   4. Warm generated textures + GPU upload (renderer.initTexture) — static
+//      production assets are loaded before the world is built; Canvas remains
+//      an automatic fallback when an asset is unavailable.
 //
 // Quick answer: the bundle is built once and shared by all devices; the CACHE (SW Cache
 // Storage, HTTP cache, GPU textures/shaders) is PER-DEVICE —
@@ -33,7 +34,9 @@ import {
   getSandTexture,
   getWaterBump,
   getWaterTexture,
+  loadStaticTextures,
 } from '../world/textures.js';
+import { QUALITY } from './setup.js';
 
 // Yield the UI one beat so the loading bar paints before the next heavy step.
 const yieldUI = () =>
@@ -91,7 +94,7 @@ async function warmBundleFiles(onFrac) {
   );
 }
 
-// Generate all procedural textures + push to GPU during loading.
+// Load all material textures + push to GPU during loading.
 async function warmTextures(renderer, onFrac) {
   const pairs = [
     [getBarkTexture, getBarkBump],
@@ -102,12 +105,14 @@ async function warmTextures(renderer, onFrac) {
     [getSandTexture, getSandBump],
     [getWaterTexture, getWaterBump],
   ];
+  const includeBump = !QUALITY.low;
   const canUpload = renderer && typeof renderer.initTexture === 'function';
+  const staticReport = await loadStaticTextures({ renderer, includeBump });
   let done = 0;
-  const total = pairs.length * 2;
+  const total = pairs.length * (includeBump ? 2 : 1);
   onFrac(0);
   for (const [getMap, getBump] of pairs) {
-    for (const get of [getMap, getBump]) {
+    for (const get of includeBump ? [getMap, getBump] : [getMap]) {
       const tex = get();
       try {
         if (canUpload && tex) renderer.initTexture(tex);
@@ -119,6 +124,7 @@ async function warmTextures(renderer, onFrac) {
       await yieldUI();
     }
   }
+  return staticReport;
 }
 
 /**
@@ -151,7 +157,7 @@ export async function runPreGameCache({ renderer = null, onProgress = () => {} }
   await yieldUI();
 
   // 0.45-0.85: texture + GPU upload.
-  await warmTextures(renderer, (f) => report(0.45 + f * 0.4, '🎨 Painting ground, rock, tree & river textures…'));
+  await warmTextures(renderer, (f) => report(0.45 + f * 0.4, '🎨 Loading baked ground, rock, tree & river textures…'));
 
   report(0.85, '🌍 Building the world…');
   await yieldUI();

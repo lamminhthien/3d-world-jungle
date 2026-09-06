@@ -7,8 +7,8 @@
 // call the same place*() helpers, so looks stay consistent.
 //
 // Presets are data (id, kind, palette, scale range, collision) +
-// small placer functions. Textures come from ./textures.js (procedural
-// canvas, no image assets) and multiply with instanceColor tints.
+// small placer functions. Textures come from ./textures.js (build-time baked
+// assets with procedural fallback) and multiply with instanceColor tints.
 
 import * as THREE from 'three';
 import { QUALITY } from '../core/setup.js';

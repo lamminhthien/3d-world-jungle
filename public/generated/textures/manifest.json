@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "format": "svg",
+  "size": 256,
+  "textures": {
+    "bark": {
+      "map": "/generated/textures/bark-color.svg",
+      "bump": "/generated/textures/bark-bump.svg"
+    },
+    "leaf": {
+      "map": "/generated/textures/leaf-color.svg",
+      "bump": "/generated/textures/leaf-bump.svg"
+    },
+    "rock": {
+      "map": "/generated/textures/rock-color.svg",
+      "bump": "/generated/textures/rock-bump.svg"
+    },
+    "cactus": {
+      "map": "/generated/textures/cactus-color.svg",
+      "bump": "/generated/textures/cactus-bump.svg"
+    },
+    "ground": {
+      "map": "/generated/textures/ground-color.svg",
+      "bump": "/generated/textures/ground-bump.svg"
+    },
+    "sand": {
+      "map": "/generated/textures/sand-color.svg",
+      "bump": "/generated/textures/sand-bump.svg"
+    },
+    "water": {
+      "map": "/generated/textures/water-color.svg",
+      "bump": "/generated/textures/water-bump.svg"
+    }
+  }
+}

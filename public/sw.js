@@ -29,6 +29,21 @@ const SHELL = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/maskable-512.png',
+  './generated/textures/manifest.json',
+  './generated/textures/bark-color.svg',
+  './generated/textures/bark-bump.svg',
+  './generated/textures/leaf-color.svg',
+  './generated/textures/leaf-bump.svg',
+  './generated/textures/rock-color.svg',
+  './generated/textures/rock-bump.svg',
+  './generated/textures/cactus-color.svg',
+  './generated/textures/cactus-bump.svg',
+  './generated/textures/ground-color.svg',
+  './generated/textures/ground-bump.svg',
+  './generated/textures/sand-color.svg',
+  './generated/textures/sand-bump.svg',
+  './generated/textures/water-color.svg',
+  './generated/textures/water-bump.svg',
 ];
 
 self.addEventListener('install', (event) => {
