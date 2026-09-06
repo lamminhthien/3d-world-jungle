@@ -14,6 +14,8 @@ import { createPlayer } from './entities/player.js';
 import { setupControls } from './input/controls.js';
 import { setupPwaUi } from './core/pwa.js';
 import { randomSeedString } from './world/noise.js';
+import { BenchmarkManager } from './core/benchmark.js';
+import { setupBenchmarkUI } from './ui/benchmarkModal.js';
 
 // ============ Seed (docs section 4.1): ?seed= in URL, else default ============
 const params = new URLSearchParams(location.search);
@@ -175,9 +177,67 @@ async function boot() {
     });
   }
 
+  // ============ Benchmark System ============
+  const benchmark = new BenchmarkManager({
+    core,
+    env,
+    player,
+    rigControls: { keys, joy, touch },
+  });
+
+  const runBenchmark = () => {
+    // If not started yet, transition out of title screen
+    if (!started) {
+      started = true;
+      try { env.ambience.enable(); } catch {}
+      if (titleScreen) titleScreen.hidden = true;
+      document.body.classList.add('playing');
+    }
+    closeMenu();
+    benchmark.start();
+  };
+
+  const benchUI = setupBenchmarkUI({
+    benchmarkManager: benchmark,
+    onStartBenchmark: runBenchmark,
+  });
+
+  const btnBenchmark = document.getElementById('btnBenchmark');
+  if (btnBenchmark) {
+    btnBenchmark.addEventListener('click', runBenchmark);
+  }
+
+  const btnTitleBenchmark = document.getElementById('btnTitleBenchmark');
+  if (btnTitleBenchmark) {
+    btnTitleBenchmark.addEventListener('click', runBenchmark);
+  }
+
+  // Debug global hook
+  if (typeof window !== 'undefined') {
+    window.__runBenchmark = runBenchmark;
+    window.__openBenchmarkHistory = () => benchUI.openHistory();
+    window.__benchmark = benchmark;
+  }
+
   // ============ HUD ============
   const posEl = document.getElementById('pos');
   const fpsEl = document.getElementById('fps');
+  const fpsBadgeEl = document.getElementById('fpsBadge');
+  const toggleFps = document.getElementById('toggleFps');
+  let showFps = localStorage.getItem('jungle_show_fps') === 'true';
+
+  if (toggleFps) {
+    toggleFps.checked = showFps;
+    toggleFps.addEventListener('change', (e) => {
+      showFps = e.target.checked;
+      localStorage.setItem('jungle_show_fps', String(showFps));
+      if (fpsBadgeEl) fpsBadgeEl.hidden = !showFps;
+    });
+  }
+  if (fpsBadgeEl) {
+    fpsBadgeEl.hidden = !showFps;
+  }
+
   let fpsAcc = 0;
   let fpsN = 0;
   let fpsT = 0;
@@ -192,9 +252,19 @@ async function boot() {
   const _desired = new THREE.Vector3();
 
   function update(dt) {
+    if (benchmark.isRunning) {
+      benchmark.update(dt);
+    }
+
     let ix = 0;
     let iz = 0;
-    if (!started) {
+    let isSprinting = false;
+
+    if (benchmark.isRunning) {
+      ix = benchmark.simulatedInput.ix;
+      iz = benchmark.simulatedInput.iz;
+      isSprinting = benchmark.simulatedInput.sprint;
+    } else if (!started) {
       // Attract mode behind the title screen: slow orbit, no movement.
       state.azimuth += dt * 0.08;
     } else {
@@ -204,6 +274,7 @@ async function boot() {
       if (keys.KeyD || keys.ArrowRight) ix += 1;
       ix += joy.x;
       iz += joy.y;
+      isSprinting = keys.ShiftLeft || keys.ShiftRight || touch?.sprintHeld || joy.mag > 0.92;
     }
 
     const moving = Math.hypot(ix, iz) > 0.1;
@@ -219,10 +290,8 @@ async function boot() {
       iz /= Math.max(1, len);
       _move.set(0, 0, 0).addScaledVector(_fwd, -iz).addScaledVector(_right, ix).normalize();
 
-      // Sprint: hold Shift (desktop) / 🏃 / push the joystick fully (mobile).
-      const sprinting = keys.ShiftLeft || keys.ShiftRight || touch?.sprintHeld || joy.mag > 0.92;
       // Analog: light push = walk slowly, hard push = walk fast.
-      const speed = SPEED * (sprinting ? 1.6 : 1) * (0.35 + 0.65 * inputMag);
+      const speed = SPEED * (isSprinting ? 1.6 : 1) * (0.35 + 0.65 * inputMag);
 
       let nx = player.position.x + _move.x * speed * dt;
       let nz = player.position.z + _move.z * speed * dt;
@@ -318,7 +387,9 @@ async function boot() {
     fpsT += dt;
     if (fpsT > 0.5) {
       const avg = fpsAcc / fpsN;
-      fpsEl.textContent = `${Math.round(avg)} FPS`;
+      const text = `${Math.round(avg)} FPS`;
+      if (fpsEl) fpsEl.textContent = text;
+      if (fpsBadgeEl && showFps) fpsBadgeEl.textContent = text;
       posEl.textContent = `x: ${player.position.x.toFixed(1)}, z: ${player.position.z.toFixed(1)}`;
       // Perf: DOM writes throttled to 2Hz (was: chunk label every frame).
       if (chunkEl) {
