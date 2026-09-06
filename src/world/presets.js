@@ -23,6 +23,8 @@ export const PALETTES = {
   palmLeaf: 0x55a347,
   bush: 0x5f9e46,
   dryBush: 0xb5a642,
+  grass: 0x69b34c,
+  dryGrass: 0xc2b26a,
   trunk: 0x7b5334,
   coconut: 0x5c3d24,
   cactus: 0x2f9e44,
@@ -38,6 +40,7 @@ export const VEGETATION_PRESETS = [
   { id: 'dry-bush',      kind: 'dryBush',   sMin: 0.5, sMax: 0.9,  collisionR: 0,    biomes: ['desert'] },
   { id: 'cactus',        kind: 'cactus',    sMin: 0.7, sMax: 1.4,  collisionR: 0.5,  biomes: ['desert'] },
   { id: 'rock',          kind: 'rock',      sMin: 0.4, sMax: 1.6,  collisionR: 0.8,  biomes: ['jungle', 'desert', 'mountain', 'snow'] },
+  { id: 'grass-tuft',    kind: 'grass',     sMin: 0.5, sMax: 1.1,  collisionR: 0,    biomes: ['jungle', 'beach'] },
 ];
 
 export const presetById = (id) => VEGETATION_PRESETS.find((p) => p.id === id);
@@ -86,15 +89,114 @@ function createPalmFrondGeometry() {
 // Fronds per palm — single source of truth for pool sizing (chunks/trees).
 export const PALM_FRONDS = 6;
 
+// ---- P0 tessellation (docs/tessellation-improvement-plan.md) ----
+// Deterministic string hash: same position => same offset. Polyhedron
+// geometries are non-indexed soups (verts duplicated per face); keying the
+// offset by position keeps shared corners welded instead of cracking faces.
+function hashStr(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0) / 4294967296;
+}
+
+// Radial jitter: displaces each unique vertex along its radius by ±amt.
+// Same tri count, asymmetric silhouette; per-instance rotation supplies the
+// variety (3 geometries would need 3 pools = +2 draw calls, deferred to P1).
+function jitterRadial(geo, amt, seed) {
+  const pos = geo.attributes.position;
+  const seen = new Map();
+  for (let i = 0; i < pos.count; i++) {
+    const key = `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`;
+    let f = seen.get(key);
+    if (f === undefined) {
+      f = 1 + (hashStr(seed + key) - 0.5) * 2 * amt;
+      seen.set(key, f);
+    }
+    pos.setXYZ(i, pos.getX(i) * f, pos.getY(i) * f, pos.getZ(i) * f);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// Pine crown: 8 sides (was 7 — the heptagon rim showed top-down) + droop lip
+// (bottom ring pulled in 6%, 0 extra tris, reads as layered needles).
+function createPineGeometry() {
+  const geo = new THREE.ConeGeometry(1.25, 2.6, 8);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    if (pos.getY(i) < -1.2) {
+      pos.setX(i, pos.getX(i) * 0.94);
+      pos.setZ(i, pos.getZ(i) * 0.94);
+    }
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// Grass tuft: 3 crossed quads (1×2 segs each = 4 tris, 12 total), base at y=0,
+// tapered to a point tip with a forward arc bend. Opaque, DoubleSide — no
+// alpha texture, so no transparent overdraw on tiled mobile GPUs.
+function createGrassTuftGeometry() {
+  const W = 0.55;
+  const H = 0.65;
+  const blades = [];
+  for (let b = 0; b < 3; b++) {
+    const p = new THREE.PlaneGeometry(W, H, 1, 2);
+    p.translate(0, H / 2, 0); // base at origin => placer sits it on the ground
+    const pos = p.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const t = pos.getY(i) / H; // 0 base .. 1 tip
+      const w = t < 0.5 ? 1 - t * 0.5 : Math.max(0.06, 1 - t * 0.94);
+      const bend = t * t * 0.22 + t * 0.06 * (b - 1);
+      pos.setX(i, x * w);
+      pos.setZ(i, pos.getZ(i) * w + bend);
+    }
+    p.rotateY((b / 3) * Math.PI * 2);
+    blades.push(p);
+  }
+  // Manual merge (avoids a BufferGeometryUtils import for 3 tiny planes).
+  let vTotal = 0;
+  let iTotal = 0;
+  for (const b of blades) { vTotal += b.attributes.position.count; iTotal += b.index.count; }
+  const merged = new THREE.BufferGeometry();
+  const mp = new Float32Array(vTotal * 3);
+  const mn = new Float32Array(vTotal * 3);
+  const mu = new Float32Array(vTotal * 2);
+  const mi = new Uint16Array(iTotal);
+  let vo = 0;
+  let io = 0;
+  for (const b of blades) {
+    mp.set(b.attributes.position.array, vo * 3);
+    mn.set(b.attributes.normal.array, vo * 3);
+    mu.set(b.attributes.uv.array, vo * 2);
+    const idx = b.index.array;
+    for (let i = 0; i < idx.length; i++) mi[io + i] = vo + idx[i];
+    vo += b.attributes.position.count;
+    io += idx.length;
+    b.dispose();
+  }
+  merged.setAttribute('position', new THREE.BufferAttribute(mp, 3));
+  merged.setAttribute('normal', new THREE.BufferAttribute(mn, 3));
+  merged.setAttribute('uv', new THREE.BufferAttribute(mu, 2));
+  merged.setIndex(new THREE.BufferAttribute(mi, 1));
+  merged.computeVertexNormals();
+  return merged;
+}
+
 export function createVegetationKit() {
   const geometries = {
-    trunk: new THREE.CylinderGeometry(0.18, 0.3, 1.4, 6),
-    pine: new THREE.ConeGeometry(1.25, 2.6, 7),
-    blob: new THREE.IcosahedronGeometry(1.25, 0),
+    // P0: 7 sides + butt flare (was 6-sided hexagon, visible at spawn distance).
+    trunk: new THREE.CylinderGeometry(0.22, 0.34, 1.4, 7),
+    pine: createPineGeometry(),
+    // P0: same tri counts, baked asymmetric jitter (rotation adds variety).
+    blob: jitterRadial(new THREE.IcosahedronGeometry(1.25, 0), 0.1, 'blob'),
     palmLeaf: createPalmFrondGeometry(),
-    bush: new THREE.IcosahedronGeometry(0.7, 0),
-    cactus: new THREE.CylinderGeometry(0.32, 0.4, 2.4, 7),
-    rock: new THREE.DodecahedronGeometry(1, 0),
+    bush: jitterRadial(new THREE.IcosahedronGeometry(0.7, 0), 0.12, 'bush'),
+    // P0: 8 sides (was 7), flat caps kept.
+    cactus: new THREE.CylinderGeometry(0.32, 0.4, 2.4, 8),
+    rock: jitterRadial(new THREE.DodecahedronGeometry(1, 0), 0.12, 'rock'),
+    grass: createGrassTuftGeometry(),
   };
   const materials = {
     trunk: texturedMat(0xffffff, getBarkTexture(), getBarkBump(), 0.08),
@@ -104,6 +206,7 @@ export function createVegetationKit() {
     bush: texturedMat(0xffffff, getLeafTexture(), getLeafBump(), 0.04),
     cactus: texturedMat(0xffffff, getCactusTexture(), getCactusBump(), 0.06),
     rock: texturedMat(0xffffff, getRockTexture(), getRockBump(), 0.07, { roughness: 1 }),
+    grass: texturedMat(0xffffff, getLeafTexture(), getLeafBump(), 0.03, { side: THREE.DoubleSide }),
   };
   return { geometries, materials };
 }
@@ -207,6 +310,17 @@ export function placeCactus(meshes, bucket, obstacles, x, y, z, s, rng) {
   obstacles.push({ x, z, r: 0.5 * s });
 }
 
+// Grass tuft: walkable (no obstacle), base sits exactly on the ground.
+// Caller guards `bucket.gi < POOL.grass`; POOL lives in chunks.js.
+export function placeGrass(meshes, bucket, x, y, z, s, rng, tint = PALETTES.grass) {
+  meshes.grass.setColorAt(bucket.gi, _col.set(tint).offsetHSL(rand(rng, -0.02, 0.02), 0, rand(rng, -0.04, 0.04)));
+  dummy.position.set(x, y, z);
+  dummy.rotation.set(0, rand(rng, 0, 6.28), 0);
+  dummy.scale.setScalar(s);
+  dummy.updateMatrix();
+  meshes.grass.setMatrixAt(bucket.gi++, dummy.matrix);
+}
+
 export function placeRock(meshes, bucket, obstacles, x, y, z, s, rng, tint = 0x9aa0a3, collide = false) {
   meshes.rock.setColorAt(bucket.ri, _col.set(tint).offsetHSL(0, -0.05, rand(rng, -0.05, 0.02)));
   dummy.position.set(x, y + s * 0.25, z);
@@ -258,6 +372,8 @@ export function buildPresetGroup(presetId, { materials } = {}) {
     add(geos.blob, mats.blob, PALETTES.coconut, [0.25, 2.15, 0.2], [0, 0, 0], [0.32, 0.32, 0.32]);
   } else if (preset.kind === 'cactus') {
     add(geos.cactus, mats.cactus, PALETTES.cactus, [0, 1.1, 0], [0, 0, 0], [s, s, s]);
+  } else if (preset.kind === 'grass') {
+    add(geos.grass, mats.grass, PALETTES.grass, [0, 0, 0], [0, 0, 0], [s, s, s]);
   } else if (preset.kind === 'rock' || preset.kind === 'bush' || preset.kind === 'dryBush') {
     const geo = preset.kind === 'rock' ? geos.rock : geos.bush;
     const mat = preset.kind === 'rock' ? mats.rock : mats.bush;

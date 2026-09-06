@@ -123,13 +123,31 @@ const biomeColors = {
 
 const _bcB = new THREE.Color();
 const _bcScratch = new THREE.Color();
-export function biomeGroundColor(biome, random, target = _bcScratch) {
+// Deterministic 0..1 hash from world coords — no extra noise evals, no rng
+// sequence shift (called ~15k×/rebuild on desktop SEG 24).
+function hashXZ(x, z) {
+  const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+export function biomeGroundColor(biome, random, target = _bcScratch, x = 0, z = 0, y = 0) {
   const [a, b] = biomeColors[biome] || biomeColors[BIOMES.JUNGLE];
   // Perf: called per ground vertex (~7k times per full chunk rebuild), so this
   // writes into a shared scratch color instead of allocating 2 Colors per call.
   // Read r/g/b synchronously — do not hold the reference.
   target.setHex(a).lerp(_bcB.setHex(b), random());
   target.offsetHSL(0, 0, (random() - 0.5) * 0.04);
+  // P0 mountain tessellation (color-only, 0 tris): alternate terrace stripes
+  // keyed to the step level so risers read as strata, plus a ragged snow edge
+  // (rock patches in snow, snow dust on high mountain) via coord hash.
+  const lvl = Math.round(y / GEN.stepSize);
+  target.offsetHSL(0, 0, lvl % 2 === 0 ? 0.012 : -0.012);
+  if (biome === BIOMES.SNOW) {
+    if (hashXZ(x, z) < 0.18) target.lerp(_bcB.setHex(0x8d9299), 0.45);
+  } else if (biome === BIOMES.MOUNTAIN) {
+    if (y >= GEN.snowLine - GEN.stepSize && hashXZ(x, z) > 0.72) {
+      target.lerp(_bcB.setHex(0xdde7ee), 0.5);
+    }
+  }
   return target;
 }
 

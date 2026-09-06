@@ -17,6 +17,7 @@ import {
   placeBroadleaf,
   placeBush,
   placeCactus,
+  placeGrass,
   placePalm,
   placePine,
   placeRock,
@@ -34,7 +35,10 @@ import {
 } from './procedural.js';
 
 export const CHUNK_SIZE = 16;
-export const CHUNK_SEG = 16;
+// P0 tessellation: desktop samples the stepped terrain at 0.66m (risers stop
+// aliasing); low tier keeps 1.0m sampling (fill-rate bound). 24²×2 = 1152
+// tris/chunk (+16k total on desktop, fine without extra draw calls).
+export const CHUNK_SEG = QUALITY.low ? 16 : 24;
 export const CHUNK_RADIUS = 2; // (2*R+1)^2 = 25 chunks ~ 80x80 units visible
 
 const POOL = {
@@ -44,6 +48,7 @@ const POOL = {
   bushes: 900,
   cacti: 450,
   rocks: 1000,
+  grass: QUALITY.low ? 600 : 1500, // P0 grass tufts: 12 tris each, 1 draw call
 };
 
 const rand = (rng, a, b) => a + rng() * (b - a);
@@ -79,8 +84,9 @@ export function createWorldManager(scene, seedStr) {
   const bushMesh = new THREE.InstancedMesh(kit.geometries.bush, kit.materials.bush, POOL.bushes);
   const cactusMesh = new THREE.InstancedMesh(kit.geometries.cactus, kit.materials.cactus, POOL.cacti);
   const rockMesh = new THREE.InstancedMesh(kit.geometries.rock, kit.materials.rock, POOL.rocks);
-  const meshes = { trunk: trunkMesh, pine: pineMesh, blob: blobMesh, palm: palmMesh, bush: bushMesh, cactus: cactusMesh, rock: rockMesh };
-  const pools = [trunkMesh, pineMesh, blobMesh, palmMesh, bushMesh, cactusMesh, rockMesh];
+  const grassMesh = new THREE.InstancedMesh(kit.geometries.grass, kit.materials.grass, POOL.grass);
+  const meshes = { trunk: trunkMesh, pine: pineMesh, blob: blobMesh, palm: palmMesh, bush: bushMesh, cactus: cactusMesh, rock: rockMesh, grass: grassMesh };
+  const pools = [trunkMesh, pineMesh, blobMesh, palmMesh, bushMesh, cactusMesh, rockMesh, grassMesh];
   for (const m of pools) {
     // Perf: vegetation casts onto the ground but never receives — receiving
     // doubles the shadow-sampling cost on every instanced fragment, and the
@@ -91,6 +97,9 @@ export function createWorldManager(scene, seedStr) {
     m.frustumCulled = false; // instances span the whole visible area
     scene.add(m);
   }
+  // P0 grass: tufts are <0.5u tall — shadows add nothing even on desktop, so
+  // never cast (saves depth-pass instances on both tiers).
+  grassMesh.castShadow = false;
 
   let spawn = { x: 4.5, z: 2, y: 0 };
   let visibleKey = '';
@@ -112,8 +121,11 @@ export function createWorldManager(scene, seedStr) {
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
       const z = pos.getZ(i);
-      pos.setY(i, proceduralGroundHeight(x, z));
-      const c = biomeGroundColor(getBiome(x, z), rng);
+      const y = proceduralGroundHeight(x, z);
+      pos.setY(i, y);
+      // P0 banding: altitude stripe + ragged snow edge need x/z/y (no extra
+      // noise — hash-based, see procedural.js).
+      const c = biomeGroundColor(getBiome(x, z), rng, undefined, x, z, y);
       colors[i * 3] = c.r;
       colors[i * 3 + 1] = c.g;
       colors[i * 3 + 2] = c.b;
@@ -159,6 +171,9 @@ export function createWorldManager(scene, seedStr) {
           placeBush(meshes, bucket, x, y, z, rand(rng, 0.6, 1.4), rng);
         } else if (roll < 0.7 && bucket.ri < POOL.rocks) {
           placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.4, 0.9), rng);
+        } else if (roll < 0.88 && bucket.gi < POOL.grass) {
+          // P0 grass tufts: jungle floor fill, walkable, no collision.
+          placeGrass(meshes, bucket, x, y, z, rand(rng, 0.5, 1.1), rng);
         }
       } else if (biome === BIOMES.DESERT) {
         if (roll < 0.3 && bucket.ci < POOL.cacti) {
@@ -178,9 +193,11 @@ export function createWorldManager(scene, seedStr) {
             snowy ? 0xb9c2c9 : 0x7d848b);
         }
       } else {
-        // BEACH: sparse palms + shells (rocks tinted sand)
+        // BEACH: sparse palms + shells (rocks tinted sand) + dune grass.
         if (roll < 0.12 && bucket.ri < POOL.rocks) {
           placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.3, 0.6), rng, 0xd9c9a3);
+        } else if (roll < 0.22 && bucket.gi < POOL.grass) {
+          placeGrass(meshes, bucket, x, y, z, rand(rng, 0.4, 0.8), rng, PALETTES.dryGrass);
         }
       }
     }
@@ -188,7 +205,7 @@ export function createWorldManager(scene, seedStr) {
 
   function rebuildVegetation(cells) {
     obstacles.length = 0;
-    const bucket = { ti: 0, pi: 0, bi: 0, palmi: 0, bu: 0, ci: 0, ri: 0 };
+    const bucket = { ti: 0, pi: 0, bi: 0, palmi: 0, bu: 0, ci: 0, ri: 0, gi: 0 };
     // Stable order => stable world for the same seed.
     const sorted = [...cells].sort();
     for (const key of sorted) {
@@ -202,6 +219,7 @@ export function createWorldManager(scene, seedStr) {
     bushMesh.count = bucket.bu;
     cactusMesh.count = bucket.ci;
     rockMesh.count = bucket.ri;
+    grassMesh.count = bucket.gi;
     for (const m of pools) {
       m.instanceMatrix.needsUpdate = true;
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
