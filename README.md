@@ -2,7 +2,9 @@
 
 Stroll through an infinite low-poly / isometric 3D jungle built with **Three.js**. Procedural terrain, winding rivers, wooden bridges, campsites, day-night cycle, and dynamic weather — playable **offline** and installable as a mobile app (PWA).
 
-![Day in the jungle](docs/screenshots/day-jungle.png)
+![Day in the jungle](docs/screenshots/day-jungle.jpg)
+
+> All screenshots below are captured live from the current build (`npm run dev`) via `window.__env` time/weather controls — 1280×800, default `FOREST_123` spawn near river + campsite.
 
 ## ✨ Features
 
@@ -18,9 +20,13 @@ Stroll through an infinite low-poly / isometric 3D jungle built with **Three.js*
 - **Mobile ready** — floating joystick, swipe-to-rotate, pinch zoom, sprint button, adaptive resolution
 - **PWA + offline** — Service Worker bundle cache, persistent storage, install prompt, fullscreen button (`core/pwa.js`, `core/bootCache.js`, `public/sw.js`)
 
-| Sunset glow | Night campfire |
+| Sunrise (07:00) | Sunset glow (17:30) |
 |---|---|
-| ![Sunset](docs/screenshots/sunset-jungle.png) | ![Night](docs/screenshots/night-campfire.png) |
+| ![Sunrise](docs/screenshots/sunrise-jungle.jpg) | ![Sunset](docs/screenshots/sunset-jungle.jpg) |
+
+| Night campfire (00:00) | Rain storm |
+|---|---|
+| ![Night](docs/screenshots/night-campfire.jpg) | ![Rain](docs/screenshots/rain-jungle.jpg) |
 
 ## 🎮 Controls
 
@@ -37,6 +43,46 @@ Stroll through an infinite low-poly / isometric 3D jungle built with **Three.js*
 | `?seed=NAME` in URL | Load a specific world |
 
 HUD extras: pause/resume time (⏸), jump morning/night (⏭), cycle weather (🌧️), toggle music / Shift-click to skip track (🎵), toggle ambient sound (🔇).
+
+## 🌤️ Time & weather — try it live
+
+All controls live in the **☰ menu → Time & weather** panel (see screenshot). The game runs a 10-minute day (`ENV.dayLengthSec = 600` in `src/config.js`, starts at `10:00`) with auto weather re-roll every ~75s and ~6s crossfades.
+
+![Time & weather menu](docs/screenshots/menu-time-weather.jpg)
+
+**Via UI (no code):**
+- Time picker → jump to any hour (e.g. `06:00` sunrise, `17:30` sunset, `00:00` night)
+- ⏸ pause / resume the day cycle, ⏭ jump morning ↔ evening
+- 🌧️ button cycles `Clear → Overcast → Rain → Fog`
+- 🎵 / 🔊 sliders for music vs ambient volume
+- 🌍 World Type buttons: Jungle / Desert / Mountain / Beach / Night (midnight start) / Random
+
+**Via devtools console (for exact screenshots / demos):**
+```js
+// Freeze time so lighting is deterministic
+__env.state.paused = true; __env.state.weatherTimer = 9999;
+
+// Time presets used for the screenshots above
+__env.setTime(10);   // day
+__env.setTime(7);    // sunrise
+__env.setTime(17.5); // sunset
+__env.setTime(0);    // night + campfire + fireflies
+
+// Weather presets (allow ~2s for the ~6s crossfade + rain fade-in)
+__env.setWeather('clear');
+__env.setWeather('overcast');
+__env.setWeather('rain');
+__env.setWeather('fog');
+```
+
+**Via config (`src/config.js` → `ENV`):**
+```js
+export const ENV = {
+  dayLengthSec: 600,      // 1 game day = 10 real minutes
+  startTime: 10.0,        // 10:00 morning spawn
+  weatherIntervalSec: 75, // auto re-roll interval
+};
+```
 
 ## 🚀 Quickstart
 
