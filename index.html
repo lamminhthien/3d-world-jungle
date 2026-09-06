@@ -23,7 +23,6 @@
       <div class="title mini">
         <h1>🌿 Jungle Stroll</h1>
       </div>
-      <div id="fpsBadge" class="fps-badge" hidden>60 FPS</div>
       <button id="menuBtn" class="icon-btn" title="Menu" aria-label="Open menu" aria-haspopup="true" aria-expanded="false">☰</button>
       <div id="menuPanel" class="menu-panel" hidden>
         <div class="menu-section">
@@ -33,14 +32,6 @@
             <div id="pos">x: 0, z: 0</div>
             <button id="btnInstall" class="icon-btn" title="Install app" aria-label="Install app" hidden>⬇️</button>
             <button id="btnFullscreen" class="icon-btn" title="Fullscreen" aria-label="Fullscreen">⛶</button>
-            <button id="btnBenchmark" class="bench-menu-btn" title="Run Benchmark">⚡ Benchmark</button>
-          </div>
-          <div class="menu-row setting-row">
-            <label class="setting-toggle">
-              <input type="checkbox" id="toggleFps" />
-              <span class="toggle-slider"></span>
-              <span class="setting-label">Show FPS on screen</span>
-            </label>
           </div>
         </div>
         <div class="menu-section">
@@ -95,10 +86,7 @@
           <input id="titleSeed" spellcheck="false" autocomplete="off" />
           <button id="titleDice" title="Random seed">🎲</button>
         </div>
-        <div class="title-actions">
-          <button id="btnPlay">▶&nbsp; Play</button>
-          <button id="btnTitleBenchmark" class="title-bench-btn" title="Run performance benchmark">⚡ Benchmark</button>
-        </div>
+        <button id="btnPlay">▶&nbsp; Play</button>
         <p class="title-help">WASD / arrows to stroll &bull; drag to rotate &bull; scroll to zoom</p>
       </div>
     </div>
