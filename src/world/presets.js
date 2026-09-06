@@ -16,13 +16,13 @@ import { getBarkTexture, getBarkBump, getCactusTexture, getCactusBump, getLeafTe
 
 // ---- Palettes (kept identical to the old inline values) ----
 export const PALETTES = {
-  pine: [0x2f9e44, 0x2b8a3e, 0x37b24d],
+  pine: [0x2e7d4f, 0x256b43, 0x37935d],
   snowPine: [0xdfeee8, 0xcfe3d8, 0x9fc3b4],
-  broadleaf: [0x40b34f, 0x51cf66, 0x2f9e44, 0x69db7c],
-  palmLeaf: 0x37b24d,
-  bush: 0x69b93e,
+  broadleaf: [0x5da344, 0x74bd4a, 0x4a8540, 0x8ac14f],
+  palmLeaf: 0x55a347,
+  bush: 0x5f9e46,
   dryBush: 0xb5a642,
-  trunk: 0x8a5a3b,
+  trunk: 0x7b5334,
   coconut: 0x5c3d24,
   cactus: 0x2f9e44,
 };

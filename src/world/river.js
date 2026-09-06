@@ -11,7 +11,7 @@ export function createRiver(scene) {
   const waterDetail = getWaterTexture();
   const waterBump = getWaterBump();
   const waterMat = new THREE.MeshStandardMaterial({
-    color: 0x38b6d3,
+    color: 0x3da9c4,
     map: waterDetail,
     bumpMap: waterBump,
     bumpScale: 0.05,

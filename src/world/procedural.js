@@ -115,7 +115,7 @@ export function getBiome(x, z) {
 const biomeColors = {
   [BIOMES.RIVER]: [0xd9c27a, 0xcbb26a],
   [BIOMES.BEACH]: [0xd9c27a, 0xe2cf8b],
-  [BIOMES.JUNGLE]: [0x7ecb5f, 0x5da844],
+  [BIOMES.JUNGLE]: [0x7aa856, 0x597f3e],
   [BIOMES.DESERT]: [0xe3c878, 0xd4a94f],
   [BIOMES.MOUNTAIN]: [0x8d9299, 0x6f757c],
   [BIOMES.SNOW]: [0xf2f5f7, 0xdde7ee],

@@ -83,7 +83,7 @@ export function setupCore(canvas) {
   addEventListener('orientationchange', () => setTimeout(onResize, 120));
 
   // Bright daylight look (driven per-frame by the environment system).
-  const hemi = new THREE.HemisphereLight(0xcdeffd, 0x7ec850, 0.95);
+  const hemi = new THREE.HemisphereLight(0xcdeffd, 0x8a9a6b, 0.95);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff1d6, 1.9);
   sun.position.set(14, 24, 10);

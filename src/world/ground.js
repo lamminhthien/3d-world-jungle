@@ -9,8 +9,8 @@ export function createGround(scene) {
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   const colors = [];
-  const cGrass = new THREE.Color(0x7ecb5f);
-  const cGrass2 = new THREE.Color(0x67b34c);
+  const cGrass = new THREE.Color(0x7aa856);
+  const cGrass2 = new THREE.Color(0x5f8a44);
   const cSand = new THREE.Color(0xd9c27a);
 
   for (let i = 0; i < pos.count; i++) {
