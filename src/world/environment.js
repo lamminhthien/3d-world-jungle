@@ -8,6 +8,7 @@
 // - VFX: gradient skydome shader, stars, sun/moon billboards, rain particles.
 // - Audio: tiny procedural WebAudio ambience (wind / rain / birds / crickets).
 import * as THREE from 'three';
+import { QUALITY } from '../core/setup.js';
 
 export const WEATHERS = ['clear', 'overcast', 'rain', 'fog'];
 const WEATHER_LABEL = { clear: 'Clear', overcast: 'Overcast', rain: 'Rain', fog: 'Fog' };
@@ -197,7 +198,8 @@ export function createEnvironment(scene, opts = {}) {
   };
 
   // ---- Skydome (gradient shader, follows the camera focus) ----
-  const skyUniforms = {
+  // Low tier: fewer segments (160-radius sphere is mostly off-screen anyway).
+  const skySeg = QUALITY.low ? [12, 8] : [24, 16];  const skyUniforms = {
     topColor: { value: new THREE.Color(0x2f9de4) },
     bottomColor: { value: new THREE.Color(0xbfe9f5) },
     sunDir: { value: new THREE.Vector3(0, 1, 0) },
@@ -205,7 +207,7 @@ export function createEnvironment(scene, opts = {}) {
     sunGlow: { value: 0.6 },
   };
   const skydome = new THREE.Mesh(
-    new THREE.SphereGeometry(160, 24, 16),
+    new THREE.SphereGeometry(160, skySeg[0], skySeg[1]),
     new THREE.ShaderMaterial({
       uniforms: skyUniforms,
       side: THREE.BackSide,
@@ -292,7 +294,8 @@ export function createEnvironment(scene, opts = {}) {
 
   // ---- Rain particles (box around focus, wraps) ----
   // Lower density + size so the iso view never whites out.
-  const RAIN_N = 450;
+  // Low tier halves the count (CPU sim + point overdraw both cost).
+  const RAIN_N = QUALITY.low ? 200 : 450;
   const RAIN_BOX = 36;
   const RAIN_H = 18;
   const rainPos = new Float32Array(RAIN_N * 3);
@@ -536,8 +539,8 @@ export function createEnvironment(scene, opts = {}) {
         rain.position.set(focusV.x, 0, focusV.z);
       }
 
-      // --- wet look on water ---
-      if (waterMat && waterBase) {
+      // --- wet look on water (Standard only; low tier water is Lambert) ---
+      if (waterMat && waterBase && waterMat.roughness !== undefined) {
         const w = state.wetness;
         waterMat.roughness = THREE.MathUtils.lerp(waterBase.rough, 0.05, w);
         waterMat.metalness = THREE.MathUtils.lerp(waterBase.metal, 0.4, w);

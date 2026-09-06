@@ -19,11 +19,22 @@ import * as THREE from 'three';
 const cache = {};
 const SIZE = 256;
 
+function maxAniso() {
+  // Cheap UA check here to avoid a core/setup import cycle (setup is the
+  // quality owner; main.js also clamps via renderer.capabilities later).
+  // iPhones get 1, other mobiles 4, desktop 8 (was: 8 for everyone).
+  if (typeof navigator === 'undefined') return 4;
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPod/i.test(ua)) return 1;
+  if (/Android|iPad|Mobile/i.test(ua)) return 4;
+  return 8;
+}
+
 function makeTex(canvas, srgb = true) {
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
+  tex.anisotropy = maxAniso();
   return tex;
 }
 

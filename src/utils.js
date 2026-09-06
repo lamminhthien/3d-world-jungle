@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { QUALITY } from './core/setup.js';
 import { BRIDGES, RIVER_HALF } from './config.js';
 import { proceduralGroundHeight, riverDist as procRiverDist, riverXAt } from './world/procedural.js';
 
@@ -11,6 +12,13 @@ export const obstacles = []; // { x, z, r }
 export const rand = (a, b) => a + Math.random() * (b - a);
 
 export function flatMat(color, opts = {}) {
+  // Low tier (A13 Safari): Lambert + color map only. Drops bump fetches and
+  // Standard's roughness/metalness/derivative math on every fragment.
+  // Covers player, tents, bridges via this single helper.
+  if (QUALITY.low) {
+    const { bumpMap: _b, bumpScale: _s, roughness: _r, metalness: _m, ...rest } = opts;
+    return new THREE.MeshLambertMaterial({ color, flatShading: true, ...rest });
+  }
   return new THREE.MeshStandardMaterial({
     color,
     flatShading: true,

@@ -5,10 +5,12 @@
 //   toward river banks / jungle floor. Sine-wave drift => free hovering.
 // - Ortho-camera safe: fixed pixel point size (no perspective attenuation).
 import * as THREE from 'three';
+import { QUALITY } from '../core/setup.js';
 import { groundHeight, riverDist } from '../utils.js';
 import { riverXAt } from './procedural.js';
 
-const COUNT = 140;
+// Low tier halves the swarm (CPU sine sim + additive overdraw both cost).
+const COUNT = QUALITY.low ? 70 : 140;
 const RANGE = 22; // respawn box half-size around the player
 const DESPAWN = 28;
 

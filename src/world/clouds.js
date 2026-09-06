@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CLOUD_COUNT } from '../config.js';
-import { isMobileDevice } from '../core/setup.js';
+import { QUALITY, isMobileDevice } from '../core/setup.js';
 import { rand } from '../utils.js';
 
 // Low-poly drifting clouds (docs/enhance_for_night_screen.md section 3).
@@ -21,7 +21,8 @@ export function createClouds(scene) {
     depthWrite: false,
   });
   const clouds = [];
-  const count = isMobileDevice ? 6 : CLOUD_COUNT;
+  // Low tier: fewer transparent overdraw layers (each cloud is fullscreen-ish).
+  const count = QUALITY.low ? 4 : isMobileDevice ? 6 : CLOUD_COUNT;
 
   for (let i = 0; i < count; i++) {
     const n = 3 + ((Math.random() * 3) | 0);

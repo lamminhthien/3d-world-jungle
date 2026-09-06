@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { QUALITY } from '../core/setup.js';
 import { SPAWN } from '../config.js';
 import { flatMat, groundHeight } from '../utils.js';
 
@@ -7,6 +8,9 @@ import { flatMat, groundHeight } from '../utils.js';
 export function createPlayer(scene) {
   const player = new THREE.Group();
   const parts = {};
+  // Low tier: shadow maps are off, so disable casting (depth pass is skipped
+  // anyway, but this keeps the intent explicit if shadows get re-enabled).
+  const SH = QUALITY.shadowsEnabled;
 
   const skin = flatMat(0xffd8a8);
   const shirt = flatMat(0xff6b6b);
@@ -15,22 +19,22 @@ export function createPlayer(scene) {
 
   const body = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.42, 0.85, 7), shirt);
   body.position.y = 1.15;
-  body.castShadow = true;
+  body.castShadow = SH;
 
   const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.34, 0), skin);
   head.position.y = 1.95;
-  head.castShadow = true;
+  head.castShadow = SH;
 
   const hat = new THREE.Mesh(new THREE.ConeGeometry(0.55, 0.35, 8), hatM);
   hat.position.y = 2.28;
-  hat.castShadow = true;
+  hat.castShadow = SH;
 
   const mkLimb = (w, h, mat, x, y) => {
     const geo = new THREE.BoxGeometry(w, h, w);
     geo.translate(0, -h / 2, 0); // pivot at the joint
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, 0);
-    m.castShadow = true;
+    m.castShadow = SH;
     return m;
   };
 

@@ -5,13 +5,14 @@
 //   particles + drifting smoke. Warm contrast vs cool moonlight at night.
 // - Deterministic per seed; regenerates on seed change.
 import * as THREE from 'three';
+import { QUALITY } from '../core/setup.js';
 import { flatMat } from '../utils.js';
 import { proceduralGroundHeight, riverDist } from './procedural.js';
 import { rngFromString } from './noise.js';
 
 const SITE_COUNT = 5;
-const EMBERS_PER_FIRE = 22;
-const SMOKE_PER_FIRE = 8;
+const EMBERS_PER_FIRE = QUALITY.low ? 12 : 22;
+const SMOKE_PER_FIRE = QUALITY.low ? 4 : 8;
 // Beyond this distance a fire is off-screen (ortho view spans ~±20u) — its
 // light, flame pulse and particle uploads are skipped entirely.
 const FIRE_CULL_DIST = 42;
@@ -69,7 +70,9 @@ function buildTent(mats) {
   const tent = new THREE.Mesh(GEO.tent, mats.tent);
   tent.position.y = 0.85;
   tent.rotation.y = Math.PI / 4;
-  tent.castShadow = tent.receiveShadow = true;
+  // Low tier: no shadow maps, so casting only wastes the depth pass.
+  tent.castShadow = QUALITY.shadowsEnabled;
+  tent.receiveShadow = QUALITY.shadowsEnabled;
   g.add(tent);
   // Dark entrance triangle.
   const door = new THREE.Mesh(GEO.door, mats.door);
@@ -79,7 +82,7 @@ function buildTent(mats) {
   // Ground sheet.
   const sheet = new THREE.Mesh(GEO.sheet, mats.sheet);
   sheet.position.y = 0.03;
-  sheet.receiveShadow = true;
+  sheet.receiveShadow = QUALITY.shadowsEnabled;
   g.add(sheet);
   return g;
 }
@@ -92,7 +95,7 @@ function buildFirePit(mats) {
     const st = new THREE.Mesh(GEO.stone, mats.stone);
     st.position.set(Math.cos(a) * 0.55, 0.1, Math.sin(a) * 0.55);
     st.rotation.set(a, a * 2, 0);
-    st.castShadow = true;
+    st.castShadow = QUALITY.shadowsEnabled;
     g.add(st);
   }
   // Crossed logs.
@@ -101,7 +104,7 @@ function buildFirePit(mats) {
     const a = (i / 3) * Math.PI;
     log.position.y = 0.12;
     log.rotation.set(Math.PI / 2, 0, a);
-    log.castShadow = true;
+    log.castShadow = QUALITY.shadowsEnabled;
     g.add(log);
   }
   // Flame cones (emissive; scale-pulsed in update).
@@ -142,7 +145,8 @@ function buildCampsite(pos, rotY, mats) {
     const seat = new THREE.Mesh(GEO.seat, mats.log);
     seat.position.set(Math.cos(a) * 1.5, 0.22, Math.sin(a) * 1.5);
     seat.rotation.set(Math.PI / 2, 0, -a + Math.PI / 2);
-    seat.castShadow = seat.receiveShadow = true;
+    seat.castShadow = QUALITY.shadowsEnabled;
+    seat.receiveShadow = QUALITY.shadowsEnabled;
     g.add(seat);
   }
 
@@ -261,14 +265,28 @@ export function createCampsites(scene, seed = 'FOREST_123') {
       const nf = THREE.MathUtils.clamp(nightFactor, 0, 1);
       const fx = focus ? focus.x : 0;
       const fz = focus ? focus.z : 0;
-      for (const s of sites) {
+      // Low tier: a forward renderer pays for EVERY PointLight on every lit
+      // fragment, so only the nearest fire keeps its light. Others keep the
+      // flame/ember look but cost no light uniforms.
+      let nearestIdx = -1;
+      if (QUALITY.low) {
+        let best = Infinity;
+        for (let i = 0; i < sites.length; i++) {
+          const dx = sites[i].pos.x - fx;
+          const dz = sites[i].pos.z - fz;
+          const d2 = dx * dx + dz * dz;
+          if (d2 < best) { best = d2; nearestIdx = i; }
+        }
+      }
+      for (let si = 0; si < sites.length; si++) {
+        const s = sites[si];
         const dx = s.pos.x - fx;
         const dz = s.pos.z - fz;
         const d2 = dx * dx + dz * dz;
         // Perf: a forward renderer pays for EVERY PointLight on every lit
         // fragment. Far fires are off-screen anyway — hide their light so the
         // renderer drops it from the shader setup, and skip their animation.
-        const lightOn = d2 < LIGHT_DIST * LIGHT_DIST;
+        const lightOn = d2 < LIGHT_DIST * LIGHT_DIST && (!QUALITY.low || si === nearestIdx);
         s.light.visible = lightOn;
         if (d2 > FIRE_CULL_DIST * FIRE_CULL_DIST) continue;
         // Doc: light.intensity = base + random flicker; warmer at night.

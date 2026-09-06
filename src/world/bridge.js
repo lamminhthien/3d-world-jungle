@@ -1,14 +1,25 @@
 import * as THREE from 'three';
 import { BRIDGES } from '../config.js';
+import { QUALITY } from '../core/setup.js';
 import { flatMat } from '../utils.js';
 import { riverXAt } from './procedural.js';
 import { getBarkBump, getBarkTexture } from './textures.js';
+
+// Shared geometries: was `new BoxGeometry` per plank (~21 per bridge),
+// wasting GPU memory and setup time. One instance each, reused by all bridges.
+const GEO = {
+  plank: new THREE.BoxGeometry(0.9, 0.12, 1.1),
+  rail: new THREE.BoxGeometry(9, 0.12, 0.12),
+  post: new THREE.BoxGeometry(0.14, 0.8, 0.14),
+};
 
 // Wooden plank bridges spanning the winding river. Each bridge is centred on
 // the river path riverXAt(bz) so the deck always crosses the water, even after
 // a seed change. Re-call createBridges() after regenerate() to re-seat them.
 export function createBridges(scene) {
-  const woodMaps = { map: getBarkTexture(), bumpMap: getBarkBump(), bumpScale: 0.04 };
+  const woodMaps = QUALITY.low
+    ? { map: getBarkTexture() }
+    : { map: getBarkTexture(), bumpMap: getBarkBump(), bumpScale: 0.04 };
   const plankMat = flatMat(0xa5713f, woodMaps);
   const railMat = flatMat(0x7a4f27, woodMaps);
   const groups = [];
@@ -17,20 +28,21 @@ export function createBridges(scene) {
     const g = new THREE.Group();
     const cx = riverXAt(bz);
     for (let i = 0; i < 9; i++) {
-      const p = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.12, 1.1), plankMat);
+      const p = new THREE.Mesh(GEO.plank, plankMat);
       p.position.set(-4 + i, 0.45, 0);
-      p.castShadow = p.receiveShadow = true;
+      p.castShadow = QUALITY.shadowsEnabled;
+      p.receiveShadow = QUALITY.shadowsEnabled;
       g.add(p);
     }
     for (const s of [-0.8, 0.8]) {
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(9, 0.12, 0.12), railMat);
+      const rail = new THREE.Mesh(GEO.rail, railMat);
       rail.position.set(0, 1.15, s);
-      rail.castShadow = true;
+      rail.castShadow = QUALITY.shadowsEnabled;
       g.add(rail);
       for (let i = -4; i <= 4; i += 2) {
-        const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.8, 0.14), railMat);
+        const post = new THREE.Mesh(GEO.post, railMat);
         post.position.set(i, 0.8, s);
-        post.castShadow = true;
+        post.castShadow = QUALITY.shadowsEnabled;
         g.add(post);
       }
     }

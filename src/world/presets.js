@@ -11,6 +11,7 @@
 // canvas, no image assets) and multiply with instanceColor tints.
 
 import * as THREE from 'three';
+import { QUALITY } from '../core/setup.js';
 import { dummy } from '../utils.js';
 import { getBarkTexture, getBarkBump, getCactusTexture, getCactusBump, getLeafTexture, getLeafBump, getRockTexture, getRockBump } from './textures.js';
 
@@ -43,7 +44,13 @@ export const presetById = (id) => VEGETATION_PRESETS.find((p) => p.id === id);
 
 // ---- Textured materials (one per pool, shared by all instances) ----
 // map = fine color grain, bumpMap = matching relief (sun catches the grain).
+// Low tier (A13 Safari): MeshLambertMaterial + color map only. Lambert skips
+// roughness/metalness/derivative flat-shading math that makes Standard so
+// expensive per fragment, and dropping the bumpMap saves a texture fetch.
 function texturedMat(color, map, bumpMap, bumpScale = 0.05, extra = {}) {
+  if (QUALITY.low) {
+    return new THREE.MeshLambertMaterial({ color, map, flatShading: true, ...extra });
+  }
   return new THREE.MeshStandardMaterial({
     color, map, bumpMap, bumpScale, flatShading: true, roughness: 0.95, metalness: 0, ...extra,
   });

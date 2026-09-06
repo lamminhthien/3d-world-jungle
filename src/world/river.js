@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FOAM_COUNT, RIVER_HALF } from '../config.js';
+import { QUALITY } from '../core/setup.js';
 import { rand } from '../utils.js';
 import { riverXAt } from './procedural.js';
 import { getWaterBump, getWaterTexture } from './textures.js';
@@ -10,16 +11,21 @@ import { getWaterBump, getWaterTexture } from './textures.js';
 export function createRiver(scene) {
   const waterDetail = getWaterTexture();
   const waterBump = getWaterBump();
-  const waterMat = new THREE.MeshStandardMaterial({
-    color: 0x3da9c4,
-    map: waterDetail,
-    bumpMap: waterBump,
-    bumpScale: 0.05,
-    roughness: 0.25,
-    metalness: 0.05,
-    transparent: true,
-    opacity: 0.92,
-  });
+  // Low tier: opaque Lambert, no bump. A fullscreen transparent Standard
+  // plane is pure overdraw on a tiled GPU; opaque lets it early-z against
+  // the terrain (which sits above y=-0.32 outside the channel anyway).
+  const waterMat = QUALITY.low
+    ? new THREE.MeshLambertMaterial({ color: 0x3da9c4, map: waterDetail })
+    : new THREE.MeshStandardMaterial({
+      color: 0x3da9c4,
+      map: waterDetail,
+      bumpMap: waterBump,
+      bumpScale: 0.05,
+      roughness: 0.25,
+      metalness: 0.05,
+      transparent: true,
+      opacity: 0.92,
+    });
 
   const water = new THREE.Mesh(new THREE.PlaneGeometry(130, 130), waterMat);
   water.rotation.x = -Math.PI / 2;

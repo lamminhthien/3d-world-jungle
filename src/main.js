@@ -252,10 +252,13 @@ async function boot() {
         chunkEl.textContent = `${s.chunks} chunks · ${s.seed}`;
       }
       // Adaptive resolution: if the GPU can't hold ~45fps, step the pixel
-      // ratio down (min 1.0); step back up when headroom returns. This is what
-      // saves weak Android GPUs without touching desktop quality.
+      // ratio down (low tier may go to 0.85 — still fine on a 6.1" screen);
+      // step back up when headroom returns. Low tier reacts in ~1.2s instead
+      // of 2.5s so a thermally-capped iPhone recovers instead of sitting at
+      // 30fps (see docs/perf-iphone11-safari.md).
       qualityCooldown += fpsT;
-      if (qualityCooldown > 2.5) {
+      const cooldown = QUALITY.low ? 1.2 : 2.5;
+      if (qualityCooldown > cooldown) {
         qualityCooldown = 0;
         const pr = renderer.getPixelRatio();
         if (avg < 45 && pr > QUALITY.minPixelRatio) {
