@@ -24,8 +24,8 @@ const STOPS = [
   { t: 5.5,  sun: 0xff6600, sunInt: 0.55, hemiInt: 0.42, ambInt: 0.16, top: 0x3d2a6e, bot: 0xff7730, fog: 0xff8850, exp: 0.88, stars: 0.2 },
   { t: 6.5,  sun: 0xffb060, sunInt: 0.9,  hemiInt: 0.55, ambInt: 0.18, top: 0x4a6fa5, bot: 0xffa060, fog: 0xe8905a, exp: 0.95, stars: 0.0 },
   { t: 7,    sun: 0xffd9a8, sunInt: 1.1,  hemiInt: 0.6,  ambInt: 0.18, top: 0x3d9be9, bot: 0xcfeef7, fog: 0xb8ddef, exp: 1.0,  stars: 0.0 },
-  { t: 9,    sun: 0xfff3e0, sunInt: 1.9,  hemiInt: 0.95, ambInt: 0.25, top: 0x2f9de4, bot: 0xbfe9f5, fog: 0xa8dcf0, exp: 1.1,  stars: 0.0 },
-  { t: 15.5, sun: 0xfff3e0, sunInt: 1.9,  hemiInt: 0.95, ambInt: 0.25, top: 0x2f9de4, bot: 0xbfe9f5, fog: 0xa8dcf0, exp: 1.1,  stars: 0.0 },
+  { t: 9,    sun: 0xfff3e0, sunInt: 2.0,  hemiInt: 1.0,  ambInt: 0.25, top: 0x1f8fe8, bot: 0xa8ecff, fog: 0x9adcff, exp: 1.15, stars: 0.0 },
+  { t: 15.5, sun: 0xfff3e0, sunInt: 2.0,  hemiInt: 1.0,  ambInt: 0.25, top: 0x1f8fe8, bot: 0xa8ecff, fog: 0x9adcff, exp: 1.15, stars: 0.0 },
   // GOLDEN HOUR
   { t: 16.5, sun: 0xffaa44, sunInt: 1.5,  hemiInt: 0.75, ambInt: 0.2,  top: 0x3a7bd5, bot: 0xffcc88, fog: 0xf0a866, exp: 1.05, stars: 0.0 },
   // SUNSET — deep amber top, vivid coral/orange bottom
@@ -305,7 +305,7 @@ export function createEnvironment(scene, opts = {}) {
           vec3 col = mix(bottomColor, topColor, pow(max(h, 0.0), 0.55));
           col = mix(col, bottomColor * 0.92, smoothstep(0.0, -0.4, h));
           float s = max(dot(d, normalize(sunDir)), 0.0);
-          col += sunColor * (pow(s, 350.0) * 1.2 + pow(s, 12.0) * 0.22 * sunGlow);
+          col += sunColor * (pow(s, 350.0) * 1.4 + pow(s, 12.0) * 0.35 * sunGlow);
           gl_FragColor = vec4(col, 1.0);
         }`,
     }),

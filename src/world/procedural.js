@@ -151,15 +151,19 @@ export function sampleGround(x, z) {
   return { y, biome, d };
 }
 
-// Vertex / ground colors per biome (low-poly flat look).
+// Vertex / ground colors per biome (vivid cartoon look).
 const biomeColors = {
-  [BIOMES.RIVER]: [0xd9c27a, 0xcbb26a],
-  [BIOMES.BEACH]: [0xd9c27a, 0xe2cf8b],
-  [BIOMES.JUNGLE]: [0x7aa856, 0x597f3e],
-  [BIOMES.DESERT]: [0xe3c878, 0xd4a94f],
-  [BIOMES.MOUNTAIN]: [0x8d9299, 0x6f757c],
-  [BIOMES.SNOW]: [0xf2f5f7, 0xdde7ee],
+  [BIOMES.RIVER]: [0xe8cf7e, 0xd4b45e],
+  [BIOMES.BEACH]: [0xf2d789, 0xe9c86e],
+  [BIOMES.JUNGLE]: [0x5fd44e, 0x2fa84f],
+  [BIOMES.DESERT]: [0xf2cf6e, 0xdd9f3f],
+  [BIOMES.MOUNTAIN]: [0x9aa3b0, 0x6f7a8e],
+  [BIOMES.SNOW]: [0xffffff, 0xd8ecf7],
 };
+
+// Flower-meadow speckle tints dotted over the jungle floor (hash-driven,
+// no extra noise — a few % of vertices blush pink/gold/white like petals).
+const MEADOW_DOTS = [0xff8fb5, 0xffd93b, 0xffffff, 0xc99aff, 0xff7e4f];
 
 const _bcB = new THREE.Color();
 const _bcScratch = new THREE.Color();
@@ -185,7 +189,16 @@ export function biomeGroundColor(biome, random, target = _bcScratch, x = 0, z = 
   const lvl = Math.round(y / GEN.stepSize);
   const dl = (random() - 0.5) * 0.04 + (lvl % 2 === 0 ? 0.012 : -0.012);
   target.offsetHSL(0, 0, dl);
-  if (biome === BIOMES.SNOW) {
+  if (biome === BIOMES.JUNGLE) {
+    // Lime/teal patches + tiny petal dots: the floor blooms with color.
+    const h = hashXZ(x, z);
+    if (h > 0.86) {
+      target.lerp(_bcB.setHex(h > 0.93 ? 0x2fd6a0 : 0xaee63f), 0.5);
+    } else if (h < 0.05) {
+      target.lerp(_bcB.setHex(MEADOW_DOTS[(h * 9973 | 0) % MEADOW_DOTS.length]), 0.65);
+    }
+    target.offsetHSL(0, 0.03, 0); // gentle saturation lift for the jungle
+  } else if (biome === BIOMES.SNOW) {
     if (hashXZ(x, z) < 0.18) target.lerp(_bcB.setHex(0x8d9299), 0.45);
   } else if (biome === BIOMES.MOUNTAIN) {
     if (y >= GEN.snowLine - GEN.stepSize && hashXZ(x, z) > 0.72) {

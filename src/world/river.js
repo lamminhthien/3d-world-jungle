@@ -15,9 +15,9 @@ export function createRiver(scene) {
   // plane is pure overdraw on a tiled GPU; opaque lets it early-z against
   // the terrain (which sits above y=-0.32 outside the channel anyway).
   const waterMat = QUALITY.low
-    ? new THREE.MeshLambertMaterial({ color: 0x1a95d4, map: waterDetail })
+    ? new THREE.MeshLambertMaterial({ color: 0x0fc3e8, map: waterDetail })
     : new THREE.MeshStandardMaterial({
-      color: 0x1a8fbf,
+      color: 0x0fb6dd,
       map: waterDetail,
       bumpMap: waterBump,
       bumpScale: 0.08,

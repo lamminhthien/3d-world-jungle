@@ -14,12 +14,20 @@ import {
   createVegetationKit,
   PALETTES,
   PALM_FRONDS,
+  placeBanana,
+  placeBlossomTree,
   placeBroadleaf,
   placeBush,
   placeCactus,
+  placeFloweringBush,
+  placeFlowerPatch,
+  placeFruitTree,
+  placeGoldenTree,
   placeGrass,
+  placeKapok,
   placePalm,
   placePine,
+  placeRainbowTree,
   placeRock,
 } from './presets.js';
 import {
@@ -41,13 +49,19 @@ export const CHUNK_SEG = QUALITY.low ? 16 : 24;
 export const CHUNK_RADIUS = 2; // (2*R+1)^2 = 25 chunks ~ 80x80 units visible
 
 const POOL = {
-  trees: 800,
-  crowns: 1600, // pine cones + round canopies + coconut blobs share nothing; split below
-  palms: 4800, // 800 trees × PALM_FRONDS (6) worst case, all palms
+  // Cartoon-realistic trees cost more instances per tree now (branches reuse
+  // the trunk pool, 3-puff canopies, buttress roots): size trunks/crowns for
+  // ~30 tries/chunk × 25 chunks with headroom.
+  trees: QUALITY.low ? 1800 : 3200,
+  crowns: QUALITY.low ? 2600 : 4200, // pine tiers (3) + canopy puffs (3-5)
+  palms: 4800, // palms + banana clumps share the frond pool
   bushes: 900,
   cacti: 450,
   rocks: 1000,
   grass: QUALITY.low ? 600 : 1500, // P0 grass tufts: 12 tris each, 1 draw call
+  fruit: QUALITY.low ? 900 : 1600, // mango/orange/apple/banana/coconut orbs
+  flowerStem: QUALITY.low ? 900 : 1600,
+  flowerHead: QUALITY.low ? 900 : 1600,
 };
 
 const rand = (rng, a, b) => a + rng() * (b - a);
@@ -84,8 +98,11 @@ export function createWorldManager(scene, seedStr) {
   const cactusMesh = new THREE.InstancedMesh(kit.geometries.cactus, kit.materials.cactus, POOL.cacti);
   const rockMesh = new THREE.InstancedMesh(kit.geometries.rock, kit.materials.rock, POOL.rocks);
   const grassMesh = new THREE.InstancedMesh(kit.geometries.grass, kit.materials.grass, POOL.grass);
-  const meshes = { trunk: trunkMesh, pine: pineMesh, blob: blobMesh, palm: palmMesh, bush: bushMesh, cactus: cactusMesh, rock: rockMesh, grass: grassMesh };
-  const pools = [trunkMesh, pineMesh, blobMesh, palmMesh, bushMesh, cactusMesh, rockMesh, grassMesh];
+  const fruitMesh = new THREE.InstancedMesh(kit.geometries.fruit, kit.materials.fruit, POOL.fruit);
+  const flowerStemMesh = new THREE.InstancedMesh(kit.geometries.flowerStem, kit.materials.flowerStem, POOL.flowerStem);
+  const flowerHeadMesh = new THREE.InstancedMesh(kit.geometries.flowerHead, kit.materials.flowerHead, POOL.flowerHead);
+  const meshes = { trunk: trunkMesh, pine: pineMesh, blob: blobMesh, palm: palmMesh, bush: bushMesh, cactus: cactusMesh, rock: rockMesh, grass: grassMesh, fruit: fruitMesh, flowerStem: flowerStemMesh, flowerHead: flowerHeadMesh };
+  const pools = [trunkMesh, pineMesh, blobMesh, palmMesh, bushMesh, cactusMesh, rockMesh, grassMesh, fruitMesh, flowerStemMesh, flowerHeadMesh];
   for (const m of pools) {
     // Perf: vegetation casts onto the ground but never receives — receiving
     // doubles the shadow-sampling cost on every instanced fragment, and the
@@ -99,6 +116,9 @@ export function createWorldManager(scene, seedStr) {
   // P0 grass: tufts are <0.5u tall — shadows add nothing even on desktop, so
   // never cast (saves depth-pass instances on both tiers).
   grassMesh.castShadow = false;
+  // Petals + stems are tiny: skip them in the shadow depth pass.
+  flowerStemMesh.castShadow = false;
+  flowerHeadMesh.castShadow = false;
 
   let spawn = { x: 4.5, z: 2, y: 0 };
   let visibleKey = '';
@@ -204,23 +224,47 @@ export function createWorldManager(scene, seedStr) {
       // All shapes come from static presets (see ./presets.js) — same
       // densities as before, now with textured materials.
       if (biome === BIOMES.JUNGLE) {
-        if (roll < 0.42 && bucket.ti < POOL.trees) {
+        if (roll < 0.44 && bucket.ti + 4 <= POOL.trees) {
           const s = rand(rng, 0.8, 1.5);
           const kind = rng();
-          if (kind < 0.45 && bucket.pi + 2 <= POOL.crowns) {
+          // Canopy tree lottery: classic pine/broadleaf + fruit, blossom,
+          // kapok giants, banana clumps, coconut palms + rare rainbow/golden.
+          if (kind < 0.2 && bucket.pi + 3 <= POOL.crowns) {
             placePine(meshes, bucket, obstacles, x, y, z, s, rng);
-          } else if (kind < 0.8 && bucket.bi + 2 <= POOL.crowns) {
+          } else if (kind < 0.36 && bucket.bi + 3 <= POOL.crowns) {
             placeBroadleaf(meshes, bucket, obstacles, x, y, z, s, rng);
-          } else if (bucket.palmi + PALM_FRONDS < POOL.palms && bucket.bi + 1 <= POOL.crowns) {
+          } else if (kind < 0.5 && bucket.bi + 3 <= POOL.crowns && bucket.fri + 7 <= POOL.fruit) {
+            placeFruitTree(meshes, bucket, obstacles, x, y, z, s, rng);
+          } else if (kind < 0.6 && bucket.bi + 3 <= POOL.crowns && bucket.fhi + 6 <= POOL.flowerHead) {
+            placeBlossomTree(meshes, bucket, obstacles, x, y, z, s, rng);
+          } else if (kind < 0.64 && bucket.bi + 4 <= POOL.crowns) {
+            // Rare rainbow showpiece.
+            placeRainbowTree(meshes, bucket, obstacles, x, y, z, rand(rng, 0.9, 1.4), rng);
+          } else if (kind < 0.69 && bucket.bi + 3 <= POOL.crowns) {
+            // Rare golden accent.
+            placeGoldenTree(meshes, bucket, obstacles, x, y, z, s, rng);
+          } else if (kind < 0.74 && bucket.bi + 5 <= POOL.crowns) {
+            placeKapok(meshes, bucket, obstacles, x, y, z, rand(rng, 1.0, 1.5), rng);
+          } else if (kind < 0.84 && bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
+            placeBanana(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.2), rng);
+          } else if (bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
             placePalm(meshes, bucket, obstacles, x, y, z, s, rng);
           }
-        } else if (roll < 0.62 && bucket.bu < POOL.bushes) {
-          placeBush(meshes, bucket, x, y, z, rand(rng, 0.6, 1.4), rng);
-        } else if (roll < 0.7 && bucket.ri < POOL.rocks) {
+        } else if (roll < 0.58 && bucket.bu < POOL.bushes) {
+          // Every second bush blooms: vivid blossoms on the crown.
+          if (rng() < 0.5 && bucket.fhi + 8 <= POOL.flowerHead) {
+            placeFloweringBush(meshes, bucket, x, y, z, rand(rng, 0.5, 1.0), rng);
+          } else {
+            placeBush(meshes, bucket, x, y, z, rand(rng, 0.6, 1.4), rng);
+          }
+        } else if (roll < 0.7 && bucket.fhi + 9 <= POOL.flowerHead && bucket.fsti + 9 <= POOL.flowerStem) {
+          placeFlowerPatch(meshes, bucket, x, y, z, rand(rng, 0.7, 1.2), rng);
+        } else if (roll < 0.75 && bucket.ri < POOL.rocks) {
           placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.4, 0.9), rng);
-        } else if (roll < 0.88 && bucket.gi < POOL.grass) {
-          // P0 grass tufts: jungle floor fill, walkable, no collision.
-          placeGrass(meshes, bucket, x, y, z, rand(rng, 0.5, 1.1), rng);
+        } else if (roll < 0.93 && bucket.gi < POOL.grass) {
+          // Grass tufts: mostly green, every 5th golden for meadow sparkle.
+          const tint = rng() < 0.2 ? PALETTES.grassGold : PALETTES.grass;
+          placeGrass(meshes, bucket, x, y, z, rand(rng, 0.5, 1.1), rng, tint);
         }
       } else if (biome === BIOMES.DESERT) {
         if (roll < 0.3 && bucket.ci < POOL.cacti) {
@@ -232,7 +276,7 @@ export function createWorldManager(scene, seedStr) {
         }
       } else if (biome === BIOMES.MOUNTAIN || biome === BIOMES.SNOW) {
         const snowy = biome === BIOMES.SNOW;
-        if (roll < 0.34 && bucket.ti < POOL.trees && bucket.pi + 2 < POOL.crowns) {
+        if (roll < 0.34 && bucket.ti + 1 <= POOL.trees && bucket.pi + 3 <= POOL.crowns) {
           placePine(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.2), rng,
             snowy ? PALETTES.snowPine : PALETTES.pine);
         } else if (roll < 0.6 && bucket.ri < POOL.rocks) {
@@ -241,9 +285,11 @@ export function createWorldManager(scene, seedStr) {
         }
       } else {
         // BEACH: tropical palms, seashells (cream rocks), dune grass.
-        if (roll < 0.15 && bucket.ti < POOL.trees && bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.bi + 1 <= POOL.crowns) {
+        if (roll < 0.15 && bucket.ti + 2 <= POOL.trees && bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
           // Beach palms: shorter, wider spread
           placePalm(meshes, bucket, obstacles, x, y, z, rand(rng, 0.65, 1.1), rng);
+        } else if (roll < 0.2 && bucket.ti + 2 <= POOL.trees && bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
+          placeBanana(meshes, bucket, obstacles, x, y, z, rand(rng, 0.6, 0.95), rng);
         } else if (roll < 0.28 && bucket.ri < POOL.rocks) {
           // Seashells: tiny cream-tinted rocks
           placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.18, 0.45), rng, 0xf5f0e8);
@@ -254,8 +300,14 @@ export function createWorldManager(scene, seedStr) {
           // Dune grass — taller and denser
           placeGrass(meshes, bucket, x, y, z, rand(rng, 0.5, 1.0), rng, PALETTES.dryGrass);
         } else if (roll < 0.62 && bucket.bu < POOL.bushes) {
-          // Coastal shrubs
-          placeBush(meshes, bucket, x, y, z, rand(rng, 0.4, 0.7), rng, 0x8aac5a);
+          // Coastal shrubs (sometimes blooming)
+          if (rng() < 0.4 && bucket.fhi + 6 <= POOL.flowerHead) {
+            placeFloweringBush(meshes, bucket, x, y, z, rand(rng, 0.4, 0.7), rng);
+          } else {
+            placeBush(meshes, bucket, x, y, z, rand(rng, 0.4, 0.7), rng, 0x8aac5a);
+          }
+        } else if (roll < 0.68 && bucket.fhi + 6 <= POOL.flowerHead && bucket.fsti + 6 <= POOL.flowerStem) {
+          placeFlowerPatch(meshes, bucket, x, y, z, rand(rng, 0.5, 0.9), rng);
         }
       }
     }
@@ -263,7 +315,7 @@ export function createWorldManager(scene, seedStr) {
 
   function rebuildVegetation(cells) {
     obstacles.length = 0;
-    const bucket = { ti: 0, pi: 0, bi: 0, palmi: 0, bu: 0, ci: 0, ri: 0, gi: 0 };
+    const bucket = { ti: 0, pi: 0, bi: 0, palmi: 0, bu: 0, ci: 0, ri: 0, gi: 0, fri: 0, fsti: 0, fhi: 0 };
     // Stable order => stable world for the same seed.
     const sorted = [...cells].sort();
     for (const key of sorted) {
@@ -278,6 +330,9 @@ export function createWorldManager(scene, seedStr) {
     cactusMesh.count = bucket.ci;
     rockMesh.count = bucket.ri;
     grassMesh.count = bucket.gi;
+    fruitMesh.count = bucket.fri;
+    flowerStemMesh.count = bucket.fsti;
+    flowerHeadMesh.count = bucket.fhi;
     for (const m of pools) {
       m.instanceMatrix.needsUpdate = true;
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
