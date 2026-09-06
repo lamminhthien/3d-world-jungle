@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dạo Chơi Trong Rừng — Low Poly Isometric</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+
+    <div id="hud">
+      <div class="title">
+        <h1>🌿 Dạo Chơi Trong Rừng</h1>
+        <p>Low Poly &bull; Isometric &bull; Three.js</p>
+      </div>
+      <div class="controls-hint">
+        <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span>
+        <span class="or">hoặc</span>
+        <span class="key">←</span><span class="key">↑</span><span class="key">↓</span><span class="key">→</span>
+        <span class="label">để đi dạo &bull; kéo chuột để xoay góc nhìn &bull; lăn chuột để zoom</span>
+      </div>
+      <div class="stats">
+        <div id="fps">60 FPS</div>
+        <div id="pos">x: 0, z: 0</div>
+      </div>
+    </div>
+
+    <div id="joystick"><div id="stick"></div></div>
+
+    <div id="loading">
+      <div class="loader">🌴</div>
+      <p>Đang trồng rừng...</p>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
