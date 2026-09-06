@@ -76,6 +76,11 @@ export function setupCore(canvas) {
     renderer.setSize(innerWidth, innerHeight);
   }
   addEventListener('resize', onResize);
+  // Android Chrome: thanh địa chỉ ẩn/hiện làm innerHeight nhảy — visualViewport chính xác hơn.
+  if (typeof visualViewport !== 'undefined' && visualViewport) {
+    visualViewport.addEventListener('resize', onResize);
+  }
+  addEventListener('orientationchange', () => setTimeout(onResize, 120));
 
   // Bright daylight look (driven per-frame by the environment system).
   const hemi = new THREE.HemisphereLight(0xcdeffd, 0x7ec850, 0.95);

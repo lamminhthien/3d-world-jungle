@@ -1,6 +1,7 @@
-* { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { width: 100%; height: 100%; overflow: hidden; font-family: "Segoe UI", system-ui, -apple-system, sans-serif; background: #aee3f5; }
-#scene { position: fixed; inset: 0; display: block; }
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { width: 100%; height: 100%; overflow: hidden; font-family: "Segoe UI", system-ui, -apple-system, sans-serif; background: #aee3f5; overscroll-behavior: none; }
+body { user-select: none; -webkit-user-select: none; touch-action: none; position: fixed; inset: 0; }
+#scene { position: fixed; inset: 0; display: block; touch-action: none; }
 
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
 .title { position: absolute; top: 20px; left: 24px; background: rgba(255,255,255,.82); backdrop-filter: blur(8px); padding: 12px 18px; border-radius: 16px; box-shadow: 0 8px 24px rgba(46,125,50,.18); border: 1px solid rgba(255,255,255,.7); }
@@ -28,9 +29,49 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: "Segoe UI
 #envbar button { border: none; background: rgba(255,255,255,.14); color: #fff; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 14px; line-height: 1; }
 #envbar button:hover { background: rgba(255,255,255,.3); }
 
-#joystick { position: fixed; bottom: 90px; right: 30px; width: 110px; height: 110px; border-radius: 50%; background: rgba(255,255,255,.25); border: 2px solid rgba(255,255,255,.6); z-index: 20; display: none; touch-action: none; }
+#joystick { position: fixed; bottom: 90px; right: 30px; width: 110px; height: 110px; border-radius: 50%; background: rgba(255,255,255,.25); border: 2px solid rgba(255,255,255,.6); z-index: 20; display: none; touch-action: none; opacity: .55; transition: opacity .15s; }
 #stick { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,.9); transform: translate(-50%,-50%); box-shadow: 0 4px 12px rgba(0,0,0,.25); }
-@media (pointer: coarse) { #joystick { display: block; } .controls-hint { display: none; } }
+/* Floating joystick: hiện rõ khi đang chạm, ẩn mờ khi idle */
+#joystick.active { opacity: 1; background: rgba(255,255,255,.32); border-color: rgba(255,255,255,.85); }
+
+/* Cụm nút cảm ứng: zoom + chạy nhanh */
+#touch-ui { display: none; }
+@media (pointer: coarse) {
+  #joystick { display: block; width: 120px; height: 120px; }
+  #stick { width: 54px; height: 54px; }
+  .controls-hint { display: none; }
+  #touch-ui { display: block; position: fixed; inset: 0; pointer-events: none; z-index: 21; }
+  #touch-ui .zoom-btns { position: absolute; right: calc(16px + env(safe-area-inset-right)); bottom: calc(96px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px; pointer-events: auto; }
+  #touch-ui .zoom-btns button, #btnSprint {
+    width: 48px; height: 48px; border-radius: 50%; border: 2px solid rgba(255,255,255,.7);
+    background: rgba(33,33,33,.55); color: #fff; font-size: 20px; font-weight: 700;
+    backdrop-filter: blur(6px); cursor: pointer; touch-action: none;
+  }
+  #touch-ui .zoom-btns button:active, #btnSprint.held { background: rgba(67,160,71,.85); transform: scale(.93); }
+  #btnSprint { position: absolute; right: calc(76px + env(safe-area-inset-right)); bottom: calc(36px + env(safe-area-inset-bottom)); pointer-events: auto; font-size: 22px; }
+  #mobile-hint {
+    position: absolute; bottom: calc(10px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+    background: rgba(33,33,33,.6); color: #fff; font-size: 11px; padding: 7px 14px; border-radius: 999px;
+    white-space: nowrap; backdrop-filter: blur(6px);
+  }
+  /* HUD gọn cho màn hình nhỏ + tránh tai thỏ */
+  .title { top: calc(10px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); padding: 8px 12px; border-radius: 12px; }
+  .title h1 { font-size: 15px; }
+  .title p { font-size: 10px; }
+  .stats { top: calc(10px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right)); }
+  .stats div { padding: 6px 9px; font-size: 11px; }
+  .seedbar { bottom: calc(44px + env(safe-area-inset-bottom)); left: calc(12px + env(safe-area-inset-left)); padding: 6px 10px; gap: 6px; }
+  .seedbar input { width: 84px; font-size: 12px; }
+  #envbar { display: none; }
+}
+/* Ngang màn hình: joystick + nút dồn gọn để không che map */
+@media (pointer: coarse) and (orientation: landscape) {
+  #joystick { width: 104px; height: 104px; }
+  .title p, #mobile-hint { display: none; }
+  .seedbar { bottom: calc(10px + env(safe-area-inset-bottom)); }
+  #touch-ui .zoom-btns { bottom: calc(24px + env(safe-area-inset-bottom)); }
+  #btnSprint { bottom: calc(24px + env(safe-area-inset-bottom)); }
+}
 
 #loading { position: fixed; inset: 0; background: linear-gradient(180deg, #b3e5fc, #c8e6c9); display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; z-index: 50; transition: opacity .6s; font-size: 18px; color: #2e7d32; font-weight: 600; }
 #loading.hidden { opacity: 0; pointer-events: none; }

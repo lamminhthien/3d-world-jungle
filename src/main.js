@@ -52,7 +52,7 @@ const camps = createCampsites(scene, initialSeed);
 const { player, parts } = createPlayer(scene);
 player.position.set(spawn.x, groundHeight(spawn.x, spawn.z), spawn.z);
 camTarget.set(spawn.x, 0.5, spawn.z);
-const { keys, joy } = setupControls(canvas, core);
+const { keys, joy, touch } = setupControls(canvas, core);
 
 // ============ Seed UI ============
 const seedInput = document.getElementById('seed');
@@ -119,12 +119,18 @@ function update(dt) {
     _right.set(Math.sin(az), 0, -Math.cos(az));
 
     const len = Math.hypot(ix, iz);
+    const inputMag = Math.min(1, len);
     ix /= Math.max(1, len);
     iz /= Math.max(1, len);
     _move.set(0, 0, 0).addScaledVector(_fwd, -iz).addScaledVector(_right, ix).normalize();
 
-    let nx = player.position.x + _move.x * SPEED * dt;
-    let nz = player.position.z + _move.z * SPEED * dt;
+    // Sprint: giữ Shift (desktop) / nút 🏃 / đẩy joystick hết cỡ (mobile).
+    const sprinting = keys.ShiftLeft || keys.ShiftRight || touch?.sprintHeld || joy.mag > 0.92;
+    // Analog: đẩy joystick nhẹ = đi chậm, đẩy mạnh = đi nhanh.
+    const speed = SPEED * (sprinting ? 1.6 : 1) * (0.35 + 0.65 * inputMag);
+
+    let nx = player.position.x + _move.x * speed * dt;
+    let nz = player.position.z + _move.z * speed * dt;
 
     // Circle collision against trees / rocks / cacti (squared distances —
     // Math.hypot per obstacle per frame is needlessly slow).
@@ -157,7 +163,7 @@ function update(dt) {
     player.position.z = nz;
     player.rotation.y = Math.atan2(_move.x, _move.z);
 
-    walkTime += dt * 10;
+    walkTime += dt * 10 * (sprinting ? 1.45 : 1) * (0.5 + 0.5 * inputMag);
     const sw = Math.sin(walkTime);
     parts.legL.rotation.x = sw * 0.7;
     parts.legR.rotation.x = -sw * 0.7;

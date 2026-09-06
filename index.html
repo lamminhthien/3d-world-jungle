@@ -2,7 +2,11 @@
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#2e7d32" />
     <title>Dạo Chơi Trong Rừng — Low Poly Isometric</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
@@ -33,6 +37,16 @@
     </div>
 
     <div id="joystick"><div id="stick"></div></div>
+
+    <!-- Mobile touch UI: zoom + sprint (chỉ hiện trên cảm ứng) -->
+    <div id="touch-ui">
+      <div class="zoom-btns">
+        <button id="zoomIn" aria-label="Phóng to">＋</button>
+        <button id="zoomOut" aria-label="Thu nhỏ">－</button>
+      </div>
+      <button id="btnSprint" aria-label="Chạy nhanh">🏃</button>
+      <div id="mobile-hint">👈 chạm trái để đi &bull; 👉 vuốt phải để xoay &bull; pinch để zoom</div>
+    </div>
 
     <div id="loading">
       <div class="loader">🌴</div>
