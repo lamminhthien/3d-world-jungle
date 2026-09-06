@@ -1,5 +1,46 @@
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { width: 100%; height: 100%; overflow: hidden; font-family: "Segoe UI", system-ui, -apple-system, sans-serif; background: #aee3f5; overscroll-behavior: none; }
+
+#adventure-hud {
+  position: fixed;
+  left: 14px;
+  bottom: 18px;
+  z-index: 8;
+  max-width: min(360px, calc(100vw - 28px));
+  padding: 10px 13px;
+  border: 1px solid rgba(255,255,255,.55);
+  border-radius: 12px;
+  color: #fff;
+  background: rgba(35, 67, 43, .78);
+  box-shadow: 0 5px 18px rgba(0,0,0,.18);
+  font-size: 13px;
+  line-height: 1.45;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0,0,0,.4);
+}
+
+#inventory { margin-top: 3px; color: #e4f5cf; }
+
+#adventure-prompt {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  z-index: 9;
+  transform: translateX(-50%);
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 9px 15px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(31, 48, 34, .88);
+  font-size: 13px;
+  text-align: center;
+  pointer-events: none;
+}
+
+@media (max-width: 600px) {
+  #adventure-hud { bottom: 78px; font-size: 12px; }
+  #adventure-prompt { bottom: 70px; }
+}
 body { user-select: none; -webkit-user-select: none; touch-action: none; position: fixed; inset: 0; }
 #scene { position: fixed; inset: 0; display: block; touch-action: none; }
 
