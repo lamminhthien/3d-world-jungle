@@ -6,8 +6,18 @@
 
 import * as THREE from 'three';
 import { BRIDGES } from '../config.js';
-import { dummy, flatMat, obstacles } from '../utils.js';
+import { obstacles } from '../utils.js';
 import { rngFromString } from './noise.js';
+import {
+  createVegetationKit,
+  PALETTES,
+  placeBroadleaf,
+  placeBush,
+  placeCactus,
+  placePalm,
+  placePine,
+  placeRock,
+} from './presets.js';
 import {
   BIOMES,
   GEN,
@@ -34,18 +44,8 @@ const POOL = {
 };
 
 const rand = (rng, a, b) => a + rng() * (b - a);
-const pick = (rng, arr) => arr[(rng() * arr.length) | 0];
-
-const pinePalette = [0x2f9e44, 0x2b8a3e, 0x37b24d];
-const blobPalette = [0x40b34f, 0x51cf66, 0x2f9e44, 0x69db7c];
-const snowPinePalette = [0xdfeee8, 0xcfe3d8, 0x9fc3b4];
 
 const keyOf = (cx, cz) => `${cx},${cz}`;
-
-// Shared scratch color for setColorAt calls. setColorAt() copies the values
-// into the instance buffer, so reuse across placements is safe and avoids
-// thousands of short-lived Color objects on every vegetation rebuild.
-const _col = new THREE.Color();
 
 export function createWorldManager(scene, seedStr) {
   if (seedStr) initProcedural(seedStr);
@@ -56,14 +56,16 @@ export function createWorldManager(scene, seedStr) {
   });
   const groundChunks = new Map(); // key -> Mesh
 
-  // ---- Global vegetation pools (one draw call each) ----
-  const trunkMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.18, 0.3, 1.4, 6), flatMat(0xffffff), POOL.trees);
-  const pineMesh = new THREE.InstancedMesh(new THREE.ConeGeometry(1.25, 2.6, 7), flatMat(0xffffff), POOL.crowns);
-  const blobMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1.25, 0), flatMat(0xffffff), POOL.crowns);
-  const palmMesh = new THREE.InstancedMesh(new THREE.ConeGeometry(0.4, 2.6, 4), flatMat(0xffffff), POOL.palms);
-  const bushMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.7, 0), flatMat(0xffffff), POOL.bushes);
-  const cactusMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.32, 0.4, 2.4, 7), flatMat(0xffffff), POOL.cacti);
-  const rockMesh = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), flatMat(0xffffff), POOL.rocks);
+  // ---- Global vegetation pools (one draw call each, textured via presets) ----
+  const kit = createVegetationKit();
+  const trunkMesh = new THREE.InstancedMesh(kit.geometries.trunk, kit.materials.trunk, POOL.trees);
+  const pineMesh = new THREE.InstancedMesh(kit.geometries.pine, kit.materials.pine, POOL.crowns);
+  const blobMesh = new THREE.InstancedMesh(kit.geometries.blob, kit.materials.blob, POOL.crowns);
+  const palmMesh = new THREE.InstancedMesh(kit.geometries.palmLeaf, kit.materials.palmLeaf, POOL.palms);
+  const bushMesh = new THREE.InstancedMesh(kit.geometries.bush, kit.materials.bush, POOL.bushes);
+  const cactusMesh = new THREE.InstancedMesh(kit.geometries.cactus, kit.materials.cactus, POOL.cacti);
+  const rockMesh = new THREE.InstancedMesh(kit.geometries.rock, kit.materials.rock, POOL.rocks);
+  const meshes = { trunk: trunkMesh, pine: pineMesh, blob: blobMesh, palm: palmMesh, bush: bushMesh, cactus: cactusMesh, rock: rockMesh };
   const pools = [trunkMesh, pineMesh, blobMesh, palmMesh, bushMesh, cactusMesh, rockMesh];
   for (const m of pools) {
     // Perf: vegetation casts onto the ground but never receives — receiving
@@ -125,143 +127,45 @@ export function createWorldManager(scene, seedStr) {
       const y = proceduralGroundHeight(x, z);
       const roll = rng();
 
+      // All shapes come from static presets (see ./presets.js) — same
+      // densities as before, now with textured materials.
       if (biome === BIOMES.JUNGLE) {
         if (roll < 0.42 && bucket.ti < POOL.trees) {
           const s = rand(rng, 0.8, 1.5);
-          trunkMesh.setColorAt(bucket.ti, _col.set(0x8a5a3b).offsetHSL(0, 0, rand(rng, -0.03, 0.03)));
-          dummy.position.set(x, y + 0.7 * s, z);
-          dummy.rotation.set(rand(rng, -0.08, 0.08), rand(rng, 0, 6.28), rand(rng, -0.08, 0.08));
-          dummy.scale.setScalar(s);
-          dummy.updateMatrix();
-          trunkMesh.setMatrixAt(bucket.ti++, dummy.matrix);
-          obstacles.push({ x, z, r: 0.55 * s });
           const kind = rng();
-          if (kind < 0.45) {
-            for (let k = 0; k < 2 && bucket.pi < POOL.crowns; k++) {
-              pineMesh.setColorAt(bucket.pi, _col.set(pick(rng, pinePalette)));
-              dummy.position.set(x, y + (1.9 + k * 1.15) * s, z);
-              dummy.rotation.set(0, rand(rng, 0, 6.28), 0);
-              dummy.scale.setScalar(s * (k === 0 ? 1 : 0.68));
-              dummy.updateMatrix();
-              pineMesh.setMatrixAt(bucket.pi++, dummy.matrix);
-            }
-          } else if (kind < 0.8) {
-            for (let k = 0; k < 2 && bucket.bi < POOL.crowns; k++) {
-              blobMesh.setColorAt(bucket.bi, _col.set(pick(rng, blobPalette)));
-              dummy.position.set(x + rand(rng, -0.4, 0.4) * s, y + (2.1 + k * 0.8) * s, z + rand(rng, -0.4, 0.4) * s);
-              dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), 0);
-              dummy.scale.set(s * rand(rng, 0.9, 1.2), s * rand(rng, 0.8, 1), s * rand(rng, 0.9, 1.2));
-              dummy.updateMatrix();
-              blobMesh.setMatrixAt(bucket.bi++, dummy.matrix);
-            }
-          } else if (bucket.palmi + 5 < POOL.palms) {
-            // palm near jungle/beach
-            dummy.position.set(x, y + 1.1 * s, z);
-            dummy.rotation.set(0.15, rand(rng, 0, 6.28), 0.12);
-            dummy.scale.setScalar(s * 1.15);
-            dummy.updateMatrix();
-            trunkMesh.setMatrixAt(bucket.ti - 1, dummy.matrix);
-            const topY = y + 2.2 * s;
-            for (let k = 0; k < 5; k++) {
-              palmMesh.setColorAt(bucket.palmi, _col.set(0x37b24d).offsetHSL(0, 0, rand(rng, -0.03, 0.03)));
-              const a = (k / 5) * Math.PI * 2;
-              dummy.position.set(x + 0.25 + Math.cos(a) * 1.05 * s, topY + rand(rng, -0.15, 0.25), z + 0.2 + Math.sin(a) * 1.05 * s);
-              dummy.rotation.set(Math.PI / 2.3, 0, -a + Math.PI / 2);
-              dummy.scale.set(1, 1, 0.28);
-              dummy.updateMatrix();
-              palmMesh.setMatrixAt(bucket.palmi++, dummy.matrix);
-            }
-            if (bucket.bi < POOL.crowns) {
-              blobMesh.setColorAt(bucket.bi, _col.set(0x5c3d24));
-              dummy.position.set(x + 0.25, topY - 0.15, z + 0.2);
-              dummy.rotation.set(0, 0, 0);
-              dummy.scale.setScalar(0.28 * s);
-              dummy.updateMatrix();
-              blobMesh.setMatrixAt(bucket.bi++, dummy.matrix);
-            }
+          if (kind < 0.45 && bucket.pi + 2 <= POOL.crowns) {
+            placePine(meshes, bucket, obstacles, x, y, z, s, rng);
+          } else if (kind < 0.8 && bucket.bi + 2 <= POOL.crowns) {
+            placeBroadleaf(meshes, bucket, obstacles, x, y, z, s, rng);
+          } else if (bucket.palmi + 5 < POOL.palms && bucket.bi + 1 <= POOL.crowns) {
+            placePalm(meshes, bucket, obstacles, x, y, z, s, rng);
           }
         } else if (roll < 0.62 && bucket.bu < POOL.bushes) {
-          bushMesh.setColorAt(bucket.bu, _col.set(0x69b93e).offsetHSL(rand(rng, -0.02, 0.02), 0, rand(rng, -0.04, 0.04)));
-          dummy.position.set(x, y + 0.3, z);
-          dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), 0);
-          dummy.scale.setScalar(rand(rng, 0.6, 1.4));
-          dummy.updateMatrix();
-          bushMesh.setMatrixAt(bucket.bu++, dummy.matrix);
+          placeBush(meshes, bucket, x, y, z, rand(rng, 0.6, 1.4), rng);
         } else if (roll < 0.7 && bucket.ri < POOL.rocks) {
-          const s = rand(rng, 0.4, 0.9);
-          rockMesh.setColorAt(bucket.ri, _col.set(0x9aa0a3).offsetHSL(0, -0.05, rand(rng, -0.05, 0.02)));
-          dummy.position.set(x, y + s * 0.25, z);
-          dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), rand(rng, 0, 3));
-          dummy.scale.set(s, s * 0.7, s);
-          dummy.updateMatrix();
-          rockMesh.setMatrixAt(bucket.ri++, dummy.matrix);
+          placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.4, 0.9), rng);
         }
       } else if (biome === BIOMES.DESERT) {
         if (roll < 0.3 && bucket.ci < POOL.cacti) {
-          const s = rand(rng, 0.7, 1.4);
-          cactusMesh.setColorAt(bucket.ci, _col.set(0x2f9e44).offsetHSL(rand(rng, -0.02, 0.02), 0.05, rand(rng, -0.03, 0.03)));
-          dummy.position.set(x, y + 1.1 * s, z);
-          dummy.rotation.set(0, rand(rng, 0, 6.28), 0);
-          dummy.scale.set(s, s, s);
-          dummy.updateMatrix();
-          cactusMesh.setMatrixAt(bucket.ci++, dummy.matrix);
-          obstacles.push({ x, z, r: 0.5 * s });
+          placeCactus(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.4), rng);
         } else if (roll < 0.45 && bucket.ri < POOL.rocks) {
-          const s = rand(rng, 0.5, 1.1);
-          rockMesh.setColorAt(bucket.ri, _col.set(0xc2a06b));
-          dummy.position.set(x, y + s * 0.25, z);
-          dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), rand(rng, 0, 3));
-          dummy.scale.set(s, s * 0.7, s);
-          dummy.updateMatrix();
-          rockMesh.setMatrixAt(bucket.ri++, dummy.matrix);
-          if (s > 0.9) obstacles.push({ x, z, r: s * 0.8 });
+          placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.5, 1.1), rng, 0xc2a06b);
         } else if (roll < 0.55 && bucket.bu < POOL.bushes) {
-          bushMesh.setColorAt(bucket.bu, _col.set(0xb5a642));
-          dummy.position.set(x, y + 0.25, z);
-          dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), 0);
-          dummy.scale.setScalar(rand(rng, 0.5, 0.9));
-          dummy.updateMatrix();
-          bushMesh.setMatrixAt(bucket.bu++, dummy.matrix);
+          placeBush(meshes, bucket, x, y, z, rand(rng, 0.5, 0.9), rng, PALETTES.dryBush);
         }
       } else if (biome === BIOMES.MOUNTAIN || biome === BIOMES.SNOW) {
         const snowy = biome === BIOMES.SNOW;
         if (roll < 0.34 && bucket.ti < POOL.trees && bucket.pi + 2 < POOL.crowns) {
-          const s = rand(rng, 0.7, 1.2);
-          trunkMesh.setColorAt(bucket.ti, _col.set(snowy ? 0x6b4f35 : 0x7a5233));
-          dummy.position.set(x, y + 0.7 * s, z);
-          dummy.rotation.set(0, rand(rng, 0, 6.28), 0);
-          dummy.scale.setScalar(s);
-          dummy.updateMatrix();
-          trunkMesh.setMatrixAt(bucket.ti++, dummy.matrix);
-          obstacles.push({ x, z, r: 0.55 * s });
-          for (let k = 0; k < 2 && bucket.pi < POOL.crowns; k++) {
-            pineMesh.setColorAt(bucket.pi, _col.set(pick(rng, snowy ? snowPinePalette : pinePalette)));
-            dummy.position.set(x, y + (1.9 + k * 1.15) * s, z);
-            dummy.rotation.set(0, rand(rng, 0, 6.28), 0);
-            dummy.scale.setScalar(s * (k === 0 ? 1 : 0.68));
-            dummy.updateMatrix();
-            pineMesh.setMatrixAt(bucket.pi++, dummy.matrix);
-          }
+          placePine(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.2), rng,
+            snowy ? PALETTES.snowPine : PALETTES.pine);
         } else if (roll < 0.6 && bucket.ri < POOL.rocks) {
-          const s = rand(rng, 0.6, 1.6);
-          rockMesh.setColorAt(bucket.ri, _col.set(snowy ? 0xb9c2c9 : 0x7d848b));
-          dummy.position.set(x, y + s * 0.25, z);
-          dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), rand(rng, 0, 3));
-          dummy.scale.set(s * rand(rng, 0.8, 1.3), s * rand(rng, 0.6, 1), s * rand(rng, 0.8, 1.3));
-          dummy.updateMatrix();
-          rockMesh.setMatrixAt(bucket.ri++, dummy.matrix);
-          if (s > 0.9) obstacles.push({ x, z, r: s * 0.8 });
+          placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.6, 1.6), rng,
+            snowy ? 0xb9c2c9 : 0x7d848b);
         }
       } else {
         // BEACH: sparse palms + shells (rocks tinted sand)
         if (roll < 0.12 && bucket.ri < POOL.rocks) {
-          const s = rand(rng, 0.3, 0.6);
-          rockMesh.setColorAt(bucket.ri, _col.set(0xd9c9a3));
-          dummy.position.set(x, y + s * 0.2, z);
-          dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), 0);
-          dummy.scale.setScalar(s);
-          dummy.updateMatrix();
-          rockMesh.setMatrixAt(bucket.ri++, dummy.matrix);
+          placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.3, 0.6), rng, 0xd9c9a3);
         }
       }
     }
