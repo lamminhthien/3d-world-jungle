@@ -30,6 +30,13 @@ Tạo một nơi an toàn để người chơi nhận quest, giao dịch, chăm 
 - Shop dùng cùng inventory và item definitions.
 - Bảng quest đọc từ quest registry.
 
+## Quy tắc layout đã triển khai
+
+- Vùng làng có clearing riêng, giảm cây procedural trong bán kính 18 đơn vị.
+- Làng có cổng mở, hàng rào bao quanh, đường đất chính/phụ và khu campfire.
+- Hai khu ruộng gồm các luống đất và cây trồng; cây rừng chỉ bắt đầu lại ở ngoài làng.
+- Sáu NPC có waypoint riêng và tự đi tuần quanh nhà, đường và ruộng.
+
 ## Mở rộng
 
 - Nâng cấp nhà.

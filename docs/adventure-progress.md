@@ -45,6 +45,14 @@ Implemented:
 - Added three villagers with `E`/mobile-button interaction and a short mobile-friendly dialogue panel.
 - Added the `🏘️ Village` world option on the title screen and in the in-game menu; selecting it regenerates the world and places the player at the village.
 
+## 2026-09-06 — Village layout pass
+
+Implemented:
+
+- Added a procedural vegetation exclusion zone so the village is a real clearing with only a small amount of surrounding forest.
+- Added a gated fence perimeter, dirt roads, two crop fields with visible rows and a more readable village core.
+- Expanded the population to six villagers; each follows a fixed, seed-stable waypoint route around the village.
+
 ## How to test the current slice
 
 1. Run `npm run dev` and press **Play**.

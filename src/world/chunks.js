@@ -217,6 +217,12 @@ export function createWorldManager(scene, seedStr) {
       const sdx = x - sx;
       const sdz = z - sz;
       if (sdx * sdx + sdz * sdz < 20.25) continue; // 4.5², no sqrt
+      // The village occupies a stable clearing just beyond the spawn camp.
+      // Keep procedural vegetation out of it so houses, roads and fields read
+      // as one settlement instead of props hidden inside the jungle.
+      const vdx = x - (sx + 16);
+      const vdz = z - (sz + 14);
+      if (vdx * vdx + vdz * vdz < 18 * 18) continue;
       if (nearBridge(x, z)) continue;
       const y = s.y;
       const roll = rng();
