@@ -194,6 +194,10 @@ async function boot() {
   const playBtn = document.getElementById('btnPlay');
   const menuBtn = document.getElementById('menuBtn');
   const menuPanel = document.getElementById('menuPanel');
+  const buildTimeEl = document.getElementById('build-time');
+  if (buildTimeEl) {
+    buildTimeEl.textContent = `Build: ${typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'Development'}`;
+  }
   if (titleSeedInput) titleSeedInput.value = initialSeed;
 
   function closeMenu() {
