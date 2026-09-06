@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 
 export const WEATHERS = ['clear', 'overcast', 'rain', 'fog'];
-const WEATHER_LABEL = { clear: 'Nắng đẹp', overcast: 'Âm u', rain: 'Mưa', fog: 'Sương mù' };
+const WEATHER_LABEL = { clear: 'Clear', overcast: 'Overcast', rain: 'Rain', fog: 'Fog' };
 const WEATHER_ICON = { clear: '☀️', overcast: '☁️', rain: '🌧️', fog: '🌫️' };
 
 // ---- Day keyframes (lerped) ----
@@ -291,7 +291,7 @@ export function createEnvironment(scene, opts = {}) {
   scene.add(moonLight); scene.add(moonLight.target);
 
   // ---- Rain particles (box around focus, wraps) ----
-  // Giảm mật độ + size để không mù mịt che màn hình iso.
+  // Lower density + size so the iso view never whites out.
   const RAIN_N = 450;
   const RAIN_BOX = 36;
   const RAIN_H = 18;
@@ -336,12 +336,12 @@ export function createEnvironment(scene, opts = {}) {
     }
     root.innerHTML = `
       <span id="env-time">☀️ 10:00</span>
-      <span id="env-wx">☀️ Nắng đẹp</span>
+      <span id="env-wx">☀️ Clear</span>
       <div class="env-btns">
-        <button id="env-pause" title="Tạm dừng / tiếp tục thời gian">⏸</button>
-        <button id="env-skip" title="Nhảy tới sáng / tối">⏭</button>
-        <button id="env-wxbtn" title="Đổi thời tiết">🌧️</button>
-        <button id="env-mute" title="Âm thanh môi trường">🔇</button>
+        <button id="env-pause" title="Pause / resume time">⏸</button>
+        <button id="env-skip" title="Jump to morning / night">⏭</button>
+        <button id="env-wxbtn" title="Change weather">🌧️</button>
+        <button id="env-mute" title="Ambient sound">🔇</button>
       </div>`;
     timeEl = root.querySelector('#env-time');
     wxEl = root.querySelector('#env-wx');
@@ -473,13 +473,13 @@ export function createEnvironment(scene, opts = {}) {
       if (renderer) renderer.toneMappingExposure = sample.exp;
 
       // --- sky / fog / background ---
-      // Giảm lerp về fogTint để không bị wash-out trắng xóa cả màn hình.
+      // Ease off the fogTint lerp to avoid washing out the whole screen.
       _cb.copy(sample.fog).lerp(wx.fogTint, state.weather === 'clear' ? 0 : 0.22);
       if (scene.fog) {
         scene.fog.color.copy(_cb);
         scene.fog.near = state.fogNear * wx.fogNear;
         scene.fog.far = state.fogFar * wx.fogFar * nightFogMul;
-        // Guard: far luôn phải > near + margin, nếu không sẽ whiteout.
+        // Guard: far must stay > near + margin, otherwise whiteout.
         if (scene.fog.far < scene.fog.near + 30) scene.fog.far = scene.fog.near + 30;
       }
       if (scene.background?.isColor) scene.background.copy(_cb);
@@ -498,7 +498,7 @@ export function createEnvironment(scene, opts = {}) {
       moonMesh.position.set(focusV.x + moonDir.x * 130, moonDir.y * 130, focusV.z + moonDir.z * 130);
       moonMesh.visible = moonDir.y > -0.05;
       // Overcast / rain veils the moon; drifting clouds cross it for an
-      // occluded-moon illusion (doc section 3: trăng mờ ảo).
+      // occluded-moon illusion (doc section 3: hazy veiled moon).
       const veil = (1 - wx.rain * 0.7) * (state.weather === 'overcast' ? 0.55 : 1) * (state.weather === 'fog' ? 0.3 : 1);
       moonMesh.material.opacity = THREE.MathUtils.clamp(moonDir.y * 4 + 0.3, 0, 0.9) * veil;
       moonHalo.position.copy(moonMesh.position);

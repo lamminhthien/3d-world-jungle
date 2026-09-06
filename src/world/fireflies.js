@@ -139,7 +139,7 @@ export function createFireflies(scene) {
         const dx = bx[i] - fx;
         const dz = bz[i] - fz;
         if (dx * dx + dz * dz > DESPAWN * DESPAWN) place(i, fx, fz);
-        // Uốn lượn tự do: layered sine drift (doc: sine wave hovering).
+        // Free wandering: layered sine drift (doc: sine wave hovering).
         const t = elapsed;
         const a = amp[i];
         p[i * 3] = bx[i] + Math.sin(t * 0.5 + seed2[i]) * a + Math.sin(t * 1.1 + seed2[i] * 2.0) * 0.25;

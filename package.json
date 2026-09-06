@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Website 3D Dạo chơi trong rừng - Low Poly / Isometric với Three.js",
+  "description": "Stroll through a low-poly / isometric 3D jungle with Three.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { CAMERA } from '../config.js';
 
-// Keyboard (WASD/arrows + Shift để chạy) + mobile:
-//  - Floating joystick nửa trái màn hình (chạm đâu hiện đó)
-//  - Vuốt nửa phải để xoay camera, pinch 2 ngón để zoom
-//  - Multi-touch: vừa đi vừa xoay (track riêng từng pointerId)
+// Keyboard (WASD/arrows + Shift to sprint) + mobile:
+//  - Floating joystick on the left half (appears where you touch)
+//  - Swipe the right half to rotate the camera, pinch with 2 fingers to zoom
+//  - Multi-touch: walk + rotate at once (separate tracking per pointerId)
 // Mutates `rig.state` (azimuth / frustumSize) and calls rig helpers.
 export function setupControls(canvas, rig) {
   const keys = {};
@@ -22,7 +22,7 @@ export function setupControls(canvas, rig) {
   const base = document.getElementById('joystick');
   const stick = document.getElementById('stick');
 
-  // Chặn menu long-press / callout trên Android Chrome + Safari.
+  // Block long-press menu / callout on Android Chrome + Safari.
   addEventListener('contextmenu', (e) => {
     if (e.target === canvas || (base && base.contains(e.target))) e.preventDefault();
   });
@@ -33,7 +33,7 @@ export function setupControls(canvas, rig) {
     rig.onResize();
   }
 
-  // Nút zoom +/- cho mobile (giữ để zoom liên tục).
+  // Mobile zoom +/- buttons (hold for continuous zoom).
   const zoomInBtn = document.getElementById('zoomIn');
   const zoomOutBtn = document.getElementById('zoomOut');
   const sprintBtn = document.getElementById('btnSprint');
@@ -78,21 +78,21 @@ export function setupControls(canvas, rig) {
   let joyPointerId = null;
   let joyOriginX = 0;
   let joyOriginY = 0;
-  // Làm mượt input analog: tránh giật khi ngón tay rung.
+  // Smooth analog input: avoid jitter from shaky fingers.
   let smoothX = 0;
   let smoothY = 0;
 
   let lookPointerId = null;
   let lookLastX = 0;
   let lookLastY = 0;
-  // Pinch: lưu khoảng cách 2 ngón look để zoom.
+  // Pinch: store the 2-finger look distance for zoom.
   const pinchPointers = new Map(); // pointerId -> {x, y}
   let pinchLastDist = 0;
 
   function showBaseAt(x, y) {
     if (!base) return;
     base.classList.add('active');
-    // Đặt tâm joystick đúng điểm chạm (base 120px).
+    // Center the joystick on the touch point (120px base).
     base.style.left = `${x}px`;
     base.style.top = `${y}px`;
     base.style.right = 'auto';
@@ -117,14 +117,14 @@ export function setupControls(canvas, rig) {
       stick.style.transform = `translate(calc(-50% + ${nx * cl}px), calc(-50% + ${ny * cl}px))`;
     }
     const rawMag = cl / MAX_RADIUS;
-    // Deadzone + đường cong expo: đẩy nhẹ = đi chậm, đẩy hết = chạy.
+    // Deadzone + expo curve: light push = walk slow, full push = run.
     const shaped = rawMag < DEADZONE ? 0 : Math.min(1, ((rawMag - DEADZONE) / (1 - DEADZONE)) ** 1.15);
     const targetX = nx * shaped;
     const targetY = ny * shaped;
-    // Lerp nhanh (~18/s ở 60fps) để mượt mà không trễ.
+    // Fast lerp (~18/s at 60fps) for smoothness without lag.
     smoothX += (targetX - smoothX) * 0.35;
     smoothY += (targetY - smoothY) * 0.35;
-    // Snap về 0 khi thả gần hết để dừng hẳn.
+    // Snap to 0 when nearly released for a full stop.
     joy.x = Math.abs(smoothX) < 0.02 && shaped === 0 ? 0 : smoothX;
     joy.y = Math.abs(smoothY) < 0.02 && shaped === 0 ? 0 : smoothY;
     joy.mag = Math.min(1, Math.hypot(joy.x, joy.y));
@@ -135,12 +135,12 @@ export function setupControls(canvas, rig) {
     return el && typeof el.closest === 'function' && el.closest('#touch-ui, #hud .seedbar, #hud .stats, #envbar, button');
   }
 
-  // Chạm bắt đầu: nửa trái (55%) = joystick, còn lại = xoay camera.
-  // Bỏ qua chạm lên nút bấm / seedbar.
+  // Touch start: left half (55%) = joystick, rest = rotate camera.
+  // Ignore touches on buttons / seedbar.
   function onPointerDown(e) {
     if (e.pointerType !== 'touch') return;
     if (isTouchUI(e.target)) return;
-    // Chạm UI joystick cũ (nếu còn ở vị trí cố định) vẫn tính là joystick.
+    // Touches on the legacy fixed joystick UI (if any) still count as joystick.
     const onBase = base && (e.target === base || base.contains(e.target));
     const goJoy = onBase || (e.clientX < innerWidth * 0.55 && joyPointerId === null);
     if (goJoy && joyPointerId === null) {
@@ -159,7 +159,7 @@ export function setupControls(canvas, rig) {
       if (pinchPointers.size === 2) {
         const [a, b] = [...pinchPointers.values()];
         pinchLastDist = Math.hypot(a.x - b.x, a.y - b.y);
-        lookPointerId = null; // nhường cho pinch
+        lookPointerId = null; // yield to pinch
       } else if (lookPointerId === null) {
         lookPointerId = e.pointerId;
         lookLastX = e.clientX;
@@ -180,7 +180,7 @@ export function setupControls(canvas, rig) {
         const [a, b] = [...pinchPointers.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
         if (pinchLastDist > 0) {
-          // Pinch ra = zoom in (frustum nhỏ lại).
+          // Pinch out = zoom in (smaller frustum).
           setZoom(rig.state.frustumSize - (d - pinchLastDist) * 0.03);
         }
         pinchLastDist = d;
@@ -188,8 +188,8 @@ export function setupControls(canvas, rig) {
       }
     }
     if (e.pointerId === lookPointerId) {
-      // Vuốt ngang xoay, vuốt dọc nhẹ chỉnh pitch? Giữ azimuth như desktop,
-      // độ nhạy cao hơn chút cho ngón tay cái.
+      // Horizontal swipe rotates; slight vertical pitch? Keep azimuth like desktop,
+      // with slightly higher sensitivity for thumbs.
       rig.state.azimuth -= (e.clientX - lookLastX) * 0.0075;
       lookLastX = e.clientX;
       lookLastY = e.clientY;
@@ -206,7 +206,7 @@ export function setupControls(canvas, rig) {
     if (pinchPointers.has(e.pointerId)) {
       pinchPointers.delete(e.pointerId);
       pinchLastDist = 0;
-      // Rớt từ pinch về 1 ngón: gán ngón còn lại thành look để xoay tiếp.
+      // Dropping from pinch to 1 finger: keep the remaining finger as look to keep rotating.
       if (pinchPointers.size === 1) {
         const [id] = [...pinchPointers.keys()];
         const p = pinchPointers.get(id);
@@ -221,8 +221,8 @@ export function setupControls(canvas, rig) {
     if (e.pointerId === lookPointerId) lookPointerId = null;
   }
 
-  // Lắng nghe trên window để bắt được cả khi ngón trượt khỏi canvas,
-  // nhưng lọc bỏ thao tác trên input text (seed).
+  // Listen on window to catch fingers sliding off the canvas,
+  // but filter out gestures on text inputs (seed).
   const opts = { passive: false };
   addEventListener('pointerdown', (e) => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -233,17 +233,17 @@ export function setupControls(canvas, rig) {
   }, opts);
   addEventListener('pointerup', onPointerUp);
   addEventListener('pointercancel', onPointerUp);
-  // Tránh kẹt joystick khi app mất focus / chuyển tab.
+  // Avoid a stuck joystick when the app loses focus / switches tab.
   addEventListener('blur', () => {
     joyPointerId = lookPointerId = null;
     pinchPointers.clear();
     resetStick();
   });
-  // iOS Safari: gesture events gây zoom trang — chặn hẳn.
+  // iOS Safari: gesture events zoom the page — block them entirely.
   document.addEventListener('gesturestart', (e) => e.preventDefault());
   document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
 
-  // ---------- Desktop: kéo chuột xoay, lăn chuột zoom (giữ nguyên) ----------
+  // ---------- Desktop: drag to rotate, wheel to zoom (unchanged) ----------
   let dragging = false;
   let px = 0;
   canvas.addEventListener('pointerdown', (e) => {

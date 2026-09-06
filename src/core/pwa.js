@@ -1,12 +1,12 @@
-// PWA helpers: nút fullscreen (Android) + nút cài app + nhận diện standalone.
+// PWA helpers: fullscreen button (Android) + install button + standalone detection.
 // ---------------------------------------------------------------------------
-// - Fullscreen dùng Fullscreen API chuẩn + tiền tố webkit (Android Chrome,
-//   Samsung Internet...). iPhone Safari không hỗ trợ fullscreen cho trang web
-//   nên nút sẽ tự ẩn (tránh hiện nút chết).
-// - Khi đã chạy dưới dạng PWA standalone thì trang vốn đã chiếm toàn màn
-//   hình -> ẩn nút fullscreen qua class `body.is-standalone` (xem style.css).
-// - Install: hứng `beforeinstallprompt` (Android Chrome/Edge) để hiện nút ⬇️;
-//   iOS không có event này -> nút hiện với hướng dẫn "Chia sẻ > Thêm vào MH chính".
+// - Fullscreen uses the standard Fullscreen API + webkit prefix (Android Chrome,
+//   Samsung Internet...). iPhone Safari has no fullscreen for web pages
+//   so the button hides itself (avoids a dead button).
+// - When already running as a standalone PWA the page already fills the screen
+//   -> hide the fullscreen button via `body.is-standalone` (see style.css).
+// - Install: listen for `beforeinstallprompt` (Android Chrome/Edge) to show the install button;
+//   iOS has no such event -> the button shows manual "Share > Add to Home Screen" guidance.
 
 function docEl() {
   return document.documentElement;
@@ -14,7 +14,7 @@ function docEl() {
 
 function requestPageFullscreen() {
   const el = docEl();
-  // Chrome/Android: navigationUI hide để thật sự tràn viền.
+  // Chrome/Android: navigationUI hide for a truly edge-to-edge view.
   if (el.requestFullscreen) {
     try {
       const p = el.requestFullscreen({ navigationUI: 'hide' });
@@ -24,7 +24,7 @@ function requestPageFullscreen() {
       return el.requestFullscreen();
     }
   }
-  // Safari desktop cũ / một số webview Android.
+  // Old desktop Safari / some Android webviews.
   const webkit = el.webkitRequestFullscreen;
   if (typeof webkit === 'function') return webkit.call(el);
   return Promise.reject(new Error('fullscreen-unsupported'));
@@ -47,7 +47,7 @@ export async function togglePageFullscreen() {
     if (isPageFullscreen()) await exitPageFullscreen();
     else await requestPageFullscreen();
   } catch {
-    /* Người dùng từ chối / thiết bị không cho: kệ, giữ nguyên */
+    /* User denied / device blocked: ignore, keep state */
   }
 }
 
@@ -56,24 +56,24 @@ export function isStandalone() {
     if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
     if (window.matchMedia && window.matchMedia('(display-mode: fullscreen)').matches) return true;
   } catch {
-    /* bỏ qua */
+    /* ignore */
   }
-  // iOS Safari "đã thêm vào MH chính".
+  // iOS Safari "added to Home Screen".
   if (typeof navigator.standalone === 'boolean' && navigator.standalone) return true;
-  // Android PWA mở từ launcher thường có referrer rỗng + không có thanh địa chỉ.
+  // Android PWAs launched from the launcher usually have an empty referrer + no address bar.
   return false;
 }
 
 const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent || '');
 
-/** Gắn logic cho 2 nút #btnFullscreen / #btnInstall. Gọi 1 lần lúc boot. */
+/** Wire up #btnFullscreen / #btnInstall. Call once at boot. */
 export function setupPwaUi() {
   const fsBtn = document.getElementById('btnFullscreen');
   const installBtn = document.getElementById('btnInstall');
 
   if (isStandalone()) document.body.classList.add('is-standalone');
 
-  // ---- Nút fullscreen ----
+  // ---- Fullscreen button ----
   if (fsBtn) {
     const supported =
       typeof docEl().requestFullscreen === 'function' ||
@@ -84,7 +84,7 @@ export function setupPwaUi() {
       const syncIcon = () => {
         const on = isPageFullscreen();
         fsBtn.textContent = on ? '✕' : '⛶';
-        fsBtn.title = on ? 'Thoát toàn màn hình' : 'Toàn màn hình';
+        fsBtn.title = on ? 'Exit fullscreen' : 'Fullscreen';
         fsBtn.setAttribute('aria-label', fsBtn.title);
       };
       fsBtn.addEventListener('click', (e) => {
@@ -98,7 +98,7 @@ export function setupPwaUi() {
     }
   }
 
-  // ---- Nút cài app (Android beforeinstallprompt + fallback iOS) ----
+  // ---- Install-app button (Android beforeinstallprompt + iOS fallback) ----
   if (!installBtn) return;
   let deferred = null;
 
@@ -110,7 +110,7 @@ export function setupPwaUi() {
   };
 
   window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault(); // giữ lại để mở khi user bấm nút ⬇️
+    e.preventDefault(); // keep it to show when the user taps the button ⬇️
     deferred = e;
     if (!isStandalone()) showInstall();
   });
@@ -120,7 +120,7 @@ export function setupPwaUi() {
     document.body.classList.add('is-standalone');
   });
 
-  // iOS: không có beforeinstallprompt -> hiện nút với hướng dẫn thủ công.
+  // iOS: no beforeinstallprompt -> show the button with manual guidance.
   if (isIOS() && !isStandalone()) showInstall();
 
   installBtn.addEventListener('click', async (e) => {
@@ -131,17 +131,17 @@ export function setupPwaUi() {
         deferred.prompt();
         await deferred.userChoice;
       } catch {
-        /* user đóng dialog: kệ */
+        /* user closed the dialog: ignore */
       }
       deferred = null;
       hideInstall();
       return;
     }
-    // Fallback (iOS / trình duyệt không hỗ trợ prompt):
+    // Fallback (iOS / browsers without prompt support):
     alert(
       isIOS()
-        ? 'Để cài app: bấm nút Chia sẻ (Share) > "Thêm vào MH chính" (Add to Home Screen).'
-        : 'Để cài app: mở menu trình duyệt (⋮) > "Cài đặt ứng dụng" / "Add to Home screen".',
+        ? 'To install: tap Share > "Add to Home Screen".'
+        : 'To install: open the browser menu (⋮) > "Install app" / "Add to Home screen".',
     );
   });
 }

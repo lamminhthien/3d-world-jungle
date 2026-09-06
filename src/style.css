@@ -15,8 +15,8 @@ body { user-select: none; -webkit-user-select: none; touch-action: none; positio
 
 .stats { position: absolute; top: 20px; right: 24px; display: flex; gap: 8px; align-items: center; }
 .stats div { background: rgba(255,255,255,.82); padding: 8px 12px; border-radius: 10px; font-size: 12px; font-weight: 600; color: #33691e; font-variant-numeric: tabular-nums; }
-/* PWA + fullscreen icon buttons (Android): con của #hud (pointer-events:none)
-// nên cần bật lại pointer-events để bấm được. */
+/* PWA + fullscreen icon buttons (Android): children of #hud (pointer-events:none)
+// so re-enable pointer-events to keep them clickable. */
 .stats .icon-btn {
   pointer-events: auto; border: 1px solid rgba(255,255,255,.7); background: rgba(255,255,255,.82);
   color: #2e7d32; width: 34px; height: 34px; border-radius: 10px; font-size: 16px; font-weight: 700;
@@ -26,7 +26,7 @@ body { user-select: none; -webkit-user-select: none; touch-action: none; positio
 .stats .icon-btn:hover { background: #fff; }
 .stats .icon-btn:active { transform: scale(.92); }
 .stats .icon-btn[hidden] { display: none; }
-/* Khi đã là PWA standalone / đã fullscreen thì nút fullscreen không còn tác dụng */
+/* Fullscreen button is useless once standalone / already fullscreen */
 body.is-standalone #btnFullscreen { display: none; }
 
 .seedbar { position: absolute; bottom: 22px; left: 24px; display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,.85); backdrop-filter: blur(8px); padding: 8px 12px; border-radius: 999px; box-shadow: 0 8px 24px rgba(46,125,50,.18); border: 1px solid rgba(255,255,255,.7); pointer-events: auto; }
@@ -44,10 +44,10 @@ body.is-standalone #btnFullscreen { display: none; }
 
 #joystick { position: fixed; bottom: 90px; right: 30px; width: 110px; height: 110px; border-radius: 50%; background: rgba(255,255,255,.25); border: 2px solid rgba(255,255,255,.6); z-index: 20; display: none; touch-action: none; opacity: .55; transition: opacity .15s; }
 #stick { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,.9); transform: translate(-50%,-50%); box-shadow: 0 4px 12px rgba(0,0,0,.25); }
-/* Floating joystick: hiện rõ khi đang chạm, ẩn mờ khi idle */
+/* Floating joystick: vivid while touching, dim when idle */
 #joystick.active { opacity: 1; background: rgba(255,255,255,.32); border-color: rgba(255,255,255,.85); }
 
-/* Cụm nút cảm ứng: zoom + chạy nhanh */
+/* Touch button cluster: zoom + sprint */
 #touch-ui { display: none; }
 @media (pointer: coarse) {
   #joystick { display: block; width: 120px; height: 120px; }
@@ -67,7 +67,7 @@ body.is-standalone #btnFullscreen { display: none; }
     background: rgba(33,33,33,.6); color: #fff; font-size: 11px; padding: 7px 14px; border-radius: 999px;
     white-space: nowrap; backdrop-filter: blur(6px);
   }
-  /* HUD gọn cho màn hình nhỏ + tránh tai thỏ */
+  /* Compact HUD for small screens + notch safe-area */
   .title { top: calc(10px + env(safe-area-inset-top)); left: calc(12px + env(safe-area-inset-left)); padding: 8px 12px; border-radius: 12px; }
   .title h1 { font-size: 15px; }
   .title p { font-size: 10px; }
@@ -77,7 +77,7 @@ body.is-standalone #btnFullscreen { display: none; }
   .seedbar input { width: 84px; font-size: 12px; }
   #envbar { display: none; }
 }
-/* Ngang màn hình: joystick + nút dồn gọn để không che map */
+/* Landscape: pack joystick + buttons so they never cover the map */
 @media (pointer: coarse) and (orientation: landscape) {
   #joystick { width: 104px; height: 104px; }
   .title p, #mobile-hint { display: none; }

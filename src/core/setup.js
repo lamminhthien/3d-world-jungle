@@ -76,7 +76,7 @@ export function setupCore(canvas) {
     renderer.setSize(innerWidth, innerHeight);
   }
   addEventListener('resize', onResize);
-  // Android Chrome: thanh địa chỉ ẩn/hiện làm innerHeight nhảy — visualViewport chính xác hơn.
+  // Android Chrome: the address bar showing/hiding jumps innerHeight — visualViewport is more accurate.
   if (typeof visualViewport !== 'undefined' && visualViewport) {
     visualViewport.addEventListener('resize', onResize);
   }

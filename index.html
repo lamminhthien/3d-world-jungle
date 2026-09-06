@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="vi">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
@@ -7,13 +7,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="theme-color" content="#2e7d32" />
-    <meta name="description" content="Dạo chơi trong rừng low-poly/isometric 3D — chơi offline, cài như app Android." />
-    <meta name="apple-mobile-web-app-title" content="Rừng 3D" />
+    <meta name="description" content="Stroll through a low-poly/isometric 3D jungle — play offline, installable as an Android app." />
+    <meta name="apple-mobile-web-app-title" content="Jungle 3D" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-    <title>Dạo Chơi Trong Rừng — Low Poly Isometric</title>
+    <title>Jungle Stroll — Low Poly Isometric</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -21,44 +21,44 @@
 
     <div id="hud">
       <div class="title">
-        <h1>🌿 Dạo Chơi Trong Rừng</h1>
+        <h1>🌿 Jungle Stroll</h1>
         <p>Low Poly &bull; Isometric &bull; Three.js</p>
       </div>
       <div class="controls-hint">
         <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span>
-        <span class="or">hoặc</span>
+        <span class="or">or</span>
         <span class="key">←</span><span class="key">↑</span><span class="key">↓</span><span class="key">→</span>
-        <span class="label">để đi dạo &bull; kéo chuột để xoay góc nhìn &bull; lăn chuột để zoom</span>
+        <span class="label">to stroll &bull; drag to rotate view &bull; scroll to zoom</span>
       </div>
       <div class="stats">
         <div id="fps">60 FPS</div>
         <div id="pos">x: 0, z: 0</div>
-        <button id="btnInstall" class="icon-btn" title="Cài app" aria-label="Cài app" hidden>⬇️</button>
-        <button id="btnFullscreen" class="icon-btn" title="Toàn màn hình" aria-label="Toàn màn hình">⛶</button>
+        <button id="btnInstall" class="icon-btn" title="Install app" aria-label="Install app" hidden>⬇️</button>
+        <button id="btnFullscreen" class="icon-btn" title="Fullscreen" aria-label="Fullscreen">⛶</button>
       </div>
       <div class="seedbar">
         <span class="seed-label">🌍 Seed</span>
         <input id="seed" spellcheck="false" autocomplete="off" />
-        <button id="newWorld" title="Tạo thế giới mới">🎲</button>
+        <button id="newWorld" title="Generate a new world">🎲</button>
         <div id="chunks" class="chunks"></div>
       </div>
     </div>
 
     <div id="joystick"><div id="stick"></div></div>
 
-    <!-- Mobile touch UI: zoom + sprint (chỉ hiện trên cảm ứng) -->
+    <!-- Mobile touch UI: zoom + sprint (touch only) -->
     <div id="touch-ui">
       <div class="zoom-btns">
-        <button id="zoomIn" aria-label="Phóng to">＋</button>
-        <button id="zoomOut" aria-label="Thu nhỏ">－</button>
+        <button id="zoomIn" aria-label="Zoom in">＋</button>
+        <button id="zoomOut" aria-label="Zoom out">－</button>
       </div>
-      <button id="btnSprint" aria-label="Chạy nhanh">🏃</button>
-      <div id="mobile-hint">👈 chạm trái để đi &bull; 👉 vuốt phải để xoay &bull; pinch để zoom</div>
+      <button id="btnSprint" aria-label="Sprint">🏃</button>
+      <div id="mobile-hint">👈 left touch to move &bull; 👉 right swipe to rotate &bull; pinch to zoom</div>
     </div>
 
     <div id="loading">
       <div class="loader">🌴</div>
-      <p id="loadmsg">Đang trồng rừng...</p>
+      <p id="loadmsg">Growing the jungle...</p>
       <div class="loadbar"><div id="loadfill"></div></div>
     </div>
 

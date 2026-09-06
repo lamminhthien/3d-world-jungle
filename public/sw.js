@@ -1,23 +1,23 @@
-// Service Worker: bundle cache cho game (Cache Storage API).
+// Service Worker: game bundle cache (Cache Storage API).
 // ---------------------------------------------------------------------------
-// - File này nằm trong public/ nên được copy nguyên vẹn ra dist/ khi build.
-// - Tên cache lấy từ query `?v=` lúc register (xem src/core/bootCache.js):
+// - This file lives in public/ so it is copied as-is to dist/ at build time.
+// - Cache name comes from the `?v=` query at register time (see src/core/bootCache.js):
 //     /sw.js?v=1.0.0  ->  cache "jungle-v1.0.0"
-//   Mỗi bản build mới (bump version trong package.json) sẽ tạo cache mới,
-//   SW mới tự skipWaiting + dọn cache cũ -> không bao giờ kẹt bản cũ.
-// - Chiến lược:
-//     + App shell (/, /index.html): precache lúc install.
-//     + Same-origin GET (js/css bundle): cache-first, miss thì lên mạng rồi
-//       lưu lại -> lần chơi sau mở gần như tức thì, rớt mạng vẫn chơi được.
-//     + Navigation khi offline: trả index.html trong cache.
-//     + Request khác (CDN ngoài...): cho đi thẳng, không cache.
+//   Every new build (version bump in package.json) creates a new cache,
+//   the new SW skipWaits + cleans old caches -> never stuck on an old build.
+// - Strategy:
+//     + App shell (/, /index.html): precached at install.
+//     + Same-origin GET (js/css bundle): cache-first, on miss go to network then
+//       save it -> next visit opens near-instantly, offline still playable.
+//     + Offline navigation: serve cached index.html.
+//     + Other requests (external CDNs...): pass through, never cached.
 //
-// LƯU Ý QUAN TRỌNG (trả lời câu hỏi "cache có build riêng từng thiết bị?"):
-//   Bundle (js/css/html) chỉ build 1 lần duy nhất lúc `npm run build`, GIỐNG
-//   NHAU cho mọi thiết bị. Còn Cache Storage này nằm TRÊN TỪNG TRÌNH DUYỆT /
-//   TỪNG THIẾT BỊ: mỗi máy tải bundle về và giữ một bản copy riêng sau lần
-//   vào đầu tiên. Không có bước "build cache riêng cho từng thiết bị" —
-//   thiết bị nào vào trước thì máy đó tự cache cho chính nó.
+// IMPORTANT NOTE ("is the cache built per device?"):
+//   The bundle (js/css/html) is built exactly once via `npm run build`, IDENTICAL
+//   for every device. This Cache Storage lives ON EACH BROWSER /
+//   EACH DEVICE: every machine downloads the bundle and keeps its own copy after the
+//   first visit. There is no "per-device cache build" step —
+//   whichever device visits first caches for itself.
 
 const VERSION = new URL(self.location.href).searchParams.get('v') || 'dev';
 const CACHE_NAME = `jungle-v${VERSION}`;
@@ -37,7 +37,7 @@ self.addEventListener('install', (event) => {
       .open(CACHE_NAME)
       .then((cache) => cache.addAll(SHELL))
       .then(() => self.skipWaiting())
-      .catch(() => self.skipWaiting()), // offline ngay lần đầu: bỏ qua lỗi precache
+      .catch(() => self.skipWaiting()), // offline on first visit: ignore precache errors
   );
 });
 
@@ -60,9 +60,9 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return; // CDN ngoài: bỏ qua
+  if (url.origin !== self.location.origin) return; // external CDN: skip
 
-  // Điều hướng trang: mạng trước, rớt mạng thì trả app shell trong cache.
+  // Page navigation: network first, fall back to the cached app shell offline.
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -76,13 +76,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Bundle/assets: cache trước, miss thì lên mạng + lưu lại.
+  // Bundle/assets: cache first, on miss go to network + save.
   event.respondWith(
     caches.match(request).then(
       (hit) =>
         hit ||
         fetch(request).then((res) => {
-          // Chỉ cache response hợp lệ (tránh khóa lỗi 404/500 vào cache).
+          // Only cache valid responses (avoid locking 404/500 errors into cache).
           if (res && (res.status === 200 || res.type === 'opaque')) {
             const copy = res.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));

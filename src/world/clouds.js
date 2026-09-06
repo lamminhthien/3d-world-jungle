@@ -39,10 +39,10 @@ export function createClouds(scene) {
     g.add(m);
     const ang = rand(0, Math.PI * 2);
     const rad = rand(30, 44);
-    // Camera iso ở cao ~35 units (distance 60 * sin(35°)), nhìn xuống 35°.
-    // Mây PHẢI ở trên camera (42-48) thì mới lơ lửng ở rìa trên màn hình
-    // như bầu trời. Để ở 24-38 là ngang tầm camera -> bay xuyên qua
-    // trước mặt camera, che kín đất (đây chính là lỗi "mù mịt").
+    // Iso camera sits ~35 units high (distance 60 * sin(35°)), looking down at 35°.
+    // Clouds MUST be above the camera (42-48) to hover at the top edge
+    // like sky. At 24-38 they fly at camera level -> drift straight
+    // in front of the camera and cover the ground (the old "whiteout" bug).
     g.position.set(Math.cos(ang) * rad, rand(42, 48), Math.sin(ang) * rad);
     g.userData.speed = rand(0.2, 0.6);
     g.userData.driftZ = rand(-0.15, 0.15);

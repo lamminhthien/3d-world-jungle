@@ -1,8 +1,8 @@
 {
-  "name": "Dạo Chơi Trong Rừng — Low Poly Isometric",
-  "short_name": "Rừng 3D",
-  "description": "Website 3D dạo chơi trong rừng low-poly/isometric với Three.js. Chơi offline, cài như app Android.",
-  "lang": "vi",
+  "name": "Jungle Stroll — Low Poly Isometric",
+  "short_name": "Jungle 3D",
+  "description": "Stroll through a low-poly/isometric 3D jungle with Three.js. Play offline, installable as an Android app.",
+  "lang": "en",
   "id": "./",
   "start_url": "./",
   "scope": "./",

@@ -28,30 +28,30 @@ function setProgress(frac, msg) {
   if (loadFill) loadFill.style.width = `${Math.round(f * 100)}%`;
   if (msg && loadMsg) loadMsg.textContent = msg;
 }
-// Nhường 1 frame để thanh loading kịp vẽ trước bước nặng kế tiếp.
+// Yield 1 frame so the loading bar can paint before the next heavy step.
 const tick = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
-// ============ Boot (async để pipeline cache chạy trước khi chơi) ============
+// ============ Boot (async so the cache pipeline runs before playing) ============
 async function boot() {
-  // Nút fullscreen / cài PWA phải bấm được ngay cả khi game đang load.
+  // Fullscreen / PWA install buttons must work even while the game loads.
   setupPwaUi();
-  setProgress(0.01, '🌱 Đang khởi động…');
+  setProgress(0.01, '🌱 Booting up…');
   await tick();
 
-  // ---- Giai đoạn 1: renderer trước để pipeline cache dùng được GPU ----
+  // ---- Stage 1: renderer first so the pipeline cache can use the GPU ----
   const canvas = document.getElementById('scene');
   const core = setupCore(canvas);
   const { renderer, scene, camera, camTarget, sun, hemi, ambient, state, updateCameraPos } = core;
 
-  // ---- Giai đoạn 2: bundle/GPU cache (SW + storage + texture) — 0 → 0.85 ----
+  // ---- Stage 2: bundle/GPU cache (SW + storage + texture) — 0 → 0.85 ----
   await runPreGameCache({ renderer, onProgress: setProgress });
 
-  // ---- Giai đoạn 3: dựng thế giới ----
+  // ---- Stage 3: build the world ----
   // Infinite chunked world (docs section 3): ground + biome vegetation stream
   // around the player; section 4.5 spawns at (0, ymax, 0).
   const world = createWorldManager(scene, initialSeed);
   let spawn = world.getSpawn();
-  setProgress(0.88, '🌉 Đang bắc cầu qua sông…');
+  setProgress(0.88, '🌉 Building the river bridge…');
   await tick();
 
   const river = createRiver(scene);
@@ -151,9 +151,9 @@ async function boot() {
       iz /= Math.max(1, len);
       _move.set(0, 0, 0).addScaledVector(_fwd, -iz).addScaledVector(_right, ix).normalize();
 
-      // Sprint: giữ Shift (desktop) / nút 🏃 / đẩy joystick hết cỡ (mobile).
+      // Sprint: hold Shift (desktop) / 🏃 / push the joystick fully (mobile).
       const sprinting = keys.ShiftLeft || keys.ShiftRight || touch?.sprintHeld || joy.mag > 0.92;
-      // Analog: đẩy joystick nhẹ = đi chậm, đẩy mạnh = đi nhanh.
+      // Analog: light push = walk slowly, hard push = walk fast.
       const speed = SPEED * (sprinting ? 1.6 : 1) * (0.35 + 0.65 * inputMag);
 
       let nx = player.position.x + _move.x * speed * dt;
@@ -270,18 +270,18 @@ async function boot() {
     }
   }
 
-  // ---- Giai đoạn 4: biên dịch shader trước frame đầu (chống khựng) ----
-  setProgress(0.95, '⚡ Đang nạp shader…');
+  // ---- Stage 4: pre-compile shaders before the first frame (anti-jank) ----
+  setProgress(0.95, '⚡ Loading shaders…');
   await tick();
   try {
     renderer.compile(scene, camera);
   } catch {
-    /* GPU không hỗ trợ precompile: frame đầu sẽ compile như cũ */
+    /* GPU precompile unsupported: first frame compiles as usual */
   }
 
-  setProgress(1, 'Sẵn sàng, vào rừng thôi! 🌴');
+  setProgress(1, 'Ready — into the jungle! 🌴');
   animate();
-  // Nán lại 1 nhịp cho người chơi kịp thấy 100% rồi mới mở game.
+  // Hold one beat so players see 100% before the game opens.
   setTimeout(() => loadingEl.classList.add('hidden'), 250);
 }
 

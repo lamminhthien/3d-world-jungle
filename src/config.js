@@ -22,9 +22,9 @@ export const WORLD = {
   groundSegments: 64,
   playRadius: 37,
   fogColor: 0xa8dcf0,
-  // NOTE: Ortho camera đứng cách target ~60 units (CAMERA.distance),
-  // nên fog near/far phải lớn hơn 60 nếu không cả màn hình sẽ chìm trong sương.
-  // Clear: gần như không sương ở trung tâm, chỉ fade ở rìa xa.
+  // NOTE: Ortho camera sits ~60 units from the target (CAMERA.distance),
+  // so fog near/far must be larger than 60 or the whole screen drowns in fog.
+  // Clear: almost no fog at the center, fading only at the far edges.
   fogNear: 80,
   fogFar: 160,
 };

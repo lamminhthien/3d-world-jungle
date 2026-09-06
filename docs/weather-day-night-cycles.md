@@ -1,69 +1,61 @@
-Tích hợp chu kỳ thời gian (Day-Night Cycle) và các trạng thái thời tiết động vào thế giới procedural sẽ mang lại trải nghiệm sống động và chân thực hơn. Dưới đây là kế hoạch chi tiết để xây dựng hệ thống này.
+# Day-Night Cycle & Dynamic Weather
+
+Integrating a time cycle (day-night) and dynamic weather states into the procedural world makes the experience far more vivid and believable. Below is the detailed plan for building this system.
 
 ---
 
-**1. Hệ thống Chu kỳ Thời gian (Day-Night & Twilight Cycle)**
+**1. Time Cycle System (Day-Night & Twilight)**
 
-Quản lý thời gian theo một vòng lặp liên tục (ví dụ: 1 ngày trong game = 10 phút ngoài đời) dựa trên biến `timeOfDay` từ `0` đến `24`.
+Time runs on a continuous loop (e.g. 1 in-game day = 10 real minutes) driven by a `timeOfDay` variable from `0` to `24`.
 
-* **4 Trạng thái Thời gian Chính:**
-* **Ban ngày (Day: 08:00 - 16:00):** Ánh sáng mặt trời gắt (`DirectionalLight` màu vàng nhạt/trắng), bóng đổ rõ nét, màu bầu trời xanh tươi sáng.
-* **Hoàng hôn (Sunset: 16:00 - 19:00) / Bình minh (Sunrise: 05:00 - 08:00):** Ánh sáng mặt trời góc thấp, chuyển sang tone màu cam/đỏ hồng. Ánh sáng môi trường (`AmbientLight`) dịu lại, bóng đổ kéo dài.
-* **Ban đêm (Night: 19:00 - 05:00):** Mặt trời lặn hẳn và thay bằng Mặt trăng (ánh sáng xanh lam nhạt, cường độ thấp). Bầu trời chuyển sang xanh thẫm/đen, hiển thị sao/ngân hà (Stars Particles).
+* **4 Main Time States:**
+* **Day (08:00 - 16:00):** Harsh sunlight (`DirectionalLight`, pale yellow/white), crisp shadows, bright blue sky.
+* **Sunset (16:00 - 19:00) / Sunrise (05:00 - 08:00):** Low-angle sun shifting to orange/pink tones. Ambient light (`AmbientLight`) softens, shadows stretch long.
+* **Night (19:00 - 05:00):** The sun sets fully and is replaced by the moon (pale blue light, low intensity). The sky turns deep blue/black with stars/milky-way (star particles).
 
-
-* **Kỹ thuật Thực thi:**
-* **Xoay nguồn sáng:** Quỹ đạo của `DirectionalLight` xoay theo dạng hình tròn/elip quanh tâm bản đồ dựa trên `timeOfDay`.
-* **Chuyển màu mượt mà (Lerp Color):** Sử dụng `THREE.Color.lerp()` để nội suy màu sắc của `AmbientLight`, `DirectionalLight`, và `scene.fog` giữa các khung giờ mà không bị giật khựng.
-
-
+* **Implementation techniques:**
+* **Light orbit:** The `DirectionalLight` orbits in a circle/ellipse around the map center based on `timeOfDay`.
+* **Smooth color blending (Lerp Color):** Use `THREE.Color.lerp()` to interpolate `AmbientLight`, `DirectionalLight`, and `scene.fog` colors between hours without pops.
 
 ---
 
-**2. Hệ thống Thời tiết Động (Dynamic Weather System)**
+**2. Dynamic Weather System**
 
-Một máy trạng thái ngẫu nhiên (Random State Machine) điều khiển các loại thời tiết dựa trên tỷ lệ phần trăm xác suất.
+A random state machine drives weather types based on probability weights.
 
-* **Các loại thời tiết:**
-* **Nắng đẹp (Clear):** Tầm nhìn xa, màu sắc tươi tắn, mây trôi rải rác.
-* **Nhiều mây / Âm u (Overcast):** Giảm cường độ ánh sáng mặt trời, chuyển màu sương mù sang xám nhạt, che phủ bầu trời bằng layer mây Low-Poly dày hơn.
-* **Mưa (Rain):**
-* Tối sầm bầu trời.
-* Xuất hiện hệ thống hạt (Particle System) cho các giọt mưa rơi theo hướng thẳng đứng/xiên.
-* Tăng độ phản chiếu (Roughness/Metalness) trên bề mặt đá và nước để tạo hiệu ứng ướt át.
+* **Weather types:**
+* **Clear:** Long view distance, vivid colors, scattered drifting clouds.
+* **Overcast:** Reduced sunlight intensity, fog tint shifts to light gray, thicker low-poly cloud layer covers the sky.
+* **Rain:**
+* Darkened sky.
+* Particle system for raindrops falling vertically/slanted.
+* Higher reflectivity (lower roughness / higher metalness) on rock and water surfaces for a wet look.
 
-
-* **Sương mù (Fog):** Tăng mật độ sương mù (`THREE.FogExp2`), thu hẹp tầm nhìn của camera, tạo cảm giác huyền bí cho khu rừng.
-
-
+* **Fog:** Denser fog (`THREE.FogExp2`), narrower camera view, mysterious jungle mood.
 
 ---
 
-**3. Tích hợp Hiệu ứng Hình ảnh & Âm thanh (VFX & Audio)**
+**3. Visual & Audio Effects (VFX & Audio)**
 
 * **Skybox & Atmospheric Fog:**
-* Sử dụng `THREE.FogExp2` có màu thay đổi linh hoạt theo thời gian và thời tiết để che đi điểm Spawn/Despawn của các Chunk ở rìa bản đồ.
-* Tạo bầu trời dạng vòm (Skydome) với shader tùy chỉnh để tự động đổi màu gradient từ ngày sang đêm.
+* Use time/weather-reactive `THREE.FogExp2` color to hide chunk spawn/despawn at the map edge.
+* A skydome with a custom shader that auto-blends its gradient from day to night.
 
-
-* **Âm thanh Môi trường (Audio Environment):**
-* Ban ngày: Tiếng chim hót, tiếng gió nhẹ.
-* Ban đêm: Tiếng dế kêu, tiếng cú đêm.
-* Khi mưa: Âm thanh mưa rào và tiếng sấm rền ngẫu nhiên.
-
-
+* **Ambient Audio:**
+* Day: birdsong, soft wind.
+* Night: crickets, night owls.
+* Rain: downpour sound with random distant thunder.
 
 ---
 
-**4. Luồng Xử lý Code (Logic Flow)**
+**4. Code Flow**
 
-1. **Update Loop:** Trong hàm `requestAnimationFrame`, tăng giá trị `timeOfDay` theo delta time.
-2. **Calculate Sun Position:** Tính toán tọa độ $(x, y, z)$ của mặt trời:
+1. **Update Loop:** In `requestAnimationFrame`, advance `timeOfDay` by delta time.
+2. **Calculate Sun Position:** Compute the sun's $(x, y, z)$ coordinates:
 
 $$x = R \cdot \cos(\theta), \quad y = R \cdot \sin(\theta)$$
 
+3. **Lerp Lighting & Fog:** Update light and fog colors from the sun angle $\theta$.
+4. **Trigger Weather Change:** Every cycle (e.g. 5 minutes), roll the dice to switch weather and fire the matching particle effect.
 
-3. **Lerp Lighting & Fog:** Cập nhật màu sắc ánh sáng và sương mù tương ứng với góc $\theta$ của mặt trời.
-4. **Trigger Weather Change:** Cứ sau mỗi chu kỳ (ví dụ 5 phút), hệ thống sẽ gieo xúc xắc ngẫu nhiên để chuyển đổi loại thời tiết và kích hoạt hiệu ứng Particle tương ứng.
-
-Bạn có muốn đi sâu vào cách viết Shader cho Skydome chuyển màu ngày/đêm hay cách dựng Particle System cho mưa trong Three.js không?
+Want to go deeper into the day/night skydome shader or the Three.js rain particle system?

@@ -1,21 +1,21 @@
-// Pre-game bundle/GPU cache pipeline (chạy TRƯỚC khi vào game).
+// Pre-game bundle/GPU cache pipeline (runs BEFORE entering the game).
 // ---------------------------------------------------------------------------
-// Mục tiêu: lần chơi đầu tải + cache đủ thứ, các lần sau mở gần như tức thì,
-// vào game không khựng (shader/texture đã nằm sẵn trên GPU).
+// Goal: first play downloads + caches everything, later opens are near-instant,
+// entering the game never janks (shaders/textures already on the GPU).
 //
-// Pipeline gồm 4 bước (có báo tiến trình ra màn hình loading):
-//   1. Đăng ký Service Worker  -> bundle js/css/html được Cache Storage giữ
-//      lại trên máy này (chỉ PROD; dev thì bỏ qua cho đỡ vướng HMR).
-//   2. Xin persistent storage  -> hạn chế trình duyệt tự xóa cache.
-//   3. Hâm nóng bundle hiện tại -> fetch trước các file js/css mà trang đang
-//      dùng để HTTP cache/SW có sẵn.
-//   4. Hâm nóng texture + upload GPU (renderer.initTexture) — canvas procedural
-//      sinh trên CPU rồi đẩy thẳng lên VRAM trong lúc loading.
+// 4-step pipeline (progress reported on the loading screen):
+//   1. Register Service Worker -> js/css/html bundle kept in Cache Storage
+//      on this device (PROD only; skipped in dev to avoid HMR friction).
+//   2. Request persistent storage -> stop the browser from evicting the cache.
+//   3. Warm the current bundle -> pre-fetch the js/css files this page uses
+//      so HTTP cache / SW already has them.
+//   4. Warm textures + GPU upload (renderer.initTexture) — procedural canvas
+//      generated on CPU then pushed straight to VRAM during loading.
 //
-// Trả lời nhanh: bundle build 1 lần dùng chung mọi máy; còn CACHE (SW Cache
-// Storage, HTTP cache, texture/shader trên GPU) là RIÊNG TỪNG THIẾT BỊ —
-// máy nào vào trước thì máy đó tự build cache cho chính nó, không share được
-// vì khác trình duyệt/khác GPU.
+// Quick answer: the bundle is built once and shared by all devices; the CACHE (SW Cache
+// Storage, HTTP cache, GPU textures/shaders) is PER-DEVICE —
+// whichever device visits first builds the cache for itself, it cannot be shared
+// because browsers/GPUs differ.
 
 import { version as APP_VERSION } from '../../package.json';
 import {
@@ -35,11 +35,11 @@ import {
   getWaterTexture,
 } from '../world/textures.js';
 
-// Nhường UI 1 nhịp để thanh loading kịp vẽ trước bước nặng tiếp theo.
+// Yield the UI one beat so the loading bar paints before the next heavy step.
 const yieldUI = () =>
   new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
 
-// Đăng ký SW với version theo package.json: đổi version = SW mới = cache mới.
+// Register the SW versioned by package.json: new version = new SW = new cache.
 async function registerBundleSW() {
   if (!('serviceWorker' in navigator)) return { active: false, reason: 'no-sw' };
   if (!import.meta.env.PROD) return { active: false, reason: 'dev-skip' };
@@ -49,7 +49,7 @@ async function registerBundleSW() {
       navigator.serviceWorker.register(url),
       new Promise((_, reject) => setTimeout(() => reject(new Error('sw-timeout')), 8000)),
     ]);
-    // Đợi SW điều khiển trang (để fetch bundle đi qua cache ngay từ đầu).
+    // Wait for the SW to control the page (so bundle fetches go through cache immediately).
     await Promise.race([
       navigator.serviceWorker.ready,
       new Promise((resolve) => setTimeout(resolve, 8000)),
@@ -64,12 +64,12 @@ async function ensurePersistentStorage() {
   try {
     if (navigator.storage?.persist) return { persisted: await navigator.storage.persist() };
   } catch {
-    /* bỏ qua: API không hỗ trợ hoặc bị từ chối */
+    /* ignore: API unsupported or denied */
   }
   return { persisted: false };
 }
 
-// Fetch trước bundle mà trang đang dùng (main.js, style.css...) để cache nóng.
+// Pre-fetch the bundle this page uses (main.js, style.css...) to warm the cache.
 async function warmBundleFiles(onFrac) {
   const urls = new Set();
   document.querySelectorAll('script[src]').forEach((el) => urls.add(el.src));
@@ -82,7 +82,7 @@ async function warmBundleFiles(onFrac) {
       try {
         await fetch(u, { credentials: 'same-origin' });
       } catch {
-        /* offline/miss: SW hoặc lần sau lo */
+        /* offline/miss: SW or next visit handles it */
       }
       done += 1;
       onFrac(done / Math.max(1, list.length));
@@ -91,7 +91,7 @@ async function warmBundleFiles(onFrac) {
   );
 }
 
-// Sinh toàn bộ texture procedural + đẩy lên GPU ngay trong lúc loading.
+// Generate all procedural textures + push to GPU during loading.
 async function warmTextures(renderer, onFrac) {
   const pairs = [
     [getBarkTexture, getBarkBump],
@@ -112,7 +112,7 @@ async function warmTextures(renderer, onFrac) {
       try {
         if (canUpload && tex) renderer.initTexture(tex);
       } catch {
-        /* GPU bận: kệ, lần render đầu sẽ tự upload */
+        /* GPU busy: ignore, first render uploads by itself */
       }
       done += 1;
       onFrac(done / total);
@@ -122,44 +122,44 @@ async function warmTextures(renderer, onFrac) {
 }
 
 /**
- * Chạy toàn bộ pipeline trước khi chơi.
- * @param {(frac:number, msg:string) => void} onProgress frac 0..1 toàn cục
- * @returns summary { sw, persisted } để debug (xem window.__jungleCache)
+ * Run the full pipeline before playing.
+ * @param {(frac:number, msg:string) => void} onProgress frac 0..1 global
+ * @returns summary { sw, persisted } for debugging (see window.__jungleCache)
  */
 export async function runPreGameCache({ renderer = null, onProgress = () => {} } = {}) {
   const report = (frac, msg) => {
     try {
       onProgress(Math.min(1, Math.max(0, frac)), msg);
     } catch {
-      /* UI loading bị thiếu: vẫn cho game chạy */
+      /* missing loading UI: still let the game run */
     }
   };
 
-  // 0.00–0.20: Service Worker (bundle cache trên thiết bị này).
-  report(0.02, '📦 Đang bật bộ nhớ cache…');
+  // 0.00-0.20: Service Worker (bundle cache on this device).
+  report(0.02, '📦 Enabling cache storage…');
   const sw = await registerBundleSW();
-  report(0.2, sw.active ? '📦 Cache sẵn sàng!' : '📦 Bỏ qua cache (chế độ dev/offline)…');
+  report(0.2, sw.active ? '📦 Cache ready!' : '📦 Cache skipped (dev/offline mode)…');
   await yieldUI();
 
   // 0.20–0.25: persistent storage.
   const { persisted } = await ensurePersistentStorage();
-  report(0.25, persisted ? '💾 Đã giữ chỗ lưu trữ!' : '💾 Chuẩn bị tài nguyên…');
+  report(0.25, persisted ? '💾 Storage reserved!' : '💾 Preparing resources…');
   await yieldUI();
 
-  // 0.25–0.45: hâm nóng bundle hiện tại.
-  await warmBundleFiles((f) => report(0.25 + f * 0.2, '📥 Đang tải gói game…'));
+  // 0.25-0.45: warm the current bundle.
+  await warmBundleFiles((f) => report(0.25 + f * 0.2, '📥 Downloading game bundle…'));
   await yieldUI();
 
-  // 0.45–0.85: texture + GPU upload.
-  await warmTextures(renderer, (f) => report(0.45 + f * 0.4, '🎨 Đang vẽ vân đất đá cây sông…'));
+  // 0.45-0.85: texture + GPU upload.
+  await warmTextures(renderer, (f) => report(0.45 + f * 0.4, '🎨 Painting ground, rock, tree & river textures…'));
 
-  report(0.85, '🌍 Đang dựng thế giới…');
+  report(0.85, '🌍 Building the world…');
   await yieldUI();
   const summary = { version: APP_VERSION, sw, persisted };
   try {
     window.__jungleCache = summary;
   } catch {
-    /* non-browser? bỏ qua */
+    /* non-browser? ignore */
   }
   return summary;
 }
