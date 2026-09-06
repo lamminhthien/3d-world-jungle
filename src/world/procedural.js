@@ -17,6 +17,17 @@ export const BIOMES = {
   SNOW: 'snow',
 };
 
+// Placement-facing surface classes. A biome describes the visual/ecological
+// look; this smaller vocabulary describes what can safely receive gameplay
+// props. In particular, mountain terrain is intentionally not buildable soil.
+export const SURFACES = {
+  WATER: 'water',
+  BEACH: 'beach',
+  SOIL: 'soil',
+  ROCK: 'rock',
+  SNOW: 'snow',
+};
+
 // Tunables for the generator.
 export const GEN = {
   maxHeight: 5, // top of stepped terrain
@@ -149,6 +160,42 @@ export function sampleGround(x, z) {
     }
   }
   return { y, biome, d };
+}
+
+export function surfaceForBiome(biome) {
+  if (biome === BIOMES.RIVER) return SURFACES.WATER;
+  if (biome === BIOMES.BEACH) return SURFACES.BEACH;
+  if (biome === BIOMES.MOUNTAIN) return SURFACES.ROCK;
+  if (biome === BIOMES.SNOW) return SURFACES.SNOW;
+  return SURFACES.SOIL;
+}
+
+// Sample the centre, corners and edge midpoints of a rectangular footprint.
+// Placement is generated only at rebuild time, so this deliberately favors a
+// conservative result over a noisy single-point decision at biome boundaries.
+export function sampleFootprint(x, z, halfX, halfZ = halfX) {
+  const points = [
+    [0, 0],
+    [-halfX, -halfZ], [0, -halfZ], [halfX, -halfZ],
+    [-halfX, 0],                     [halfX, 0],
+    [-halfX, halfZ],  [0, halfZ],    [halfX, halfZ],
+  ];
+  let minY = Infinity;
+  let maxY = -Infinity;
+  const surfaces = new Set();
+  const biomes = new Set();
+  for (const [ox, oz] of points) {
+    const sample = sampleGround(x + ox, z + oz);
+    minY = Math.min(minY, sample.y);
+    maxY = Math.max(maxY, sample.y);
+    surfaces.add(surfaceForBiome(sample.biome));
+    biomes.add(sample.biome);
+  }
+  return { minY, maxY, deltaY: maxY - minY, surfaces, biomes };
+}
+
+export function isBuildableSurface(surface) {
+  return surface === SURFACES.SOIL || surface === SURFACES.BEACH;
 }
 
 // Vertex / ground colors per biome (vivid cartoon look).

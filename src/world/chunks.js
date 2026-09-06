@@ -33,11 +33,13 @@ import {
 import {
   BIOMES,
   GEN,
+  SURFACES,
   biomeGroundColor,
   findSpawn,
   getSeed,
   initProcedural,
   riverXAt,
+  sampleFootprint,
   sampleGround,
 } from './procedural.js';
 
@@ -227,6 +229,16 @@ export function createWorldManager(scene, seedStr) {
       const y = s.y;
       const roll = rng();
 
+      // A point can be soil while the footprint immediately around it is a
+      // mountain/snow step. Reject those edge placements so a canopy/trunk
+      // cannot visually grow out of a rock shelf.
+      const needsSurfaceClearance = (biome === BIOMES.JUNGLE && roll < 0.58)
+        || (biome === BIOMES.BEACH && roll < 0.2);
+      if (needsSurfaceClearance) {
+        const footprint = sampleFootprint(x, z, biome === BIOMES.JUNGLE ? 1.4 : 0.8);
+        if (footprint.surfaces.has(SURFACES.ROCK) || footprint.surfaces.has(SURFACES.SNOW) || footprint.surfaces.has(SURFACES.WATER)) continue;
+      }
+
       // All shapes come from static presets (see ./presets.js). Tree density
       // and scale are controlled centrally in config.js so the streamed world
       // and legacy/static previews can be tuned together.
@@ -283,10 +295,9 @@ export function createWorldManager(scene, seedStr) {
         }
       } else if (biome === BIOMES.MOUNTAIN || biome === BIOMES.SNOW) {
         const snowy = biome === BIOMES.SNOW;
-        if (roll < 0.34 * VEGETATION.treeDensity && bucket.ti + 1 <= POOL.trees && bucket.pi + 3 <= POOL.crowns) {
-          placePine(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.2) * VEGETATION.treeScale, rng,
-            snowy ? PALETTES.snowPine : PALETTES.pine);
-        } else if (roll < 0.6 && bucket.ri < POOL.rocks) {
+        // Mountain/snow terrain is the rock backdrop. Keep it dressed with
+        // rocks only; trees must have a real soil surface beneath them.
+        if (roll < 0.6 && bucket.ri < POOL.rocks) {
           placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.6, 1.6), rng,
             snowy ? 0xb9c2c9 : 0x7d848b);
         }

@@ -1,5 +1,11 @@
 import * as THREE from 'three';
-import { groundHeight } from '../utils.js';
+import { isBuildableSurface, sampleFootprint, SURFACES } from '../world/procedural.js';
+
+const VILLAGE_HALF_X = 21;
+const VILLAGE_HALF_Z = 19;
+const VILLAGE_CORE_HALF_X = 12;
+const VILLAGE_CORE_HALF_Z = 10;
+const VILLAGE_MAX_SLOPE = 0.55;
 
 const NPCS = [
   { id: 'merchant', name: 'Mai · Người bán hàng', color: 0xc47a3c, text: 'Chào bạn! Mình đang chuẩn bị cửa hàng nhỏ cho làng. Hãy mang thêm tài nguyên về nhé.', route: [[-8, 1], [-3, 1], [-3, 6]] },
@@ -106,16 +112,58 @@ function makePath(width, length, horizontal = true) {
   return path;
 }
 
+function makeVillagePad() {
+  // Geometry is offset down so its top face lands exactly at the validated
+  // hubY. It masks terrain steps beneath the settlement without changing the
+  // procedural terrain or adding another terrain draw call.
+  const pad = new THREE.Mesh(new THREE.BoxGeometry(VILLAGE_HALF_X * 2, 0.12, VILLAGE_HALF_Z * 2), mat(0xb88a55));
+  pad.position.y = -0.06;
+  return pad;
+}
+
 export function createVillage(scene, spawn) {
   const root = new THREE.Group();
   root.name = 'village-hub';
   scene.add(root);
   let currentHub = { x: spawn.x + 16, z: spawn.z + 14 };
+  let hubY = 0;
   const features = [];
   const addFeature = (object, offset) => { features.push({ object, offset }); root.add(object); };
 
+  function findVillageHub(nextSpawn) {
+    const baseX = nextSpawn.x + 16;
+    const baseZ = nextSpawn.z + 14;
+    let best = null;
+    // Search a deterministic raster around the intended hub. The core must
+    // be soil and reasonably level; the outer footprint is covered by a
+    // shallow village pad so houses cannot straddle exposed rock steps.
+    for (let ring = 0; ring <= 30; ring += 2) {
+      for (let dx = -ring; dx <= ring; dx += 2) {
+        for (let dz = -ring; dz <= ring; dz += 2) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== ring) continue;
+          const x = baseX + dx;
+          const z = baseZ + dz;
+          const core = sampleFootprint(x, z, VILLAGE_CORE_HALF_X, VILLAGE_CORE_HALF_Z);
+          const footprint = sampleFootprint(x, z, VILLAGE_HALF_X, VILLAGE_HALF_Z);
+          const onlyBuildable = [...core.surfaces].every(isBuildableSurface);
+          if (!onlyBuildable || core.deltaY > VILLAGE_MAX_SLOPE || footprint.surfaces.has(SURFACES.WATER)) continue;
+          const distance = Math.abs(dx) + Math.abs(dz);
+          if (!best || distance < best.distance) {
+            best = { x, z, y: footprint.maxY + 0.06, distance };
+          }
+        }
+      }
+      if (best) break;
+    }
+    if (best) return best;
+    // Keep a deterministic fallback if a seed has no large flat clearing.
+    const fallback = sampleFootprint(baseX, baseZ, VILLAGE_HALF_X, VILLAGE_HALF_Z);
+    return { x: baseX, z: baseZ, y: fallback.maxY + 0.06, distance: Infinity };
+  }
+
   const houseColors = [[0xe6c28f, 0x9a513d], [0xd9b47e, 0x4e7753], [0xe2b989, 0x6e5948], [0xcfae7e, 0x76533c], [0xe8c99b, 0x7b4d56]];
   const houseLayout = [[-16, 12], [-8, 12], [0, 12], [8, 12], [16, 12], [-16, 3], [16, 3], [-16, -7], [16, -7], [0, 8]];
+  addFeature(makeVillagePad(), [0, 0]);
   houseLayout.forEach((offset, index) => {
     const colors = houseColors[index % houseColors.length];
     addFeature(makeHouse(colors[0], colors[1]), offset);
@@ -179,18 +227,23 @@ export function createVillage(scene, spawn) {
   document.getElementById('village-dialogue-close')?.addEventListener('click', () => { if (dialogueEl) dialogueEl.hidden = true; });
 
   function place(nextSpawn) {
-    currentHub = { x: nextSpawn.x + 16, z: nextSpawn.z + 14 };
+    const hub = findVillageHub(nextSpawn);
+    currentHub = { x: hub.x, z: hub.z };
+    hubY = hub.y;
     features.forEach(({ object, offset }) => {
       const x = currentHub.x + offset[0];
       const z = currentHub.z + offset[1];
-      object.position.set(x, groundHeight(x, z), z);
+      // All core village features share one validated pad height. Sampling
+      // each object independently allowed houses and paths to land on
+      // different terrain steps or sink into rock shelves.
+      object.position.set(x, hubY, z);
     });
     boardPosition = { x: currentHub.x + 3, z: currentHub.z + 3 };
     npcs.forEach((npc) => {
       const [ox, oz] = npc.route[0];
       const x = currentHub.x + ox;
       const z = currentHub.z + oz;
-      npc.object.position.set(x, groundHeight(x, z), z);
+      npc.object.position.set(x, hubY, z);
     });
   }
   place(spawn);
@@ -209,7 +262,7 @@ export function createVillage(scene, spawn) {
         const z = currentHub.z + THREE.MathUtils.lerp(from[1], to[1], t);
         const oldX = npc.object.position.x;
         const oldZ = npc.object.position.z;
-        npc.object.position.set(x, groundHeight(x, z), z);
+        npc.object.position.set(x, hubY, z);
         if (Math.hypot(x - oldX, z - oldZ) > 0.001) {
           npc.object.rotation.y = Math.atan2(x - oldX, z - oldZ);
           const walk = Math.sin((npc.routeTime + npc.routeIndex) * Math.PI * 2) * 0.55;
