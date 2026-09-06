@@ -264,7 +264,6 @@ async function boot() {
       parts.legR.rotation.x = -sw * 0.7;
       parts.armL.rotation.x = -sw * 0.6;
       parts.armR.rotation.x = sw * 0.6;
-      player.position.y += Math.abs(Math.cos(walkTime)) * 0.02;
     } else {
       // Idle breathing.
       const t = performance.now() * 0.002;
@@ -273,7 +272,12 @@ async function boot() {
       parts.armL.rotation.x = Math.sin(t) * 0.06;
       parts.armR.rotation.x = -Math.sin(t) * 0.06;
     }
-    player.position.y += (groundHeight(player.position.x, player.position.z) - player.position.y) * Math.min(1, dt * 10);
+    // Framerate-independent vertical: ground + walk bob (was: += 0.02/frame
+    // hop fighting the ground lerp — hover height + jitter scaled with fps,
+    // visibly glitchy on 120Hz screens and in the walk cycle).
+    const groundY = groundHeight(player.position.x, player.position.z);
+    const bob = moving ? Math.abs(Math.cos(walkTime)) * 0.07 : 0;
+    player.position.y += (groundY + bob - player.position.y) * Math.min(1, dt * 12);
 
     // Stream chunks around the player + keep water/foam nearby.
     world.update(player.position.x, player.position.z);
@@ -300,6 +304,8 @@ async function boot() {
   // ============ Loop ============
   const prCap = Math.min(devicePixelRatio || 1, QUALITY.maxPixelRatio);
   let qualityCooldown = 0;
+  let downVotes = 0;
+  let upVotes = 0;
 
   function animate() {
     requestAnimationFrame(animate);
@@ -319,20 +325,31 @@ async function boot() {
         const s = world.stats();
         chunkEl.textContent = `${s.chunks} chunks · ${s.seed}`;
       }
-      // Adaptive resolution: if the GPU can't hold ~45fps, step the pixel
-      // ratio down (low tier may go to 0.85 — still fine on a 6.1" screen);
-      // step back up when headroom returns. Low tier reacts in ~1.2s instead
-      // of 2.5s so a thermally-capped iPhone recovers instead of sitting at
-      // 30fps (see docs/perf-iphone11-safari.md).
+      // Adaptive resolution: step the pixel ratio down when the GPU can't
+      // hold ~45fps, back up with headroom. Requires 2 consecutive votes in
+      // the same direction so one slow window (chunk build, weather blend,
+      // GC) doesn't thrash the framebuffer size every cooldown cycle —
+      // setPixelRatio reallocates buffers, i.e. a hitch of its own.
       qualityCooldown += fpsT;
       const cooldown = QUALITY.low ? 1.2 : 2.5;
       if (qualityCooldown > cooldown) {
         qualityCooldown = 0;
         const pr = renderer.getPixelRatio();
         if (avg < 45 && pr > QUALITY.minPixelRatio) {
-          renderer.setPixelRatio(Math.max(QUALITY.minPixelRatio, pr - 0.25));
+          upVotes = 0;
+          if (++downVotes >= 2) {
+            downVotes = 0;
+            renderer.setPixelRatio(Math.max(QUALITY.minPixelRatio, pr - 0.25));
+          }
         } else if (avg > 57 && pr < prCap) {
-          renderer.setPixelRatio(Math.min(prCap, pr + 0.25));
+          downVotes = 0;
+          if (++upVotes >= 2) {
+            upVotes = 0;
+            renderer.setPixelRatio(Math.min(prCap, pr + 0.25));
+          }
+        } else {
+          downVotes = 0;
+          upVotes = 0;
         }
       }
       fpsAcc = 0;

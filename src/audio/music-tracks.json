@@ -1,0 +1,239 @@
+{
+  "tracks": [
+    {
+      "id": "jungle-sunrise",
+      "name": "Jungle Sunrise",
+      "description": "Warm, bright Stardew-like music box with a nostalgic morning stroll feel.",
+      "bpm": 74,
+      "delay": {
+        "time": 0.42,
+        "feedback": 0.32,
+        "dampen": 2200,
+        "wet": 0.35
+      },
+      "timbre": {
+        "leadWave": "triangle",
+        "shimmerWave": "sine",
+        "shimmerRatio": 2.0,
+        "shimmerGain": 0.25,
+        "leadFilterCutoff": 2400
+      },
+      "dayChords": [
+        [48, 55, 60, 64],
+        [47, 55, 59, 62],
+        [45, 52, 57, 60],
+        [41, 48, 53, 57]
+      ],
+      "nightChords": [
+        [45, 52, 57, 60],
+        [41, 48, 53, 57],
+        [48, 55, 60, 64],
+        [43, 50, 55, 59]
+      ],
+      "pentaDay": [72, 74, 76, 79, 81, 84, 86],
+      "pentaMoody": [69, 72, 74, 76, 79, 81, 84],
+      "density": {
+        "day": 0.55,
+        "night": 0.35,
+        "rain": 0.28
+      },
+      "chordCycles": 4
+    },
+    {
+      "id": "deep-emerald-canopy",
+      "name": "Deep Emerald Canopy",
+      "description": "Lush, mystical forest atmosphere with rich 7th chords and deep spacious echoes.",
+      "bpm": 64,
+      "delay": {
+        "time": 0.52,
+        "feedback": 0.38,
+        "dampen": 1900,
+        "wet": 0.40
+      },
+      "timbre": {
+        "leadWave": "triangle",
+        "shimmerWave": "triangle",
+        "shimmerRatio": 1.5,
+        "shimmerGain": 0.20,
+        "leadFilterCutoff": 2100
+      },
+      "dayChords": [
+        [41, 48, 53, 57, 64],
+        [48, 55, 60, 64],
+        [45, 50, 57, 60, 65],
+        [46, 53, 58, 62]
+      ],
+      "nightChords": [
+        [45, 50, 57, 60, 64],
+        [43, 50, 55, 58, 65],
+        [46, 53, 57, 62],
+        [45, 52, 55, 60]
+      ],
+      "pentaDay": [65, 69, 72, 74, 77, 81, 84],
+      "pentaMoody": [62, 65, 69, 72, 74, 77, 81],
+      "density": {
+        "day": 0.45,
+        "night": 0.30,
+        "rain": 0.25
+      },
+      "chordCycles": 4
+    },
+    {
+      "id": "sunlit-ruins",
+      "name": "Sunlit Ruins",
+      "description": "Playful, buoyant discovery theme with bright overtone chimes and energetic pace.",
+      "bpm": 82,
+      "delay": {
+        "time": 0.36,
+        "feedback": 0.28,
+        "dampen": 2600,
+        "wet": 0.30
+      },
+      "timbre": {
+        "leadWave": "sine",
+        "shimmerWave": "triangle",
+        "shimmerRatio": 2.0,
+        "shimmerGain": 0.30,
+        "leadFilterCutoff": 2800
+      },
+      "dayChords": [
+        [43, 50, 55, 59],
+        [42, 49, 54, 57, 62],
+        [40, 47, 52, 55, 59],
+        [48, 55, 60, 64]
+      ],
+      "nightChords": [
+        [40, 47, 52, 55, 59],
+        [48, 52, 55, 60],
+        [43, 50, 55, 59],
+        [47, 50, 54, 59]
+      ],
+      "pentaDay": [71, 74, 76, 79, 83, 86, 88],
+      "pentaMoody": [67, 71, 74, 76, 79, 83, 86],
+      "density": {
+        "day": 0.60,
+        "night": 0.40,
+        "rain": 0.30
+      },
+      "chordCycles": 5
+    },
+    {
+      "id": "whispering-river",
+      "name": "Whispering River",
+      "description": "Fluid, reflective stream atmosphere with shimmering high bells and rippling delay.",
+      "bpm": 70,
+      "delay": {
+        "time": 0.44,
+        "feedback": 0.35,
+        "dampen": 2300,
+        "wet": 0.38
+      },
+      "timbre": {
+        "leadWave": "sine",
+        "shimmerWave": "sine",
+        "shimmerRatio": 3.0,
+        "shimmerGain": 0.22,
+        "leadFilterCutoff": 2500
+      },
+      "dayChords": [
+        [45, 50, 54, 57, 62],
+        [45, 49, 52, 57],
+        [47, 50, 54, 59],
+        [43, 47, 50, 55, 59]
+      ],
+      "nightChords": [
+        [47, 50, 54, 59],
+        [43, 47, 50, 55],
+        [45, 50, 54, 57],
+        [42, 49, 54, 57]
+      ],
+      "pentaDay": [74, 76, 78, 81, 83, 86, 90],
+      "pentaMoody": [71, 74, 76, 78, 81, 83, 86],
+      "density": {
+        "day": 0.52,
+        "night": 0.33,
+        "rain": 0.28
+      },
+      "chordCycles": 4
+    },
+    {
+      "id": "ancient-totem",
+      "name": "Ancient Totem",
+      "description": "Sacred, woodland Dorian harmony with hollow kalimba-like tones and calm mystery.",
+      "bpm": 66,
+      "delay": {
+        "time": 0.48,
+        "feedback": 0.34,
+        "dampen": 2000,
+        "wet": 0.36
+      },
+      "timbre": {
+        "leadWave": "triangle",
+        "shimmerWave": "triangle",
+        "shimmerRatio": 2.0,
+        "shimmerGain": 0.18,
+        "leadFilterCutoff": 2000
+      },
+      "dayChords": [
+        [45, 52, 55, 60],
+        [45, 50, 54, 57],
+        [45, 52, 55, 60],
+        [40, 47, 52, 55]
+      ],
+      "nightChords": [
+        [45, 52, 55, 59, 64],
+        [41, 48, 52, 57],
+        [40, 47, 52, 55],
+        [45, 50, 53, 57]
+      ],
+      "pentaDay": [69, 72, 74, 76, 79, 81, 84],
+      "pentaMoody": [67, 69, 72, 74, 76, 79, 81],
+      "density": {
+        "day": 0.48,
+        "night": 0.30,
+        "rain": 0.26
+      },
+      "chordCycles": 4
+    },
+    {
+      "id": "moonlit-glade",
+      "name": "Moonlit Glade",
+      "description": "Dreamy, nocturnal star-gazing lullaby with velvet sine pads and slow lazy stroll.",
+      "bpm": 60,
+      "delay": {
+        "time": 0.50,
+        "feedback": 0.36,
+        "dampen": 1800,
+        "wet": 0.42
+      },
+      "timbre": {
+        "leadWave": "sine",
+        "shimmerWave": "sine",
+        "shimmerRatio": 2.0,
+        "shimmerGain": 0.20,
+        "leadFilterCutoff": 2200
+      },
+      "dayChords": [
+        [40, 47, 52, 55, 59],
+        [36, 43, 48, 52, 55],
+        [43, 50, 55, 59],
+        [45, 50, 54, 57]
+      ],
+      "nightChords": [
+        [40, 47, 52, 55, 59],
+        [47, 54, 57, 62],
+        [48, 52, 55, 59],
+        [45, 52, 55, 60]
+      ],
+      "pentaDay": [67, 71, 74, 76, 79, 83, 86],
+      "pentaMoody": [64, 67, 71, 74, 76, 79, 83],
+      "density": {
+        "day": 0.42,
+        "night": 0.28,
+        "rain": 0.22
+      },
+      "chordCycles": 4
+    }
+  ]
+}
+

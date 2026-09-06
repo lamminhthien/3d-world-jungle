@@ -123,6 +123,8 @@ function createAmbience() {
     musicBus.connect(master);
     cozy = createCozyMusic(ctx, musicBus);
     cozy.setMuted(!musicOn);
+    cozy.onTrackChange(() => syncMusicBtn());
+    syncMusicBtn();
     return true;
   }
 
@@ -150,7 +152,11 @@ function createAmbience() {
     if (b) {
       b.textContent = '🎵';
       b.classList.toggle('off', !musicOn);
-      b.title = musicOn ? 'Mute music' : 'Unmute music';
+      const track = cozy?.getCurrentTrack ? cozy.getCurrentTrack() : null;
+      const trackInfo = track ? ` [${track.name}]` : '';
+      b.title = musicOn
+        ? `Music: On${trackInfo} (Click: mute, Shift-click: next track)`
+        : 'Music: Off (Click to unmute)';
     }
   }
 
@@ -212,6 +218,17 @@ function createAmbience() {
       if (cozy) cozy.setMuted(!musicOn);
       syncMusicBtn();
       return musicOn;
+    },
+    nextMusicTrack() {
+      if (cozy) {
+        const next = cozy.nextTrack();
+        syncMusicBtn();
+        return next;
+      }
+      return null;
+    },
+    getCurrentTrack() {
+      return cozy?.getCurrentTrack ? cozy.getCurrentTrack() : null;
     },
     update,
   };
@@ -415,9 +432,13 @@ export function createEnvironment(scene, opts = {}) {
       muteBtn.textContent = on ? '🔊' : '🔇';
     };
     if (musicBtn) {
-      musicBtn.onclick = () => {
-        // Lazily unlock audio on first click (autoplay policy), then flip music.
+      musicBtn.onclick = (e) => {
+        // Lazily unlock audio on first click (autoplay policy)
         if (!ambience.enabled) ambience.enable();
+        if (e && e.shiftKey && ambience.musicOn) {
+          ambience.nextMusicTrack();
+          return;
+        }
         ambience.toggleMusic();
       };
     }
@@ -445,6 +466,11 @@ export function createEnvironment(scene, opts = {}) {
   const wxMix = {};
   const moonTint = new THREE.Color(0xdce8ff);
   let hudAcc = 1;
+  // Shadow depth pass over ~10k instanced veg costs every frame. At night the
+  // sun intensity is 0 so its shadows are invisible — park the shadow map too,
+  // but ONLY on day/night flips: toggling castShadow rebuilds all lit shader
+  // programs, so per-frame toggling would itself hitch every frame.
+  let lastIsDay = true;
 
   const api = {
     state,
@@ -496,6 +522,13 @@ export function createEnvironment(scene, opts = {}) {
 
       // --- lights ---
       if (sun) {
+        if (isDay !== lastIsDay) {
+          lastIsDay = isDay;
+          // One shader recompile per dawn/dusk; saves the whole shadow depth
+          // pass for the entire night in exchange.
+          if (QUALITY.low) sun.castShadow = false;
+          else sun.castShadow = isDay;
+        }
         if (isDay) {
           sun.color.copy(sample.sunColor).lerp(_ca.set(wx.fogTint), 1 - wx.sun * 0.5 - 0.25);
           sun.intensity = sample.sunInt * wx.sun;
