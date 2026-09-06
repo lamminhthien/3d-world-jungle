@@ -17,6 +17,7 @@ import { setupControls } from './input/controls.js';
 import { setupPwaUi } from './core/pwa.js';
 import { randomSeedString } from './world/noise.js';
 import { AutoPlayAgent } from './core/autoPlay.js';
+import { createAdventure } from './gameplay/adventure.js';
 
 // ============ Loop State ============
 let targetFps = DEFAULT_MAX_FPS;
@@ -86,6 +87,7 @@ async function boot() {
 
   const { player, parts } = createPlayer(scene);
   player.position.set(spawn.x, groundHeight(spawn.x, spawn.z), spawn.z);
+  const adventure = createAdventure(scene, spawn);
   camTarget.set(spawn.x, 0.5, spawn.z);
   const { keys, joy, touch } = setupControls(canvas, core);
 
@@ -141,6 +143,7 @@ async function boot() {
     bridgeGroups = createBridges(scene);
     camps.regenerate(actualSeed);
     player.position.set(spawn.x, groundHeight(spawn.x, spawn.z), spawn.z);
+    adventure.regenerate(spawn);
     camTarget.set(spawn.x, 0.5, spawn.z);
     const url = new URL(location.href);
     url.searchParams.set('seed', actualSeed);
@@ -443,6 +446,7 @@ async function boot() {
     const fire = camps.getFireProximity(player.position.x, player.position.z);
     env.update(dt, player.position, { fire });
     animals.update(dt, player.position);
+    adventure.update(dt, player.position);
 
     // Night systems (docs/enhance_for_night_screen.md section 5):
     // timeOfDay -> fireflies on, moon takes over, clouds darken, campfires glow.

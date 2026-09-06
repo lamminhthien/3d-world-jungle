@@ -9,7 +9,7 @@
 // - Audio: tiny procedural WebAudio ambience (wind / rain / birds / crickets).
 import * as THREE from 'three';
 import { QUALITY } from '../core/setup.js';
-import { createCozyMusic } from '../audio/cozy.js';
+import { createCozyMusic, MUSIC_TRACKS } from '../audio/cozy.js';
 
 export const WEATHERS = ['clear', 'overcast', 'rain', 'fog'];
 const WEATHER_LABEL = { clear: 'Clear', overcast: 'Overcast', rain: 'Rain', fog: 'Fog' };
@@ -159,13 +159,15 @@ function createAmbience() {
   }
   function syncMusicBtn() {
     const b = document.getElementById('env-music');
+    const trackSelect = document.getElementById('env-music-track');
+    const track = cozy?.getCurrentTrack ? cozy.getCurrentTrack() : null;
+    if (trackSelect && track) trackSelect.value = track.id;
     if (b) {
       b.textContent = '🎵';
       b.classList.toggle('off', !musicOn);
-      const track = cozy?.getCurrentTrack ? cozy.getCurrentTrack() : null;
       const trackInfo = track ? ` [${track.name}]` : '';
       b.title = musicOn
-        ? `Music: On${trackInfo} (Click: mute, Shift-click: next track)`
+        ? `Music: On${trackInfo} (Click to mute)`
         : 'Music: Off (Click to unmute)';
     }
   }
@@ -236,6 +238,17 @@ function createAmbience() {
         return next;
       }
       return null;
+    },
+    setMusicTrack(id) {
+      if (cozy) {
+        const track = cozy.setTrack(id);
+        syncMusicBtn();
+        return track;
+      }
+      return null;
+    },
+    getMusicTracks() {
+      return cozy?.getTracks ? cozy.getTracks() : MUSIC_TRACKS.map((track) => ({ ...track }));
     },
     setMusicVolume(v) {
       if (musicBus) musicBus.gain.value = v;
@@ -422,6 +435,10 @@ export function createEnvironment(scene, opts = {}) {
         <button id="env-pause" title="Pause / resume time">⏸</button>
         <button id="env-skip" title="Jump to morning / night">⏭</button>
         <button id="env-wxbtn" title="Change weather">🌧️</button>
+        <select id="env-music-track" title="Choose music track" aria-label="Choose music track">
+          ${MUSIC_TRACKS.map((track) => `<option value="${track.id}">${track.name}</option>`).join('')}
+        </select>
+        <button id="env-next-music" title="Change music">⏭️</button>
         <button id="env-music" title="Mute music">🎵</button>
         <button id="env-mute" title="Ambient sound">🔇</button>
         <div class="env-vol-ctrl" style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; font-size: 11px; color: #33691e; font-weight: 600;">
@@ -435,6 +452,8 @@ export function createEnvironment(scene, opts = {}) {
     const pauseBtn = root.querySelector('#env-pause');
     const skipBtn = root.querySelector('#env-skip');
     const wxBtn = root.querySelector('#env-wxbtn');
+    const trackSelect = root.querySelector('#env-music-track');
+    const nextMusicBtn = root.querySelector('#env-next-music');
     const muteBtn = root.querySelector('#env-mute');
     const musicBtn = root.querySelector('#env-music');
     const volMusic = root.querySelector('#env-vol-music');
@@ -458,18 +477,26 @@ export function createEnvironment(scene, opts = {}) {
       const i = WEATHERS.indexOf(state.weather);
       api.setWeather(WEATHERS[(i + 1) % WEATHERS.length]);
     };
+    if (trackSelect) {
+      trackSelect.onchange = (e) => {
+        if (!ambience.enabled) ambience.enable();
+        ambience.setMusicTrack(e.target.value);
+      };
+    }
+    if (nextMusicBtn) {
+      nextMusicBtn.onclick = () => {
+        if (!ambience.enabled) ambience.enable();
+        ambience.nextMusicTrack();
+      };
+    }
     muteBtn.onclick = () => {
       const on = ambience.toggle();
       muteBtn.textContent = on ? '🔊' : '🔇';
     };
     if (musicBtn) {
-      musicBtn.onclick = (e) => {
+      musicBtn.onclick = () => {
         // Lazily unlock audio on first click (autoplay policy)
         if (!ambience.enabled) ambience.enable();
-        if (e && e.shiftKey && ambience.musicOn) {
-          ambience.nextMusicTrack();
-          return;
-        }
         ambience.toggleMusic();
       };
     }

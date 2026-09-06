@@ -80,6 +80,12 @@ body.is-standalone #btnFullscreen { display: none; }
 }
 #menuEnvSlot #envbar button { background: #fff; color: #2e7d32; border: 1px solid #c8e6c9; flex: none; }
 #menuEnvSlot #envbar button:hover { background: #e0e0e0; }
+#menuEnvSlot #envbar #env-music-track {
+  min-width: 0; max-width: 145px; flex: 1 1 110px; border: 1px solid #c8e6c9;
+  border-radius: 8px; padding: 4px 6px; color: #33691e; background: #fff;
+  font-size: 12px; font-weight: 600; cursor: pointer; outline: none;
+}
+#menuEnvSlot #envbar #env-music-track:focus { border-color: #66bb6a; }
 #menuEnvSlot #envbar .env-btns {
   display: flex; flex-wrap: wrap; align-items: center;
   gap: 6px; width: 100%; max-width: 100%; min-width: 0;
@@ -317,4 +323,3 @@ body.playing .controls-hint { animation: hint-hide 1s ease 7s forwards; }
 .title-seed, .menu-panel #seed, .menu-panel #newWorld, .menu-panel .seed-label, .custom-seed-toggle {
   display: none !important;
 }
-
