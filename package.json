@@ -1,7 +1,7 @@
 {
   "name": "3d-world-jungle",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "Stroll through a low-poly / isometric 3D jungle with Three.js",
   "scripts": {

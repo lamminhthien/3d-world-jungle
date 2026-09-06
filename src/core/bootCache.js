@@ -157,13 +157,18 @@ export async function runPreGameCache({ renderer = null, onProgress = () => {} }
   await yieldUI();
 
   // 0.45-0.85: texture + GPU upload.
-  await warmTextures(renderer, (f) => report(0.45 + f * 0.4, '🎨 Loading baked ground, rock, tree & river textures…'));
+  const textures = await warmTextures(renderer, (f) => report(0.45 + f * 0.4, '🎨 Loading baked ground, rock, tree & river textures…'));
 
   report(0.85, '🌍 Building the world…');
   await yieldUI();
-  const summary = { version: APP_VERSION, sw, persisted };
+  const summary = { version: APP_VERSION, sw, persisted, textures };
   try {
     window.__jungleCache = summary;
+    if (textures?.fallback || textures?.failed) {
+      console.warn('[jungle] Static texture preload incomplete; procedural fallback is active.', textures);
+    } else {
+      console.info('[jungle] Static textures loaded.', textures);
+    }
   } catch {
     /* non-browser? ignore */
   }
