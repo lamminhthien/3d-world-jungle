@@ -11,7 +11,9 @@ import { riverXAt } from '../world/procedural.js';
  * - Obstacle and winding river avoidance with lookahead probe
  * - Opportunistic bridge crossing to traverse river banks
  * - Smooth camera slow-orbit for cinematic immersion
- * - Sprinting spurts across open plains
+ * - Calm walking pace with very rare gentle jog spurts
+ * - Consolidation / circling detection via sampled position history
+ * - Consistent avoidance-turn bias to prevent oscillating circles
  * - Automatic pause / resume on player manual control
  */
 export class AutoPlayAgent {
@@ -35,13 +37,28 @@ export class AutoPlayAgent {
     this.targetBridgeZ = null;
     this.bridgeCooldown = 12; // seconds between seeking bridges
 
-    // Obstacle avoidance memory
+    // Short-term stuck detection
     this.stuckTimer = 0;
     this.lastPos = new THREE.Vector2(0, 0);
 
     // Camera auto-orbit
     this.camOrbitTimer = 0;
     this.camOrbitDir = 1;
+
+    // Consolidation / circling detection
+    // Sample position every SAMPLE_INTERVAL seconds and compare net travel
+    // against HISTORY_LEN samples ago. If net travel is too small the agent
+    // is circling and gets a bold new random heading.
+    this._sampleTimer = 0;
+    this._SAMPLE_INTERVAL = 1.0;  // sample every 1 s
+    this._HISTORY_LEN = 4;        // look back 4 s
+    this._posHistory = [];        // ring-buffer of { x, z }
+
+    // Avoidance turn bias: +1 = turn right, -1 = turn left.
+    // Held constant during an avoidance episode so the agent turns consistently
+    // and doesn't oscillate back and forth between two mirror angles.
+    this._avoidDir = 1;
+    this._avoidBiasTimer = 0;
   }
 
   toggle() {
@@ -64,6 +81,10 @@ export class AutoPlayAgent {
       if (this.player) {
         this.lastPos.set(this.player.position.x, this.player.position.z);
       }
+      this._posHistory = [];
+      this._sampleTimer = 0;
+      this.stuckTimer = 0;
+      this._avoidBiasTimer = 0;
     }
   }
 
@@ -73,34 +94,64 @@ export class AutoPlayAgent {
     this.headingChangeTimer -= dt;
     this.sprintTimer -= dt;
     this.bridgeCooldown -= dt;
+    this._avoidBiasTimer -= dt;
 
-    // Check if player is stuck (e.g. wedged against geometry)
     const px = this.player.position.x;
     const pz = this.player.position.z;
+
+    // ── Short-term stuck detection ────────────────────────────────────────
+    // movedDist is world-units since the last frame; threshold scaled by dt
+    // so it represents a minimum speed (0.5 u/s) rather than a fixed pixel.
     const movedDist = Math.hypot(px - this.lastPos.x, pz - this.lastPos.y);
-    if (movedDist < 0.2 * dt) {
+    if (movedDist < 0.5 * dt) {
       this.stuckTimer += dt;
     } else {
       this.stuckTimer = Math.max(0, this.stuckTimer - dt * 2);
     }
     this.lastPos.set(px, pz);
 
-    if (this.stuckTimer > 0.8) {
-      // Emergency turn around
-      this.targetHeading += Math.PI * 0.75 + (Math.random() - 0.5);
+    if (this.stuckTimer > 1.2) {
+      // Emergency turn — keep avoidance bias consistent (flip only here)
+      this._avoidDir *= -1;
+      this.targetHeading += this._avoidDir * (Math.PI * 0.6 + Math.random() * 0.6);
       this.stuckTimer = 0;
       this.headingChangeTimer = 3.0;
       this.crossingBridge = false;
       this.targetBridgeZ = null;
     }
 
-    // Sprint cycle: alternate between relaxed walking (4-8s) and sprint spurts (2-4s)
-    if (this.sprintTimer <= 0) {
-      this.isSprinting = !this.isSprinting && Math.random() < 0.35;
-      this.sprintTimer = this.isSprinting ? 2.5 + Math.random() * 2 : 4 + Math.random() * 4;
+    // ── Consolidation / circling detection (1 Hz samples) ────────────────
+    this._sampleTimer += dt;
+    if (this._sampleTimer >= this._SAMPLE_INTERVAL) {
+      this._sampleTimer -= this._SAMPLE_INTERVAL;
+      this._posHistory.push({ x: px, z: pz });
+      if (this._posHistory.length > this._HISTORY_LEN) {
+        this._posHistory.shift();
+      }
+      if (this._posHistory.length === this._HISTORY_LEN) {
+        const oldest = this._posHistory[0];
+        const netDist = Math.hypot(px - oldest.x, pz - oldest.z);
+        // At a calm walk (~2.3 u/s) we expect ~9 u over 4 s.
+        // If net displacement is less than 20% of that, we are circling.
+        const minExpected = 2.3 * (this._SAMPLE_INTERVAL * this._HISTORY_LEN) * 0.20;
+        if (netDist < minExpected) {
+          // Bold heading change to escape the loop
+          this.targetHeading += Math.PI * (0.5 + Math.random() * 0.75);
+          this.headingChangeTimer = 4.0;
+          this._posHistory = [];
+          this.crossingBridge = false;
+          this.targetBridgeZ = null;
+        }
+      }
     }
 
-    // Bridge crossing decision
+    // ── Sprint cycle (cinematic pace — very rare gentle jog only) ─────────
+    if (this.sprintTimer <= 0) {
+      this.isSprinting = Math.random() < 0.15; // 15% chance of a light jog
+      this.sprintTimer = this.isSprinting ? 2 + Math.random() * 2 : 6 + Math.random() * 6;
+    }
+
+    // ── Bridge crossing decision ──────────────────────────────────────────
     const dRiver = riverDist(px, pz);
     if (!this.crossingBridge && this.bridgeCooldown <= 0 && dRiver < 18) {
       // Pick nearest bridge
@@ -145,25 +196,23 @@ export class AutoPlayAgent {
         }
       }
     } else {
-      // Normal wander steering
+      // ── Normal wander steering ──────────────────────────────────────────
       if (this.headingChangeTimer <= 0) {
-        this.headingChangeTimer = 2.5 + Math.random() * 3.5;
-        // Subtle drift in direction (-60 deg to +60 deg)
-        this.targetHeading += (Math.random() - 0.5) * 1.5;
+        this.headingChangeTimer = 3.0 + Math.random() * 4.0;
+        // Gentle drift: at most ±45° per wander step to avoid tight loops
+        this.targetHeading += (Math.random() - 0.5) * (Math.PI / 2);
       }
 
-      // Avoid river if we are not on a bridge and not seeking one
-      if (dRiver < RIVER_HALF + 3.2 && !isOnBridge(px, pz)) {
-        // Turn away from river center
+      // River avoidance
+      if (dRiver < RIVER_HALF + 3.5 && !isOnBridge(px, pz)) {
         const rx = riverXAt(pz);
         const awayFromRiver = px > rx ? 1 : -1;
-        // Steer away on x, keep some forward z motion
         this.targetHeading = Math.atan2(awayFromRiver * 2, Math.cos(this.currentHeading));
         this.headingChangeTimer = 2.0;
       }
 
-      // Proactive obstacle avoidance (lookahead probe)
-      const lookDist = this.isSprinting ? 3.5 : 2.5;
+      // ── Obstacle lookahead probe ────────────────────────────────────────
+      const lookDist = 3.0;
       const probeX = px + Math.sin(this.targetHeading) * lookDist;
       const probeZ = pz + Math.cos(this.targetHeading) * lookDist;
 
@@ -171,48 +220,49 @@ export class AutoPlayAgent {
         const o = obstacles[i];
         const odx = probeX - o.x;
         const odz = probeZ - o.z;
-        const clearance = o.r + 1.2;
+        const clearance = o.r + 1.5;
         if (odx * odx + odz * odz < clearance * clearance) {
-          // Obstacle ahead! Steer away
+          // Choose / maintain avoidance bias direction so we don't oscillate
+          if (this._avoidBiasTimer <= 0) {
+            // 70% chance to keep current bias, 30% to flip it
+            this._avoidDir = Math.random() < 0.7 ? this._avoidDir : -this._avoidDir;
+            this._avoidBiasTimer = 3.0;
+          }
           const awayAngle = Math.atan2(px - o.x, pz - o.z);
-          this.targetHeading = awayAngle + (Math.random() > 0.5 ? 0.8 : -0.8);
+          this.targetHeading = awayAngle + this._avoidDir * (0.7 + Math.random() * 0.4);
           this.headingChangeTimer = 1.5;
           break;
         }
       }
     }
 
-    // Smoothly interpolate current heading towards target heading
+    // ── Smooth heading interpolation ──────────────────────────────────────
     let diff = this.targetHeading - this.currentHeading;
     while (diff < -Math.PI) diff += Math.PI * 2;
     while (diff > Math.PI) diff -= Math.PI * 2;
-    this.currentHeading += diff * Math.min(1, dt * 4.0);
+    // Rate 2.5 (was 4.0) → more organic, gradual turns
+    this.currentHeading += diff * Math.min(1, dt * 2.5);
 
-    // Convert world-space desired heading into camera-relative ix / iz inputs
-    // In update(dt):
-    // _move = fwd * (-iz) + right * ix
-    // fwd = (-cos az, 0, -sin az)
-    // right = (sin az, 0, -cos az)
-    // Desired world velocity = [sin(currentHeading), cos(currentHeading)]
-    // Solving:
-    // ix = sin(currentHeading) * sin(az) - cos(currentHeading) * cos(az)
-    // iz = sin(currentHeading) * cos(az) + cos(currentHeading) * sin(az)
+    // ── Camera-relative ix / iz inputs ───────────────────────────────────
+    // Speed dial: 0.50 = calm walk (~2.3 u/s), 0.65 = light jog (~3 u/s).
+    // sprint flag is never set — we rely solely on the speed dial magnitude
+    // so the walk multiplier (0.35 + 0.65 * inputMag) stays in a gentle range.
+    const speedFraction = this.isSprinting ? 0.65 : 0.50;
+
     const az = this.core.state.azimuth;
     const worldMoveX = Math.sin(this.currentHeading);
     const worldMoveZ = Math.cos(this.currentHeading);
 
-    this.simulatedInput.ix = worldMoveX * Math.sin(az) - worldMoveZ * Math.cos(az);
-    this.simulatedInput.iz = worldMoveX * Math.cos(az) + worldMoveZ * Math.sin(az);
-    this.simulatedInput.sprint = this.isSprinting;
+    this.simulatedInput.ix = (worldMoveX * Math.sin(az) - worldMoveZ * Math.cos(az)) * speedFraction;
+    this.simulatedInput.iz = (worldMoveX * Math.cos(az) + worldMoveZ * Math.sin(az)) * speedFraction;
+    this.simulatedInput.sprint = false; // never trigger the 1.6× sprint multiplier
 
-    // Cinematic camera behavior: gentle slow orbit
+    // ── Cinematic camera: gentle slow orbit ──────────────────────────────
     this.camOrbitTimer += dt;
-    if (this.camOrbitTimer > 12) {
-      if (Math.random() < 0.3) {
-        this.camOrbitDir *= -1;
-      }
+    if (this.camOrbitTimer > 14) {
+      if (Math.random() < 0.3) this.camOrbitDir *= -1;
       this.camOrbitTimer = 0;
     }
-    this.core.state.azimuth += dt * 0.045 * this.camOrbitDir;
+    this.core.state.azimuth += dt * 0.03 * this.camOrbitDir;
   }
 }
