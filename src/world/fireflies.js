@@ -136,11 +136,14 @@ export function createFireflies(scene) {
       const fx = focus ? focus.x : 0;
       const fz = focus ? focus.z : 0;
       const p = geo.attributes.position.array;
+      // Budget recycles: place() runs river + ground noise; after a fast
+      // move/teleport dozens could recycle in one frame => hitch. Spread it.
+      let recycled = 0;
       for (let i = 0; i < COUNT; i++) {
         // Recycle strays back around the player.
         const dx = bx[i] - fx;
         const dz = bz[i] - fz;
-        if (dx * dx + dz * dz > DESPAWN * DESPAWN) place(i, fx, fz);
+        if (dx * dx + dz * dz > DESPAWN * DESPAWN && recycled < 4) { place(i, fx, fz); recycled++; }
         // Free wandering: layered sine drift (doc: sine wave hovering).
         const t = elapsed;
         const a = amp[i];

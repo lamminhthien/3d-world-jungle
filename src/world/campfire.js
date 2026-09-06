@@ -283,12 +283,18 @@ export function createCampsites(scene, seed = 'FOREST_123') {
         const dx = s.pos.x - fx;
         const dz = s.pos.z - fz;
         const d2 = dx * dx + dz * dz;
-        // Perf: a forward renderer pays for EVERY PointLight on every lit
-        // fragment. Far fires are off-screen anyway — hide their light so the
-        // renderer drops it from the shader setup, and skip their animation.
+        // Perf/stability: NEVER toggle light.visible per frame. In a forward
+        // renderer every visible-light count change rebuilds ALL lit shader
+        // programs (ground + 8 instanced pools) => a multi-frame hitch exactly
+        // when crossing the cull radius ("choppy in some time cycle").
+        // Keep the light in the scene and drive intensity to 0 when far;
+        // skip particle uploads for culled fires but leave the light counted.
         const lightOn = d2 < LIGHT_DIST * LIGHT_DIST && (!QUALITY.low || si === nearestIdx);
-        s.light.visible = lightOn;
-        if (d2 > FIRE_CULL_DIST * FIRE_CULL_DIST) continue;
+        s.light.visible = true;
+        if (d2 > FIRE_CULL_DIST * FIRE_CULL_DIST) {
+          s.light.intensity = 0;
+          continue;
+        }
         // Doc: light.intensity = base + random flicker; warmer at night.
         // Skipped entirely when the light is culled (invisible = free).
         const flicker = lightOn
@@ -298,7 +304,9 @@ export function createCampsites(scene, seed = 'FOREST_123') {
           : 0;
         const dayBase = 0.9;
         const nightBase = 2.4;
-        s.light.intensity = THREE.MathUtils.lerp(dayBase, nightBase, nf) + flicker * (0.5 + nf);
+        s.light.intensity = lightOn
+          ? THREE.MathUtils.lerp(dayBase, nightBase, nf) + flicker * (0.5 + nf)
+          : 0;
         s.light.distance = 12 + nf * 5 + flicker * 1.5;
 
         // Flame pulse.

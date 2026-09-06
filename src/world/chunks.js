@@ -103,6 +103,34 @@ export function createWorldManager(scene, seedStr) {
   let spawn = { x: 4.5, z: 2, y: 0 };
   let visibleKey = '';
   let bridgePts = [];
+  // Time-sliced streaming: crossing a chunk border can reveal up to 5 new
+  // chunks at once (a full row/column). Building them all synchronously
+  // (~9k noise evals/chunk) blocks the main thread ~50-100ms => a visible
+  // hitch every ~1.6s while sprinting ("choppy in some time cycle").
+  // Instead queue missing chunks and build at most N per frame.
+  let pendingBuild = [];
+  let pendingWant = null;
+  let pendingCenterKey = '';
+  const MAX_CHUNK_BUILDS_PER_FRAME = 2;
+
+  function buildOneChunk(key) {
+    if (groundChunks.has(key)) return;
+    const [cx, cz] = key.split(',').map(Number);
+    const mesh = buildGroundChunk(cx, cz);
+    scene.add(mesh);
+    groundChunks.set(key, mesh);
+  }
+
+  function drainQueue(budget) {
+    const n = Math.min(budget, pendingBuild.length);
+    for (let i = 0; i < n; i++) buildOneChunk(pendingBuild.shift());
+    if (pendingBuild.length === 0 && pendingWant) {
+      rebuildVegetation(pendingWant);
+      visibleKey = pendingCenterKey;
+      pendingWant = null;
+      pendingCenterKey = '';
+    }
+  }
 
   function refreshBridges() {
     bridgePts = BRIDGES.map((bz) => ({ x: riverXAt(bz), z: bz }));
@@ -251,6 +279,16 @@ export function createWorldManager(scene, seedStr) {
     // Perf: cheap string check first — avoids allocating a 25-entry Set plus
     // key strings on every frame when the player hasn't crossed a chunk.
     const wantKey = `${getSeed()}@${ccx},${ccz}`;
+    if (wantKey === visibleKey && pendingBuild.length === 0) return false;
+    // If the center moved while a queue was draining, drop the stale queue
+    // and recompute below (already-built chunks are kept, only the missing
+    // list is refreshed). Otherwise just keep draining.
+    if (pendingBuild.length > 0 && wantKey !== pendingCenterKey) {
+      // Fall through to recompute want/queue.
+    } else if (pendingBuild.length > 0) {
+      drainQueue(MAX_CHUNK_BUILDS_PER_FRAME);
+      return false;
+    }
     if (wantKey === visibleKey) return false;
     const want = new Set();
     for (let dx = -CHUNK_RADIUS; dx <= CHUNK_RADIUS; dx++) {
@@ -266,17 +304,21 @@ export function createWorldManager(scene, seedStr) {
         groundChunks.delete(key);
       }
     }
+    // Queue missing chunks, build a couple immediately so something shows.
+    pendingBuild = [];
     for (const key of want) {
-      if (!groundChunks.has(key)) {
-        const [cx, cz] = key.split(',').map(Number);
-        const mesh = buildGroundChunk(cx, cz);
-        scene.add(mesh);
-        groundChunks.set(key, mesh);
-      }
+      if (!groundChunks.has(key)) pendingBuild.push(key);
     }
-    rebuildVegetation(want);
-    visibleKey = wantKey;
+    // Stable order => no directional pop-in bias.
+    pendingBuild.sort();
+    pendingWant = want;
+    pendingCenterKey = wantKey;
+    drainQueue(MAX_CHUNK_BUILDS_PER_FRAME);
     return true;
+  }
+
+  function flush() {
+    while (pendingBuild.length > 0) drainQueue(pendingBuild.length);
   }
 
   function regenerate(newSeed, focusX = 0, focusZ = 0) {
@@ -287,19 +329,30 @@ export function createWorldManager(scene, seedStr) {
       mesh.geometry.dispose();
     }
     groundChunks.clear();
+    pendingBuild = [];
+    pendingWant = null;
+    pendingCenterKey = '';
     visibleKey = '';
     spawn = findSpawn();
     ensureAround(focusX || spawn.x, focusZ || spawn.z);
+    // Seed change is a rare UI action behind a loading-safe moment: finish
+    // synchronously so collisions/vegetation match the new world instantly.
+    flush();
     return { ...spawn };
   }
 
   refreshBridges();
   spawn = findSpawn();
+  // Boot is behind the loading screen: build the full 25-chunk neighborhood
+  // synchronously so the first compiled frame + attract-mode backdrop is whole.
+  ensureAround(spawn.x, spawn.z);
+  flush();
 
   return {
     update(px, pz) {
       return ensureAround(px, pz);
     },
+    flush,
     regenerate,
     getSpawn: () => ({ ...spawn }),
     getBridgePoints: () => bridgePts.map((b) => ({ ...b })),
