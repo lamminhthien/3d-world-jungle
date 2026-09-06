@@ -1,11 +1,16 @@
 import * as THREE from 'three';
 import { ROCK_COUNT } from '../config.js';
 import { dummy, flatMat, groundHeight, obstacles, rand } from '../utils.js';
+import { getRockBump, getRockTexture } from './textures.js';
 
 // Two-tier rock strips along both river banks (instanced for performance).
 export function createRocks(scene) {
   const rockGeo = new THREE.DodecahedronGeometry(1, 0);
-  const rockMat = flatMat(0x9aa0a3);
+  const rockMat = flatMat(0x9aa0a3, {
+    map: getRockTexture(),
+    bumpMap: getRockBump(),
+    bumpScale: 0.07,
+  });
   const rocks = new THREE.InstancedMesh(rockGeo, rockMat, ROCK_COUNT);
   rocks.castShadow = rocks.receiveShadow = true;
 

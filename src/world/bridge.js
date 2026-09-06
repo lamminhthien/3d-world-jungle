@@ -2,13 +2,15 @@ import * as THREE from 'three';
 import { BRIDGES } from '../config.js';
 import { flatMat } from '../utils.js';
 import { riverXAt } from './procedural.js';
+import { getBarkBump, getBarkTexture } from './textures.js';
 
 // Wooden plank bridges spanning the winding river. Each bridge is centred on
 // the river path riverXAt(bz) so the deck always crosses the water, even after
 // a seed change. Re-call createBridges() after regenerate() to re-seat them.
 export function createBridges(scene) {
-  const plankMat = flatMat(0xa5713f);
-  const railMat = flatMat(0x7a4f27);
+  const woodMaps = { map: getBarkTexture(), bumpMap: getBarkBump(), bumpScale: 0.04 };
+  const plankMat = flatMat(0xa5713f, woodMaps);
+  const railMat = flatMat(0x7a4f27, woodMaps);
   const groups = [];
 
   for (const bz of BRIDGES) {

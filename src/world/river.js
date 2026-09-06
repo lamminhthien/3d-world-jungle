@@ -2,13 +2,19 @@ import * as THREE from 'three';
 import { FOAM_COUNT, RIVER_HALF } from '../config.js';
 import { rand } from '../utils.js';
 import { riverXAt } from './procedural.js';
+import { getWaterBump, getWaterTexture } from './textures.js';
 
 // Winding river: one large water plane follows the player (the carved channel
 // dips below y=-0.32 so water only shows inside the riverbed). Foam streaks
 // drift downstream and respawn inside the channel near the player.
 export function createRiver(scene) {
+  const waterDetail = getWaterTexture();
+  const waterBump = getWaterBump();
   const waterMat = new THREE.MeshStandardMaterial({
     color: 0x38b6d3,
+    map: waterDetail,
+    bumpMap: waterBump,
+    bumpScale: 0.05,
     roughness: 0.25,
     metalness: 0.05,
     transparent: true,
@@ -70,6 +76,10 @@ export function createRiver(scene) {
     const fz = focus ? focus.z : 0;
     water.position.x = fx;
     water.position.z = fz;
+    // Flow the surface grain downstream (+z) so the river visibly streams.
+    waterDetail.offset.y -= dt * 0.08;
+    waterBump.offset.y -= dt * 0.08;
+    waterDetail.offset.x = Math.sin(performance.now() * 0.0002) * 0.02;
     let moved = false;
     for (let i = 0; i < foams.length; i++) {
       const f = foams[i];

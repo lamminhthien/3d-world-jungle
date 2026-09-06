@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { BRIDGES } from '../config.js';
 import { obstacles } from '../utils.js';
 import { rngFromString } from './noise.js';
+import { getGroundBump, getGroundTexture } from './textures.js';
 import {
   createVegetationKit,
   PALETTES,
@@ -51,6 +52,10 @@ export function createWorldManager(scene, seedStr) {
   if (seedStr) initProcedural(seedStr);
   const groundMat = new THREE.MeshStandardMaterial({
     vertexColors: true,
+    // Micro grain tiled per chunk (near-white => multiplies biome colors).
+    map: getGroundTexture(),
+    bumpMap: getGroundBump(),
+    bumpScale: 0.06,
     flatShading: true,
     roughness: 1,
   });

@@ -12,7 +12,7 @@
 
 import * as THREE from 'three';
 import { dummy } from '../utils.js';
-import { getBarkTexture, getCactusTexture, getLeafTexture, getRockTexture } from './textures.js';
+import { getBarkTexture, getBarkBump, getCactusTexture, getCactusBump, getLeafTexture, getLeafBump, getRockTexture, getRockBump } from './textures.js';
 
 // ---- Palettes (kept identical to the old inline values) ----
 export const PALETTES = {
@@ -42,9 +42,10 @@ export const VEGETATION_PRESETS = [
 export const presetById = (id) => VEGETATION_PRESETS.find((p) => p.id === id);
 
 // ---- Textured materials (one per pool, shared by all instances) ----
-function texturedMat(color, map, extra = {}) {
+// map = fine color grain, bumpMap = matching relief (sun catches the grain).
+function texturedMat(color, map, bumpMap, bumpScale = 0.05, extra = {}) {
   return new THREE.MeshStandardMaterial({
-    color, map, flatShading: true, roughness: 0.95, metalness: 0, ...extra,
+    color, map, bumpMap, bumpScale, flatShading: true, roughness: 0.95, metalness: 0, ...extra,
   });
 }
 
@@ -59,13 +60,13 @@ export function createVegetationKit() {
     rock: new THREE.DodecahedronGeometry(1, 0),
   };
   const materials = {
-    trunk: texturedMat(0xffffff, getBarkTexture()),
-    pine: texturedMat(0xffffff, getLeafTexture()),
-    blob: texturedMat(0xffffff, getLeafTexture()),
-    palmLeaf: texturedMat(0xffffff, getLeafTexture(), { side: THREE.DoubleSide }),
-    bush: texturedMat(0xffffff, getLeafTexture()),
-    cactus: texturedMat(0xffffff, getCactusTexture()),
-    rock: texturedMat(0xffffff, getRockTexture(), { roughness: 1 }),
+    trunk: texturedMat(0xffffff, getBarkTexture(), getBarkBump(), 0.08),
+    pine: texturedMat(0xffffff, getLeafTexture(), getLeafBump(), 0.04),
+    blob: texturedMat(0xffffff, getLeafTexture(), getLeafBump(), 0.04),
+    palmLeaf: texturedMat(0xffffff, getLeafTexture(), getLeafBump(), 0.03, { side: THREE.DoubleSide }),
+    bush: texturedMat(0xffffff, getLeafTexture(), getLeafBump(), 0.04),
+    cactus: texturedMat(0xffffff, getCactusTexture(), getCactusBump(), 0.06),
+    rock: texturedMat(0xffffff, getRockTexture(), getRockBump(), 0.07, { roughness: 1 }),
   };
   return { geometries, materials };
 }

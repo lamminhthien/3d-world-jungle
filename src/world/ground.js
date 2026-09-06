@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { WORLD } from '../config.js';
 import { groundHeight, rand } from '../utils.js';
+import { getGroundBump, getGroundTexture } from './textures.js';
 
 // Low-poly grass ground with sandy river banks and vertex colors.
 export function createGround(scene) {
@@ -29,9 +30,24 @@ export function createGround(scene) {
 
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geo.computeVertexNormals();
+  // Legacy single-plane ground spans the whole WORLD.size, so it needs a
+  // denser repeat than the chunked ground (which tiles per 16-unit chunk).
+  const detailMap = getGroundTexture().clone();
+  detailMap.repeat.set(48, 48);
+  detailMap.needsUpdate = true;
+  const detailBump = getGroundBump().clone();
+  detailBump.repeat.set(48, 48);
+  detailBump.needsUpdate = true;
   const ground = new THREE.Mesh(
     geo,
-    new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1 }),
+    new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      map: detailMap,
+      bumpMap: detailBump,
+      bumpScale: 0.06,
+      flatShading: true,
+      roughness: 1,
+    }),
   );
   ground.receiveShadow = true;
   scene.add(ground);
