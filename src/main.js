@@ -4,6 +4,7 @@ import { groundHeight, isOnBridge, obstacles, riverDist } from './utils.js';
 import { QUALITY, setupCore } from './core/setup.js';
 import { runPreGameCache } from './core/bootCache.js';
 import { createWorldManager } from './world/chunks.js';
+import { updateProceduralGen } from './world/procedural.js';
 import { createRiver } from './world/river.js';
 import { createBridges, removeBridges } from './world/bridge.js';
 import { createClouds } from './world/clouds.js';
@@ -89,14 +90,32 @@ async function boot() {
   const { keys, joy, touch } = setupControls(canvas, core);
 
   // ============ World type presets ============
-  // Maps preset seed strings to optional time-of-day overrides.
-  const WORLD_PRESETS = {
-    JUNGLE_PRIME:   { timeOverride: null },
-    DESERT_WINDS:   { timeOverride: null },
-    MOUNTAIN_PEAKS: { timeOverride: null },
-    BEACH_COVE:     { timeOverride: null },
-    NIGHT_FOREST:   { timeOverride: 0.5 }, // start at midnight
-    __random__:     { timeOverride: null },
+  // Maps preset seed strings to generation constants and optional time-of-day overrides.
+  const WORLD_CONFIGS = {
+    JUNGLE_PRIME: {
+      gen: {}, // default
+      timeOverride: null,
+    },
+    DESERT_WINDS: {
+      gen: { desertTemp: 0.3, desertMoist: 0.6, riverAmp: 5, riverFreq: 0.02 },
+      timeOverride: null,
+    },
+    MOUNTAIN_PEAKS: {
+      gen: { maxHeight: 8, levels: 8, rockLine: 1.0, snowLine: 3.0 },
+      timeOverride: null,
+    },
+    BEACH_COVE: {
+      gen: { bankOuter: 12, riverHalf: 4, riverAmp: 6 },
+      timeOverride: null,
+    },
+    NIGHT_FOREST: {
+      gen: {},
+      timeOverride: 0.5, // start at midnight
+    },
+    __random__: {
+      gen: {},
+      timeOverride: null,
+    },
   };
 
   // ============ Seed UI ============
@@ -113,6 +132,9 @@ async function boot() {
   }
 
   function applySeed(newSeed, timeOverride = null) {
+    const config = WORLD_CONFIGS[newSeed] || { gen: {}, timeOverride: null };
+    updateProceduralGen(config.gen);
+
     const actualSeed = newSeed === '__random__' ? randomSeedString() : newSeed;
     spawn = world.regenerate(actualSeed);
     removeBridges(scene, bridgeGroups);
@@ -125,7 +147,8 @@ async function boot() {
     history.replaceState(null, '', url);
     if (seedInput) seedInput.value = actualSeed;
     // Apply time override if the preset specifies one (e.g. Night = midnight).
-    if (timeOverride !== null && env?.setTime) env.setTime(timeOverride);
+    const finalTime = timeOverride !== null ? timeOverride : config.timeOverride;
+    if (finalTime !== null && env?.setTime) env.setTime(finalTime);
     setAllWorldBtnActive(newSeed);
   }
 
@@ -134,10 +157,10 @@ async function boot() {
     const btn = e.target.closest('.world-type-btn');
     if (!btn) return;
     const seed = btn.dataset.seed;
-    const preset = WORLD_PRESETS[seed] || {};
-    // Resolve time override from data-time attr or preset map
+    const config = WORLD_CONFIGS[seed] || {};
+    // Resolve time override from data-time attr or config map
     const timeAttr = btn.dataset.time;
-    const timeOverride = timeAttr !== '' ? Number(timeAttr) : preset.timeOverride;
+    const timeOverride = timeAttr !== '' ? Number(timeAttr) : config.timeOverride;
     if (titleSeedInput) titleSeedInput.value = seed === '__random__' ? randomSeedString() : seed;
     applySeed(seed, timeOverride);
   });
@@ -147,14 +170,14 @@ async function boot() {
     const btn = e.target.closest('.menu-world-btn');
     if (!btn) return;
     const seed = btn.dataset.seed;
-    const preset = WORLD_PRESETS[seed] || {};
-    applySeed(seed, preset.timeOverride);
+    const config = WORLD_CONFIGS[seed] || {};
+    applySeed(seed, config.timeOverride);
     closeMenu();
   });
 
 
   const fpsSelect = document.getElementById('fpsSelect');
-  if (fpsSelect) {
+  if (fpsSelect && targetFps) {
     fpsSelect.value = String(targetFps);
     fpsSelect.addEventListener('change', (e) => {
       targetFps = parseInt(e.target.value, 10);
@@ -403,6 +426,7 @@ async function boot() {
     // Fire proximity feeds the crackle ambience + warm/cool contrast logic.
     const fire = camps.getFireProximity(player.position.x, player.position.z);
     env.update(dt, player.position, { fire });
+    animals.update(dt, player.position);
 
     // Night systems (docs/enhance_for_night_screen.md section 5):
     // timeOfDay -> fireflies on, moon takes over, clouds darken, campfires glow.

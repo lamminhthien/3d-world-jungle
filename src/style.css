@@ -298,3 +298,8 @@ body.playing .controls-hint { animation: hint-hide 1s ease 7s forwards; }
   mix-blend-mode: screen;
 }
 
+/* Hide seed inputs in favor of world type presets */
+.title-seed, .menu-panel #seed, .menu-panel #newWorld, .menu-panel .seed-label, .custom-seed-toggle {
+  display: none !important;
+}
+

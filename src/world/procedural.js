@@ -31,7 +31,13 @@ export const GEN = {
   bankOuter: 6.2, // outer edge of sandy/stepped banks
   snowLine: 2.0, // stepped height above which snow appears (lvl >= 4)
   rockLine: 1.4, // above this => mountain rock (lvl >= 3)
+  desertTemp: 0.62, // temp threshold for desert
+  desertMoist: 0.42, // moist threshold for desert
 };
+
+export function updateProceduralGen(config) {
+  Object.assign(GEN, config);
+}
 
 let seed = 'FOREST_123';
 let heightFbm = null;
@@ -107,7 +113,7 @@ export function getBiome(x, z) {
   const temp = temperatureAt(x, z);
   if (h >= GEN.snowLine) return BIOMES.SNOW;
   if (h >= GEN.rockLine) return BIOMES.MOUNTAIN;
-  if (temp > 0.62 && moist < 0.42) return BIOMES.DESERT;
+  if (temp > GEN.desertTemp && moist < GEN.desertMoist) return BIOMES.DESERT;
   return BIOMES.JUNGLE;
 }
 
@@ -139,7 +145,7 @@ export function sampleGround(x, z) {
     else {
       const moist = moistureAt(x, z);
       const temp = temperatureAt(x, z);
-      biome = (temp > 0.62 && moist < 0.42) ? BIOMES.DESERT : BIOMES.JUNGLE;
+      biome = (temp > GEN.desertTemp && moist < GEN.desertMoist) ? BIOMES.DESERT : BIOMES.JUNGLE;
     }
   }
   return { y, biome, d };
