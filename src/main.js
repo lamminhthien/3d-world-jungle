@@ -7,6 +7,8 @@ import { createRiver } from './world/river.js';
 import { createBridges, removeBridges } from './world/bridge.js';
 import { createClouds } from './world/clouds.js';
 import { createEnvironment } from './world/environment.js';
+import { createFireflies } from './world/fireflies.js';
+import { createCampsites } from './world/campfire.js';
 import { createPlayer } from './entities/player.js';
 import { setupControls } from './input/controls.js';
 import { randomSeedString } from './world/noise.js';
@@ -44,6 +46,9 @@ const env = createEnvironment(scene, {
   fogFar: WORLD.fogFar,
 });
 
+const fireflies = createFireflies(scene);
+const camps = createCampsites(scene, initialSeed);
+
 const { player, parts } = createPlayer(scene);
 player.position.set(spawn.x, groundHeight(spawn.x, spawn.z), spawn.z);
 camTarget.set(spawn.x, 0.5, spawn.z);
@@ -59,6 +64,7 @@ function applySeed(newSeed) {
   spawn = world.regenerate(newSeed);
   removeBridges(scene, bridgeGroups);
   bridgeGroups = createBridges(scene);
+  camps.regenerate(newSeed);
   player.position.set(spawn.x, groundHeight(spawn.x, spawn.z), spawn.z);
   camTarget.set(spawn.x, 0.5, spawn.z);
   const url = new URL(location.href);
@@ -163,10 +169,18 @@ function update(dt) {
   // Stream chunks around the player + keep water/foam nearby.
   world.update(player.position.x, player.position.z);
   river.update(dt, player.position);
-  sky.update(dt);
+  sky.update(dt, player.position, clock.elapsedTime);
 
   // Day-night + weather drive sun/fog/sky (sun follows target for shadows).
-  env.update(dt, player.position);
+  // Fire proximity feeds the crackle ambience + warm/cool contrast logic.
+  const fire = camps.getFireProximity(player.position.x, player.position.z);
+  env.update(dt, player.position, { fire });
+
+  // Night systems (docs/enhance_for_night_screen.md section 5):
+  // timeOfDay -> fireflies on, moon takes over, clouds darken, campfires glow.
+  const nf = env.nightFactor;
+  fireflies.update(dt, clock.elapsedTime, player.position, env.timeOfDay);
+  camps.update(dt, clock.elapsedTime, player.position, nf);
 
   // Smooth camera follow (sun position itself is set by the environment).
   camTarget.lerp(new THREE.Vector3(player.position.x, 0.5, player.position.z), Math.min(1, dt * 4));

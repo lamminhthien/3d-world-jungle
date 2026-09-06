@@ -2,7 +2,11 @@ import * as THREE from 'three';
 import { CLOUD_COUNT } from '../config.js';
 import { rand } from '../utils.js';
 
-// Low-poly drifting clouds, pushed to the edges so they never cover the player.
+// Low-poly drifting clouds (docs/enhance_for_night_screen.md section 3).
+// - Merged icosahedron puffs, flat-shaded.
+// - Day: white / pale pink, slow drift. Night: dark blue-grey, occasionally
+//   crossing the moon (moon occlusion illusion under the ortho camera).
+// - Follows the focus so the sky stays alive on the infinite map.
 export function createClouds(scene) {
   const cloudMat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
@@ -26,16 +30,28 @@ export function createClouds(scene) {
     const rad = rand(30, 44);
     g.position.set(Math.cos(ang) * rad, rand(24, 30), Math.sin(ang) * rad);
     g.userData.speed = rand(0.2, 0.6);
+    g.userData.driftZ = rand(-0.15, 0.15);
+    g.userData.bobPhase = rand(0, Math.PI * 2);
+    g.userData.baseY = g.position.y;
     scene.add(g);
     clouds.push(g);
   }
 
-  function update(dt) {
+  function update(dt, focus, elapsed = 0) {
+    const fx = focus ? focus.x : 0;
+    const fz = focus ? focus.z : 0;
     for (const c of clouds) {
+      // Slow drift on X (+ slight Z wander), gentle vertical bob.
       c.position.x += c.userData.speed * dt;
-      if (c.position.x > 48) c.position.x = -48;
+      c.position.z += c.userData.driftZ * dt;
+      c.position.y = c.userData.baseY + Math.sin(elapsed * 0.3 + c.userData.bobPhase) * 0.5;
+      // Wrap around the focus (not world origin) for the infinite map.
+      if (c.position.x - fx > 48) c.position.x -= 96;
+      if (c.position.x - fx < -48) c.position.x += 96;
+      if (c.position.z - fz > 48) c.position.z -= 96;
+      if (c.position.z - fz < -48) c.position.z += 96;
     }
   }
 
-  return { clouds, update };
+  return { clouds, cloudMat, update };
 }

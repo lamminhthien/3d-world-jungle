@@ -81,6 +81,7 @@ function createAmbience() {
   let ctx = null;
   let windGain, rainGain, master;
   let chirpTimer = 0;
+  let crackleTimer = 0;
   let enabled = false;
 
   function ensure() {
@@ -124,8 +125,9 @@ function createAmbience() {
     o.start(t0); o.stop(t0 + dur + 0.05);
   }
 
-  // dt-driven critter scheduler: birds by day, crickets by night.
-  function update(dt, { isNight, rain }) {
+  // dt-driven critter scheduler: birds by day, crickets by night,
+  // campfire crackle when the player camps nearby.
+  function update(dt, { isNight, rain, fire = 0 }) {
     if (!ctx || !enabled) return;
     windGain.gain.value += ((rain > 0.5 ? 0.05 : 0.03) - windGain.gain.value) * Math.min(1, dt * 2);
     rainGain.gain.value += (rain * 0.14 - rainGain.gain.value) * Math.min(1, dt * 2);
@@ -143,6 +145,17 @@ function createAmbience() {
       } else {
         chirpTimer = 2;
       }
+    }
+    // Fire crackle: short sharp pops, rate + volume scale with proximity.
+    crackleTimer -= dt;
+    if (fire > 0.02 && crackleTimer <= 0) {
+      const t0 = ctx.currentTime + 0.02;
+      const pops = 1 + ((Math.random() * 3) | 0);
+      for (let k = 0; k < pops; k++) {
+        const f = 700 + Math.random() * 2600;
+        blip(f, t0 + k * (0.02 + Math.random() * 0.04), 0.03 + Math.random() * 0.03, (0.015 + Math.random() * 0.04) * fire, f * 0.6);
+      }
+      crackleTimer = 0.08 + Math.random() * 0.5 * (1.2 - fire);
     }
   }
 
@@ -170,6 +183,7 @@ export function createEnvironment(scene, opts = {}) {
     timeOfDay: startTime, paused: false, speed: 1,
     weather: 'clear', prevWeather: 'clear', blend: 1,
     weatherTimer: weatherIntervalSec, wetness: 0,
+    nightFactor: 0, isNight: false,
     dayLengthSec, weatherIntervalSec, fogNear, fogFar,
   };
 
@@ -253,9 +267,30 @@ export function createEnvironment(scene, opts = {}) {
   );
   sunMesh.frustumCulled = moonMesh.frustumCulled = false;
   scene.add(sunMesh); scene.add(moonMesh);
+  // Moon halo: additive glow shell for a misty moon-shaft look at night.
+  const moonHalo = new THREE.Mesh(
+    new THREE.SphereGeometry(4.6, 16, 16),
+    new THREE.MeshBasicMaterial({
+      color: 0xa1c4fd, fog: false, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }),
+  );
+  moonHalo.frustumCulled = false;
+  scene.add(moonHalo);
 
-  // ---- Moon fill light (soft blue, only matters at night) ----
-  const moonLight = new THREE.DirectionalLight(0x8fb4ff, 0);
+  // ---- Moonlight (doc section 2: icy-blue #a1c4fd, 180° opposite the sun) ----
+  // Second directional light on the mirrored orbit, with soft shadows so trees
+  // / player cast faint moon-shadows. A pale halo billboard fakes god-ray glow
+  // through the low-poly canopy (cheap moon-shaft feel + FogExp2-like depth).
+  const moonLight = new THREE.DirectionalLight(0xa1c4fd, 0);
+  moonLight.castShadow = true;
+  moonLight.shadow.mapSize.set(1024, 1024);
+  moonLight.shadow.camera.left = -30;
+  moonLight.shadow.camera.right = 30;
+  moonLight.shadow.camera.top = 30;
+  moonLight.shadow.camera.bottom = -30;
+  moonLight.shadow.camera.far = 120;
+  moonLight.shadow.bias = -0.0006;
   scene.add(moonLight); scene.add(moonLight.target);
 
   // ---- Rain particles (box around focus, wraps) ----
@@ -358,6 +393,8 @@ export function createEnvironment(scene, opts = {}) {
     ambience,
     get timeOfDay() { return state.timeOfDay; },
     get weather() { return state.weather; },
+    get nightFactor() { return state.nightFactor || 0; },
+    get isNight() { return !!state.isNight; },
     setTime(h) { state.timeOfDay = ((h % 24) + 24) % 24; },
     setWeather(w) {
       if (!WEATHERS.includes(w) || w === state.weather) return;
@@ -372,7 +409,7 @@ export function createEnvironment(scene, opts = {}) {
       api.setWeather(WEATHERS[(i + 1) % WEATHERS.length]);
     },
 
-    update(dt, focus) {
+    update(dt, focus, extra = {}) {
       // Debug / tuning handle (e.g. `__env.setTime(0)` in the console).      // --- advance clock + weather machine ---
       if (!state.paused) state.timeOfDay = (state.timeOfDay + (dt * state.speed * 24) / state.dayLengthSec) % 24;
       state.blend = Math.min(1, state.blend + dt / 6); // ~6s crossfade
@@ -415,8 +452,11 @@ export function createEnvironment(scene, opts = {}) {
         sun.target.updateMatrixWorld();
       }
       // Moonlight: the main night source — kept bright enough to play by.
+      // Icy pale-blue per doc (#a1c4fd), mirrored 180° from the sun.
       const nightF = THREE.MathUtils.clamp(-sunDir.y * 2.2, 0, 1);
-      moonLight.color.setHex(0x9dbdf5);
+      state.nightFactor = nightF;
+      state.isNight = !isDay;
+      moonLight.color.setHex(0xa1c4fd);
       moonLight.intensity = nightF * 1.15 * (0.55 + 0.45 * wx.sun);
       moonLight.position.set(focusV.x + moonDir.x * ORBIT_R, Math.max(6, moonDir.y * ORBIT_R), focusV.z + moonDir.z * ORBIT_R);
       moonLight.target.position.copy(focusV);
@@ -452,11 +492,19 @@ export function createEnvironment(scene, opts = {}) {
       sunMesh.material.opacity = THREE.MathUtils.clamp(sunDir.y * 4 + 0.4, 0, 0.95);
       moonMesh.position.set(focusV.x + moonDir.x * 130, moonDir.y * 130, focusV.z + moonDir.z * 130);
       moonMesh.visible = moonDir.y > -0.05;
-      moonMesh.material.opacity = THREE.MathUtils.clamp(moonDir.y * 4 + 0.3, 0, 0.9) * (1 - wx.rain * 0.7);
+      // Overcast / rain veils the moon; drifting clouds cross it for an
+      // occluded-moon illusion (doc section 3: trăng mờ ảo).
+      const veil = (1 - wx.rain * 0.7) * (state.weather === 'overcast' ? 0.55 : 1) * (state.weather === 'fog' ? 0.3 : 1);
+      moonMesh.material.opacity = THREE.MathUtils.clamp(moonDir.y * 4 + 0.3, 0, 0.9) * veil;
+      moonHalo.position.copy(moonMesh.position);
+      moonHalo.visible = moonMesh.visible;
+      moonHalo.material.opacity = nightF * 0.16 * veil;
 
-      // --- clouds: thicker + grayer when overcast/rain ---
+      // --- clouds: thicker + grayer when overcast/rain, dark blue-grey at night ---
       if (cloudMat) {
         cloudMat.color.copy(cloudBaseColor).lerp(_ca.set(wx.fogTint), state.weather === 'clear' ? 0 : 0.45);
+        // Night tint (doc section 3): white/pink day -> somber blue-grey night.
+        cloudMat.color.lerp(_ca.setHex(0x2e3a55), nightF * 0.78);
         cloudMat.opacity = state.weather === 'fog' ? 0.55 : wx.cloud;
         cloudMat.transparent = true;
       }
@@ -490,8 +538,8 @@ export function createEnvironment(scene, opts = {}) {
         waterMat.color.copy(waterBase.color).multiplyScalar(1 - w * 0.25);
       }
 
-      // --- ambience ---
-      ambience.update(dt, { isNight: !isDay, rain: targetRain });
+      // --- ambience (birds/crickets + rain + campfire crackle) ---
+      ambience.update(dt, { isNight: !isDay, rain: targetRain, fire: extra.fire || 0 });
 
       // --- HUD text (throttled) ---
       hudAcc += dt;
