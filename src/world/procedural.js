@@ -121,11 +121,16 @@ const biomeColors = {
   [BIOMES.SNOW]: [0xf2f5f7, 0xdde7ee],
 };
 
-export function biomeGroundColor(biome, random) {
+const _bcB = new THREE.Color();
+const _bcScratch = new THREE.Color();
+export function biomeGroundColor(biome, random, target = _bcScratch) {
   const [a, b] = biomeColors[biome] || biomeColors[BIOMES.JUNGLE];
-  const c = new THREE.Color(a).lerp(new THREE.Color(b), random());
-  c.offsetHSL(0, 0, (random() - 0.5) * 0.04);
-  return c;
+  // Perf: called per ground vertex (~7k times per full chunk rebuild), so this
+  // writes into a shared scratch color instead of allocating 2 Colors per call.
+  // Read r/g/b synchronously — do not hold the reference.
+  target.setHex(a).lerp(_bcB.setHex(b), random());
+  target.offsetHSL(0, 0, (random() - 0.5) * 0.04);
+  return target;
 }
 
 // Spawn: centre (0, ymax, 0) per doc — highest stepped point near origin, off-river.

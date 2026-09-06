@@ -1,5 +1,7 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CLOUD_COUNT } from '../config.js';
+import { isMobileDevice } from '../core/setup.js';
 import { rand } from '../utils.js';
 
 // Low-poly drifting clouds (docs/enhance_for_night_screen.md section 3).
@@ -7,26 +9,34 @@ import { rand } from '../utils.js';
 // - Day: white / pale pink, slow drift. Night: dark blue-grey, occasionally
 //   crossing the moon (moon occlusion illusion under the ortho camera).
 // - Follows the focus so the sky stays alive on the infinite map.
+// Perf: each cloud's puffs are merged into ONE geometry (= 1 draw call per
+// cloud instead of 3-5), sharing a single cheap Lambert material. MeshStandard
+// was overkill here — every extra lit material multiplies per-light cost.
 export function createClouds(scene) {
-  const cloudMat = new THREE.MeshStandardMaterial({
+  const cloudMat = new THREE.MeshLambertMaterial({
     color: 0xffffff,
     flatShading: true,
-    roughness: 1,
     transparent: true,
     opacity: 0.8,
     depthWrite: false,
   });
   const clouds = [];
+  const count = isMobileDevice ? 6 : CLOUD_COUNT;
 
-  for (let i = 0; i < CLOUD_COUNT; i++) {
-    const g = new THREE.Group();
+  for (let i = 0; i < count; i++) {
     const n = 3 + ((Math.random() * 3) | 0);
+    const parts = [];
     for (let k = 0; k < n; k++) {
-      const m = new THREE.Mesh(new THREE.IcosahedronGeometry(rand(0.8, 1.4), 0), cloudMat);
-      m.position.set(k * rand(1.0, 1.5), rand(-0.3, 0.3), rand(-0.6, 0.6));
-      m.scale.y = 0.6;
-      g.add(m);
+      const pg = new THREE.IcosahedronGeometry(rand(0.8, 1.4), 0);
+      pg.scale(1, 0.6, 1);
+      pg.translate(k * rand(1.0, 1.5), rand(-0.3, 0.3), rand(-0.6, 0.6));
+      parts.push(pg);
     }
+    const merged = mergeGeometries(parts);
+    for (const pg of parts) pg.dispose();
+    const m = new THREE.Mesh(merged, cloudMat);
+    const g = new THREE.Group();
+    g.add(m);
     const ang = rand(0, Math.PI * 2);
     const rad = rand(30, 44);
     // Camera iso ở cao ~35 units (distance 60 * sin(35°)), nhìn xuống 35°.

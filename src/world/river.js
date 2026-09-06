@@ -18,44 +18,72 @@ export function createRiver(scene) {
   const water = new THREE.Mesh(new THREE.PlaneGeometry(130, 130), waterMat);
   water.rotation.x = -Math.PI / 2;
   water.position.y = -0.32;
-  water.receiveShadow = true;
+  // Perf: a full-screen transparent Standard material that also receives
+  // shadows is a fill-rate hog on mobile — shadows on water add little.
+  water.receiveShadow = false;
   scene.add(water);
 
+  // Perf: foam streaks were 26 individual Meshes (= 26 draw calls). One
+  // InstancedMesh keeps the exact same look for 1 draw call.
   const foamGeo = new THREE.PlaneGeometry(0.28, 0.7);
+  foamGeo.rotateX(-Math.PI / 2);
   const foamMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 });
+  const foamMesh = new THREE.InstancedMesh(foamGeo, foamMat, FOAM_COUNT);
+  foamMesh.frustumCulled = false;
+  foamMesh.renderOrder = 2;
+  scene.add(foamMesh);
   const foams = [];
+  const _m = new THREE.Matrix4();
+  const _q = new THREE.Quaternion();
+  const _p = new THREE.Vector3();
+  const _s = new THREE.Vector3();
+
+  function writeFoamMatrix(i, f) {
+    _p.set(f.x, -0.28, f.z);
+    _q.identity();
+    _s.setScalar(f.scale);
+    _m.compose(_p, _q, _s);
+    foamMesh.setMatrixAt(i, _m);
+  }
 
   function spawnFoam(f, fx, fz) {
     const z = fz + rand(-48, 48);
-    f.mesh.position.set(riverXAt(z) + rand(-2.2, 2.2), -0.28, z);
+    f.x = riverXAt(z) + rand(-2.2, 2.2);
+    f.z = z;
   }
 
   for (let i = 0; i < FOAM_COUNT; i++) {
     const f = {
-      mesh: new THREE.Mesh(foamGeo, foamMat),
+      x: 0,
+      z: rand(-44, 44),
+      scale: rand(0.5, 1.2),
       speed: rand(1.5, 3.2),
     };
-    f.mesh.rotation.x = -Math.PI / 2;
-    f.mesh.position.set(0, -0.28, rand(-44, 44));
-    f.mesh.scale.setScalar(rand(0.5, 1.2));
-    scene.add(f.mesh);
+    f.x = riverXAt(f.z) + rand(-2.2, 2.2);
     foams.push(f);
+    writeFoamMatrix(i, f);
   }
+  foamMesh.instanceMatrix.needsUpdate = true;
 
   function update(dt, focus) {
     const fx = focus ? focus.x : 0;
     const fz = focus ? focus.z : 0;
     water.position.x = fx;
     water.position.z = fz;
-    for (const f of foams) {
-      f.mesh.position.z += f.speed * dt;
-      if (Math.abs(f.mesh.position.z - fz) > 48 || Math.abs(f.mesh.position.x - fx) > 48) {
+    let moved = false;
+    for (let i = 0; i < foams.length; i++) {
+      const f = foams[i];
+      f.z += f.speed * dt;
+      if (Math.abs(f.z - fz) > 48 || Math.abs(f.x - fx) > 48) {
         spawnFoam(f, fx, fz);
       }
+      writeFoamMatrix(i, f);
+      moved = true;
     }
+    if (moved) foamMesh.instanceMatrix.needsUpdate = true;
   }
 
-  return { water, foams, update };
+  return { water, foams: foamMesh, update };
 }
 
 export { RIVER_HALF };

@@ -1,14 +1,36 @@
 import * as THREE from 'three';
 import { CAMERA, WORLD } from '../config.js';
 
+// Coarse device tier used to scale quality (shadows, pixel ratio, AA).
+// Mobile GPUs are fill-rate bound: MSAA + high DPR + PCFSoft shadows kill them.
+export const isMobileDevice =
+  typeof navigator !== 'undefined' &&
+  (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+    (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 820));
+
+export const QUALITY = {
+  isMobile: isMobileDevice,
+  // Desktop keeps crisp 2x; mobile caps at 1.5 (huge fill-rate win).
+  maxPixelRatio: isMobileDevice ? 1.5 : 2,
+  minPixelRatio: 1,
+  shadowSize: isMobileDevice ? 1024 : 2048,
+};
+
 // Renderer / Scene / Isometric camera / Lights.
 // Returns everything main.js needs to run the frame loop.
 export function setupCore(canvas) {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  const renderer = new THREE.WebGLRenderer({
+    canvas,
+    // MSAA 4x is expensive on tiled mobile GPUs — off there, on for desktop.
+    antialias: !isMobileDevice,
+    powerPreference: 'high-performance',
+    stencil: false,
+  });
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, QUALITY.maxPixelRatio));
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // PCFSoft looks slightly nicer but costs more ALU on mobile.
+  renderer.shadowMap.type = isMobileDevice ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.1;
@@ -61,11 +83,11 @@ export function setupCore(canvas) {
   const sun = new THREE.DirectionalLight(0xfff1d6, 1.9);
   sun.position.set(14, 24, 10);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.left = -30;
-  sun.shadow.camera.right = 30;
-  sun.shadow.camera.top = 30;
-  sun.shadow.camera.bottom = -30;
+  sun.shadow.mapSize.set(QUALITY.shadowSize, QUALITY.shadowSize);
+  sun.shadow.camera.left = -26;
+  sun.shadow.camera.right = 26;
+  sun.shadow.camera.top = 26;
+  sun.shadow.camera.bottom = -26;
   sun.shadow.camera.far = 120;
   sun.shadow.bias = -0.0006;
   scene.add(sun);

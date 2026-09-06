@@ -12,6 +12,26 @@ import { rngFromString } from './noise.js';
 const SITE_COUNT = 5;
 const EMBERS_PER_FIRE = 22;
 const SMOKE_PER_FIRE = 8;
+// Beyond this distance a fire is off-screen (ortho view spans ~±20u) — its
+// light, flame pulse and particle uploads are skipped entirely.
+const FIRE_CULL_DIST = 42;
+const LIGHT_DIST = 34;
+
+// Perf: one shared geometry set for all campsites (was: ~18 fresh geometries
+// per site per seed). Materials for flames are shared too — only ember/smoke
+// stay per-site because their opacity animates independently.
+const GEO = {
+  tent: new THREE.ConeGeometry(1.5, 1.7, 4),
+  door: new THREE.ConeGeometry(0.55, 0.9, 3),
+  sheet: new THREE.BoxGeometry(2.4, 0.06, 2.0),
+  seat: new THREE.CylinderGeometry(0.22, 0.22, 1.1, 7),
+  stone: new THREE.DodecahedronGeometry(0.16, 0),
+  log: new THREE.CylinderGeometry(0.09, 0.09, 0.9, 6),
+  flameOuter: new THREE.ConeGeometry(0.32, 0.8, 7),
+  flameInner: new THREE.ConeGeometry(0.17, 0.5, 6),
+};
+const flameOuterMat = new THREE.MeshBasicMaterial({ color: 0xff6a1f, transparent: true, opacity: 0.92 });
+const flameInnerMat = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.95 });
 
 function isFlat(x, z) {
   const h0 = proceduralGroundHeight(x, z);
@@ -46,18 +66,18 @@ function findSite(rng, cx, cz) {
 function buildTent(mats) {
   const g = new THREE.Group();
   // Low-poly A-frame tent: 4-sided cone squashed = pyramid tent.
-  const tent = new THREE.Mesh(new THREE.ConeGeometry(1.5, 1.7, 4), mats.tent);
+  const tent = new THREE.Mesh(GEO.tent, mats.tent);
   tent.position.y = 0.85;
   tent.rotation.y = Math.PI / 4;
   tent.castShadow = tent.receiveShadow = true;
   g.add(tent);
   // Dark entrance triangle.
-  const door = new THREE.Mesh(new THREE.ConeGeometry(0.55, 0.9, 3), mats.door);
+  const door = new THREE.Mesh(GEO.door, mats.door);
   door.position.set(0, 0.45, 1.02);
   door.rotation.y = Math.PI;
   g.add(door);
   // Ground sheet.
-  const sheet = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.06, 2.0), mats.sheet);
+  const sheet = new THREE.Mesh(GEO.sheet, mats.sheet);
   sheet.position.y = 0.03;
   sheet.receiveShadow = true;
   g.add(sheet);
@@ -69,7 +89,7 @@ function buildFirePit(mats) {
   // Stone ring.
   for (let i = 0; i < 7; i++) {
     const a = (i / 7) * Math.PI * 2;
-    const st = new THREE.Mesh(new THREE.DodecahedronGeometry(0.16, 0), mats.stone);
+    const st = new THREE.Mesh(GEO.stone, mats.stone);
     st.position.set(Math.cos(a) * 0.55, 0.1, Math.sin(a) * 0.55);
     st.rotation.set(a, a * 2, 0);
     st.castShadow = true;
@@ -77,7 +97,7 @@ function buildFirePit(mats) {
   }
   // Crossed logs.
   for (let i = 0; i < 3; i++) {
-    const log = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.9, 6), mats.log);
+    const log = new THREE.Mesh(GEO.log, mats.log);
     const a = (i / 3) * Math.PI;
     log.position.y = 0.12;
     log.rotation.set(Math.PI / 2, 0, a);
@@ -85,15 +105,9 @@ function buildFirePit(mats) {
     g.add(log);
   }
   // Flame cones (emissive; scale-pulsed in update).
-  const flameOuter = new THREE.Mesh(
-    new THREE.ConeGeometry(0.32, 0.8, 7),
-    new THREE.MeshBasicMaterial({ color: 0xff6a1f, transparent: true, opacity: 0.92 }),
-  );
+  const flameOuter = new THREE.Mesh(GEO.flameOuter, flameOuterMat);
   flameOuter.position.y = 0.55;
-  const flameInner = new THREE.Mesh(
-    new THREE.ConeGeometry(0.17, 0.5, 6),
-    new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.95 }),
-  );
+  const flameInner = new THREE.Mesh(GEO.flameInner, flameInnerMat);
   flameInner.position.y = 0.45;
   g.add(flameOuter, flameInner);
   return { group: g, flameOuter, flameInner };
@@ -125,7 +139,7 @@ function buildCampsite(pos, rotY, mats) {
   // Log seats around the fire.
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2 + 0.4;
-    const seat = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.1, 7), mats.log);
+    const seat = new THREE.Mesh(GEO.seat, mats.log);
     seat.position.set(Math.cos(a) * 1.5, 0.22, Math.sin(a) * 1.5);
     seat.rotation.set(Math.PI / 2, 0, -a + Math.PI / 2);
     seat.castShadow = seat.receiveShadow = true;
@@ -245,11 +259,25 @@ export function createCampsites(scene, seed = 'FOREST_123') {
     },
     update(dt, elapsed, focus, nightFactor = 0) {
       const nf = THREE.MathUtils.clamp(nightFactor, 0, 1);
+      const fx = focus ? focus.x : 0;
+      const fz = focus ? focus.z : 0;
       for (const s of sites) {
+        const dx = s.pos.x - fx;
+        const dz = s.pos.z - fz;
+        const d2 = dx * dx + dz * dz;
+        // Perf: a forward renderer pays for EVERY PointLight on every lit
+        // fragment. Far fires are off-screen anyway — hide their light so the
+        // renderer drops it from the shader setup, and skip their animation.
+        const lightOn = d2 < LIGHT_DIST * LIGHT_DIST;
+        s.light.visible = lightOn;
+        if (d2 > FIRE_CULL_DIST * FIRE_CULL_DIST) continue;
         // Doc: light.intensity = base + random flicker; warmer at night.
-        const flicker = Math.sin(elapsed * 13 + s.phase) * 0.15
-          + Math.sin(elapsed * 29 + s.phase * 2) * 0.08
-          + (Math.random() - 0.5) * 0.35;
+        // Skipped entirely when the light is culled (invisible = free).
+        const flicker = lightOn
+          ? Math.sin(elapsed * 13 + s.phase) * 0.15
+            + Math.sin(elapsed * 29 + s.phase * 2) * 0.08
+            + (Math.random() - 0.5) * 0.35
+          : 0;
         const dayBase = 0.9;
         const nightBase = 2.4;
         s.light.intensity = THREE.MathUtils.lerp(dayBase, nightBase, nf) + flicker * (0.5 + nf);

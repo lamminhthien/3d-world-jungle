@@ -42,6 +42,11 @@ const snowPinePalette = [0xdfeee8, 0xcfe3d8, 0x9fc3b4];
 
 const keyOf = (cx, cz) => `${cx},${cz}`;
 
+// Shared scratch color for setColorAt calls. setColorAt() copies the values
+// into the instance buffer, so reuse across placements is safe and avoids
+// thousands of short-lived Color objects on every vegetation rebuild.
+const _col = new THREE.Color();
+
 export function createWorldManager(scene, seedStr) {
   if (seedStr) initProcedural(seedStr);
   const groundMat = new THREE.MeshStandardMaterial({
@@ -61,7 +66,11 @@ export function createWorldManager(scene, seedStr) {
   const rockMesh = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), flatMat(0xffffff), POOL.rocks);
   const pools = [trunkMesh, pineMesh, blobMesh, palmMesh, bushMesh, cactusMesh, rockMesh];
   for (const m of pools) {
-    m.castShadow = m.receiveShadow = true;
+    // Perf: vegetation casts onto the ground but never receives — receiving
+    // doubles the shadow-sampling cost on every instanced fragment, and the
+    // flat-shaded look hides the difference.
+    m.castShadow = true;
+    m.receiveShadow = false;
     m.frustumCulled = false; // instances span the whole visible area
     scene.add(m);
   }
@@ -119,7 +128,7 @@ export function createWorldManager(scene, seedStr) {
       if (biome === BIOMES.JUNGLE) {
         if (roll < 0.42 && bucket.ti < POOL.trees) {
           const s = rand(rng, 0.8, 1.5);
-          trunkMesh.setColorAt(bucket.ti, new THREE.Color(0x8a5a3b).offsetHSL(0, 0, rand(rng, -0.03, 0.03)));
+          trunkMesh.setColorAt(bucket.ti, _col.set(0x8a5a3b).offsetHSL(0, 0, rand(rng, -0.03, 0.03)));
           dummy.position.set(x, y + 0.7 * s, z);
           dummy.rotation.set(rand(rng, -0.08, 0.08), rand(rng, 0, 6.28), rand(rng, -0.08, 0.08));
           dummy.scale.setScalar(s);
@@ -129,7 +138,7 @@ export function createWorldManager(scene, seedStr) {
           const kind = rng();
           if (kind < 0.45) {
             for (let k = 0; k < 2 && bucket.pi < POOL.crowns; k++) {
-              pineMesh.setColorAt(bucket.pi, new THREE.Color(pick(rng, pinePalette)));
+              pineMesh.setColorAt(bucket.pi, _col.set(pick(rng, pinePalette)));
               dummy.position.set(x, y + (1.9 + k * 1.15) * s, z);
               dummy.rotation.set(0, rand(rng, 0, 6.28), 0);
               dummy.scale.setScalar(s * (k === 0 ? 1 : 0.68));
@@ -138,7 +147,7 @@ export function createWorldManager(scene, seedStr) {
             }
           } else if (kind < 0.8) {
             for (let k = 0; k < 2 && bucket.bi < POOL.crowns; k++) {
-              blobMesh.setColorAt(bucket.bi, new THREE.Color(pick(rng, blobPalette)));
+              blobMesh.setColorAt(bucket.bi, _col.set(pick(rng, blobPalette)));
               dummy.position.set(x + rand(rng, -0.4, 0.4) * s, y + (2.1 + k * 0.8) * s, z + rand(rng, -0.4, 0.4) * s);
               dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), 0);
               dummy.scale.set(s * rand(rng, 0.9, 1.2), s * rand(rng, 0.8, 1), s * rand(rng, 0.9, 1.2));
@@ -154,7 +163,7 @@ export function createWorldManager(scene, seedStr) {
             trunkMesh.setMatrixAt(bucket.ti - 1, dummy.matrix);
             const topY = y + 2.2 * s;
             for (let k = 0; k < 5; k++) {
-              palmMesh.setColorAt(bucket.palmi, new THREE.Color(0x37b24d).offsetHSL(0, 0, rand(rng, -0.03, 0.03)));
+              palmMesh.setColorAt(bucket.palmi, _col.set(0x37b24d).offsetHSL(0, 0, rand(rng, -0.03, 0.03)));
               const a = (k / 5) * Math.PI * 2;
               dummy.position.set(x + 0.25 + Math.cos(a) * 1.05 * s, topY + rand(rng, -0.15, 0.25), z + 0.2 + Math.sin(a) * 1.05 * s);
               dummy.rotation.set(Math.PI / 2.3, 0, -a + Math.PI / 2);
@@ -163,7 +172,7 @@ export function createWorldManager(scene, seedStr) {
               palmMesh.setMatrixAt(bucket.palmi++, dummy.matrix);
             }
             if (bucket.bi < POOL.crowns) {
-              blobMesh.setColorAt(bucket.bi, new THREE.Color(0x5c3d24));
+              blobMesh.setColorAt(bucket.bi, _col.set(0x5c3d24));
               dummy.position.set(x + 0.25, topY - 0.15, z + 0.2);
               dummy.rotation.set(0, 0, 0);
               dummy.scale.setScalar(0.28 * s);
@@ -172,7 +181,7 @@ export function createWorldManager(scene, seedStr) {
             }
           }
         } else if (roll < 0.62 && bucket.bu < POOL.bushes) {
-          bushMesh.setColorAt(bucket.bu, new THREE.Color(0x69b93e).offsetHSL(rand(rng, -0.02, 0.02), 0, rand(rng, -0.04, 0.04)));
+          bushMesh.setColorAt(bucket.bu, _col.set(0x69b93e).offsetHSL(rand(rng, -0.02, 0.02), 0, rand(rng, -0.04, 0.04)));
           dummy.position.set(x, y + 0.3, z);
           dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), 0);
           dummy.scale.setScalar(rand(rng, 0.6, 1.4));
@@ -180,7 +189,7 @@ export function createWorldManager(scene, seedStr) {
           bushMesh.setMatrixAt(bucket.bu++, dummy.matrix);
         } else if (roll < 0.7 && bucket.ri < POOL.rocks) {
           const s = rand(rng, 0.4, 0.9);
-          rockMesh.setColorAt(bucket.ri, new THREE.Color(0x9aa0a3).offsetHSL(0, -0.05, rand(rng, -0.05, 0.02)));
+          rockMesh.setColorAt(bucket.ri, _col.set(0x9aa0a3).offsetHSL(0, -0.05, rand(rng, -0.05, 0.02)));
           dummy.position.set(x, y + s * 0.25, z);
           dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), rand(rng, 0, 3));
           dummy.scale.set(s, s * 0.7, s);
@@ -190,7 +199,7 @@ export function createWorldManager(scene, seedStr) {
       } else if (biome === BIOMES.DESERT) {
         if (roll < 0.3 && bucket.ci < POOL.cacti) {
           const s = rand(rng, 0.7, 1.4);
-          cactusMesh.setColorAt(bucket.ci, new THREE.Color(0x2f9e44).offsetHSL(rand(rng, -0.02, 0.02), 0.05, rand(rng, -0.03, 0.03)));
+          cactusMesh.setColorAt(bucket.ci, _col.set(0x2f9e44).offsetHSL(rand(rng, -0.02, 0.02), 0.05, rand(rng, -0.03, 0.03)));
           dummy.position.set(x, y + 1.1 * s, z);
           dummy.rotation.set(0, rand(rng, 0, 6.28), 0);
           dummy.scale.set(s, s, s);
@@ -199,7 +208,7 @@ export function createWorldManager(scene, seedStr) {
           obstacles.push({ x, z, r: 0.5 * s });
         } else if (roll < 0.45 && bucket.ri < POOL.rocks) {
           const s = rand(rng, 0.5, 1.1);
-          rockMesh.setColorAt(bucket.ri, new THREE.Color(0xc2a06b));
+          rockMesh.setColorAt(bucket.ri, _col.set(0xc2a06b));
           dummy.position.set(x, y + s * 0.25, z);
           dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), rand(rng, 0, 3));
           dummy.scale.set(s, s * 0.7, s);
@@ -207,7 +216,7 @@ export function createWorldManager(scene, seedStr) {
           rockMesh.setMatrixAt(bucket.ri++, dummy.matrix);
           if (s > 0.9) obstacles.push({ x, z, r: s * 0.8 });
         } else if (roll < 0.55 && bucket.bu < POOL.bushes) {
-          bushMesh.setColorAt(bucket.bu, new THREE.Color(0xb5a642));
+          bushMesh.setColorAt(bucket.bu, _col.set(0xb5a642));
           dummy.position.set(x, y + 0.25, z);
           dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), 0);
           dummy.scale.setScalar(rand(rng, 0.5, 0.9));
@@ -218,7 +227,7 @@ export function createWorldManager(scene, seedStr) {
         const snowy = biome === BIOMES.SNOW;
         if (roll < 0.34 && bucket.ti < POOL.trees && bucket.pi + 2 < POOL.crowns) {
           const s = rand(rng, 0.7, 1.2);
-          trunkMesh.setColorAt(bucket.ti, new THREE.Color(snowy ? 0x6b4f35 : 0x7a5233));
+          trunkMesh.setColorAt(bucket.ti, _col.set(snowy ? 0x6b4f35 : 0x7a5233));
           dummy.position.set(x, y + 0.7 * s, z);
           dummy.rotation.set(0, rand(rng, 0, 6.28), 0);
           dummy.scale.setScalar(s);
@@ -226,7 +235,7 @@ export function createWorldManager(scene, seedStr) {
           trunkMesh.setMatrixAt(bucket.ti++, dummy.matrix);
           obstacles.push({ x, z, r: 0.55 * s });
           for (let k = 0; k < 2 && bucket.pi < POOL.crowns; k++) {
-            pineMesh.setColorAt(bucket.pi, new THREE.Color(pick(rng, snowy ? snowPinePalette : pinePalette)));
+            pineMesh.setColorAt(bucket.pi, _col.set(pick(rng, snowy ? snowPinePalette : pinePalette)));
             dummy.position.set(x, y + (1.9 + k * 1.15) * s, z);
             dummy.rotation.set(0, rand(rng, 0, 6.28), 0);
             dummy.scale.setScalar(s * (k === 0 ? 1 : 0.68));
@@ -235,7 +244,7 @@ export function createWorldManager(scene, seedStr) {
           }
         } else if (roll < 0.6 && bucket.ri < POOL.rocks) {
           const s = rand(rng, 0.6, 1.6);
-          rockMesh.setColorAt(bucket.ri, new THREE.Color(snowy ? 0xb9c2c9 : 0x7d848b));
+          rockMesh.setColorAt(bucket.ri, _col.set(snowy ? 0xb9c2c9 : 0x7d848b));
           dummy.position.set(x, y + s * 0.25, z);
           dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), rand(rng, 0, 3));
           dummy.scale.set(s * rand(rng, 0.8, 1.3), s * rand(rng, 0.6, 1), s * rand(rng, 0.8, 1.3));
@@ -247,7 +256,7 @@ export function createWorldManager(scene, seedStr) {
         // BEACH: sparse palms + shells (rocks tinted sand)
         if (roll < 0.12 && bucket.ri < POOL.rocks) {
           const s = rand(rng, 0.3, 0.6);
-          rockMesh.setColorAt(bucket.ri, new THREE.Color(0xd9c9a3));
+          rockMesh.setColorAt(bucket.ri, _col.set(0xd9c9a3));
           dummy.position.set(x, y + s * 0.2, z);
           dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), 0);
           dummy.scale.setScalar(s);
@@ -283,14 +292,16 @@ export function createWorldManager(scene, seedStr) {
   function ensureAround(px, pz) {
     const ccx = Math.floor(px / CHUNK_SIZE);
     const ccz = Math.floor(pz / CHUNK_SIZE);
+    // Perf: cheap string check first — avoids allocating a 25-entry Set plus
+    // key strings on every frame when the player hasn't crossed a chunk.
+    const wantKey = `${getSeed()}@${ccx},${ccz}`;
+    if (wantKey === visibleKey) return false;
     const want = new Set();
     for (let dx = -CHUNK_RADIUS; dx <= CHUNK_RADIUS; dx++) {
       for (let dz = -CHUNK_RADIUS; dz <= CHUNK_RADIUS; dz++) {
         want.add(keyOf(ccx + dx, ccz + dz));
       }
     }
-    const wantKey = `${getSeed()}@${keyOf(ccx, ccz)}`;
-    if (wantKey === visibleKey) return false;
     // Remove far chunks (dispose GPU geometry).
     for (const [key, mesh] of groundChunks) {
       if (!want.has(key)) {

@@ -62,12 +62,12 @@ function sampleStops(t, out) {
   return out;
 }
 
-function mixWx(prev, next, blend) {
+function mixWx(prev, next, blend, out) {
   const A = WX[prev];
   const B = WX[next];
-  const o = {};
+  const o = out || {};
   for (const k of ['sun', 'hemi', 'fogNear', 'fogFar', 'cloud', 'rain', 'wet']) o[k] = THREE.MathUtils.lerp(A[k], B[k], blend);
-  o.fogTint = new THREE.Color(A.fogTint).lerp(_ca.set(B.fogTint), blend);
+  (o.fogTint || (o.fogTint = new THREE.Color())).set(A.fogTint).lerp(_ca.set(B.fogTint), blend);
   return o;
 }
 
@@ -261,11 +261,11 @@ export function createEnvironment(scene, opts = {}) {
 
   // ---- Sun + moon billboards ----
   const sunMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(4, 16, 16),
+    new THREE.SphereGeometry(4, 12, 12),
     new THREE.MeshBasicMaterial({ color: 0xfff6d8, fog: false, transparent: true, opacity: 0.95 }),
   );
   const moonMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(2.8, 16, 16),
+    new THREE.SphereGeometry(2.8, 12, 12),
     new THREE.MeshBasicMaterial({ color: 0xdce8ff, fog: false, transparent: true, opacity: 0.9 }),
   );
   sunMesh.frustumCulled = moonMesh.frustumCulled = false;
@@ -282,23 +282,17 @@ export function createEnvironment(scene, opts = {}) {
   scene.add(moonHalo);
 
   // ---- Moonlight (doc section 2: icy-blue #a1c4fd, 180° opposite the sun) ----
-  // Second directional light on the mirrored orbit, with soft shadows so trees
-  // / player cast faint moon-shadows. A pale halo billboard fakes god-ray glow
-  // through the low-poly canopy (cheap moon-shaft feel + FogExp2-like depth).
+  // Second directional light on the mirrored orbit so trees / player cast faint
+  // moon-shadows. NOTE (perf): castShadow stays OFF — a second shadow map would
+  // double the geometry pass every frame; the sun map already gives depth.
+  // A pale halo billboard fakes god-ray glow through the low-poly canopy.
   const moonLight = new THREE.DirectionalLight(0xa1c4fd, 0);
-  moonLight.castShadow = true;
-  moonLight.shadow.mapSize.set(1024, 1024);
-  moonLight.shadow.camera.left = -30;
-  moonLight.shadow.camera.right = 30;
-  moonLight.shadow.camera.top = 30;
-  moonLight.shadow.camera.bottom = -30;
-  moonLight.shadow.camera.far = 120;
-  moonLight.shadow.bias = -0.0006;
+  moonLight.castShadow = false;
   scene.add(moonLight); scene.add(moonLight.target);
 
   // ---- Rain particles (box around focus, wraps) ----
   // Giảm mật độ + size để không mù mịt che màn hình iso.
-  const RAIN_N = 700;
+  const RAIN_N = 450;
   const RAIN_BOX = 36;
   const RAIN_H = 18;
   const rainPos = new Float32Array(RAIN_N * 3);
@@ -392,6 +386,8 @@ export function createEnvironment(scene, opts = {}) {
   const sunDir = new THREE.Vector3();
   const moonDir = new THREE.Vector3();
   const focusV = new THREE.Vector3();
+  const wxMix = {};
+  const moonTint = new THREE.Color(0xdce8ff);
   let hudAcc = 1;
 
   const api = {
@@ -425,7 +421,7 @@ export function createEnvironment(scene, opts = {}) {
           api.setWeather(rollNextWeather());
         }
       }
-      const wx = mixWx(state.prevWeather, state.weather, state.blend);
+      const wx = mixWx(state.prevWeather, state.weather, state.blend, wxMix);
       state.wetness += (wx.wet - state.wetness) * Math.min(1, dt * (wx.wet > state.wetness ? 0.5 : 0.08));
 
       if (focus) focusV.set(focus.x, 0, focus.z);
@@ -490,7 +486,7 @@ export function createEnvironment(scene, opts = {}) {
       skyUniforms.topColor.value.copy(sample.top).lerp(_ca.set(wx.fogTint), state.weather === 'clear' ? 0 : 0.25);
       skyUniforms.bottomColor.value.copy(sample.bot).lerp(_ca.set(wx.fogTint), state.weather === 'clear' ? 0 : 0.25);
       skyUniforms.sunDir.value.copy(isDay ? sunDir : moonDir);
-      skyUniforms.sunColor.value.copy(isDay ? sample.sunColor : new THREE.Color(0xdce8ff));
+      skyUniforms.sunColor.value.copy(isDay ? sample.sunColor : moonTint);
       skyUniforms.sunGlow.value = isDay ? 0.6 * wx.sun + 0.15 : 0.25;
       skydome.position.copy(focusV);
       stars.position.copy(focusV);

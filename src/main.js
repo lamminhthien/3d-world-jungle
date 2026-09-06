@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { DEFAULT_SEED, ENV, RIVER_HALF, SPEED, WORLD } from './config.js';
 import { groundHeight, isOnBridge, obstacles, riverDist } from './utils.js';
-import { setupCore } from './core/setup.js';
+import { QUALITY, setupCore } from './core/setup.js';
 import { createWorldManager } from './world/chunks.js';
 import { createRiver } from './world/river.js';
 import { createBridges, removeBridges } from './world/bridge.js';
@@ -95,6 +95,11 @@ let fpsT = 0;
 // ============ Movement + world update ============
 let walkTime = 0;
 const clock = new THREE.Clock();
+// Perf: reused scratch vectors — update() runs every frame, so no `new`.
+const _fwd = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _move = new THREE.Vector3();
+const _desired = new THREE.Vector3();
 
 function update(dt) {
   let ix = 0;
@@ -110,24 +115,27 @@ function update(dt) {
   if (moving) {
     // Camera-relative movement on the ground plane.
     const az = state.azimuth;
-    const fwd = new THREE.Vector3(-Math.cos(az), 0, -Math.sin(az));
-    const right = new THREE.Vector3(Math.sin(az), 0, -Math.cos(az));
+    _fwd.set(-Math.cos(az), 0, -Math.sin(az));
+    _right.set(Math.sin(az), 0, -Math.cos(az));
 
     const len = Math.hypot(ix, iz);
     ix /= Math.max(1, len);
     iz /= Math.max(1, len);
-    const move = new THREE.Vector3().addScaledVector(fwd, -iz).addScaledVector(right, ix).normalize();
+    _move.set(0, 0, 0).addScaledVector(_fwd, -iz).addScaledVector(_right, ix).normalize();
 
-    let nx = player.position.x + move.x * SPEED * dt;
-    let nz = player.position.z + move.z * SPEED * dt;
+    let nx = player.position.x + _move.x * SPEED * dt;
+    let nz = player.position.z + _move.z * SPEED * dt;
 
-    // Circle collision against trees / rocks / cacti.
-    for (const o of obstacles) {
+    // Circle collision against trees / rocks / cacti (squared distances —
+    // Math.hypot per obstacle per frame is needlessly slow).
+    for (let i = 0; i < obstacles.length; i++) {
+      const o = obstacles[i];
       const dx = nx - o.x;
       const dz = nz - o.z;
-      const d = Math.hypot(dx, dz);
       const min = o.r + 0.45;
-      if (d < min && d > 1e-4) {
+      const d2 = dx * dx + dz * dz;
+      if (d2 < min * min && d2 > 1e-8) {
+        const d = Math.sqrt(d2);
         nx = o.x + (dx / d) * min;
         nz = o.z + (dz / d) * min;
       }
@@ -147,7 +155,7 @@ function update(dt) {
 
     player.position.x = nx;
     player.position.z = nz;
-    player.rotation.y = Math.atan2(move.x, move.z);
+    player.rotation.y = Math.atan2(_move.x, _move.z);
 
     walkTime += dt * 10;
     const sw = Math.sin(walkTime);
@@ -183,16 +191,15 @@ function update(dt) {
   camps.update(dt, clock.elapsedTime, player.position, nf);
 
   // Smooth camera follow (sun position itself is set by the environment).
-  camTarget.lerp(new THREE.Vector3(player.position.x, 0.5, player.position.z), Math.min(1, dt * 4));
+  _desired.set(player.position.x, 0.5, player.position.z);
+  camTarget.lerp(_desired, Math.min(1, dt * 4));
   updateCameraPos();
-
-  if (chunkEl) {
-    const s = world.stats();
-    chunkEl.textContent = `${s.chunks} chunks · ${s.seed}`;
-  }
 }
 
 // ============ Loop ============
+const prCap = Math.min(devicePixelRatio || 1, QUALITY.maxPixelRatio);
+let qualityCooldown = 0;
+
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
@@ -203,8 +210,27 @@ function animate() {
   fpsN++;
   fpsT += dt;
   if (fpsT > 0.5) {
-    fpsEl.textContent = `${Math.round(fpsAcc / fpsN)} FPS`;
+    const avg = fpsAcc / fpsN;
+    fpsEl.textContent = `${Math.round(avg)} FPS`;
     posEl.textContent = `x: ${player.position.x.toFixed(1)}, z: ${player.position.z.toFixed(1)}`;
+    // Perf: DOM writes throttled to 2Hz (was: chunk label every frame).
+    if (chunkEl) {
+      const s = world.stats();
+      chunkEl.textContent = `${s.chunks} chunks · ${s.seed}`;
+    }
+    // Adaptive resolution: if the GPU can't hold ~45fps, step the pixel
+    // ratio down (min 1.0); step back up when headroom returns. This is what
+    // saves weak Android GPUs without touching desktop quality.
+    qualityCooldown += fpsT;
+    if (qualityCooldown > 2.5) {
+      qualityCooldown = 0;
+      const pr = renderer.getPixelRatio();
+      if (avg < 45 && pr > QUALITY.minPixelRatio) {
+        renderer.setPixelRatio(Math.max(QUALITY.minPixelRatio, pr - 0.25));
+      } else if (avg > 57 && pr < prCap) {
+        renderer.setPixelRatio(Math.min(prCap, pr + 0.25));
+      }
+    }
     fpsAcc = 0;
     fpsN = 0;
     fpsT = 0;
