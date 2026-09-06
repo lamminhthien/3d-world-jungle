@@ -18,16 +18,21 @@ const WEATHER_ICON = { clear: '☀️', overcast: '☁️', rain: '🌧️', fog
 // ---- Day keyframes (lerped) ----
 // t: hour, sun: color/intensity (day star), sky top/bottom, fog, exposure, stars
 const STOPS = [
-  { t: 0,  sun: 0x8fb4ff, sunInt: 0.0,  hemiInt: 0.38, ambInt: 0.22, top: 0x0a1428, bot: 0x1b3350, fog: 0x16283a, exp: 0.9, stars: 1.0 },
-  { t: 4.5, sun: 0x8fb4ff, sunInt: 0.0, hemiInt: 0.38, ambInt: 0.22, top: 0x0a1428, bot: 0x1b3350, fog: 0x16283a, exp: 0.9, stars: 1.0 },
-  { t: 5.5, sun: 0xff9a5c, sunInt: 0.35, hemiInt: 0.4, ambInt: 0.14, top: 0x4a6fa5, bot: 0xffb37a, fog: 0xd9a06f, exp: 0.9, stars: 0.25 },
-  { t: 7,  sun: 0xffd9a8, sunInt: 1.1,  hemiInt: 0.6,  ambInt: 0.18, top: 0x3d9be9, bot: 0xcfeef7, fog: 0xb8ddef, exp: 1.0,  stars: 0.0 },
-  { t: 9,  sun: 0xfff3e0, sunInt: 1.9,  hemiInt: 0.95, ambInt: 0.25, top: 0x2f9de4, bot: 0xbfe9f5, fog: 0xa8dcf0, exp: 1.1,  stars: 0.0 },
-  { t: 15.5, sun: 0xfff3e0, sunInt: 1.9, hemiInt: 0.95, ambInt: 0.25, top: 0x2f9de4, bot: 0xbfe9f5, fog: 0xa8dcf0, exp: 1.1, stars: 0.0 },
-  { t: 17, sun: 0xffb37a, sunInt: 1.2,  hemiInt: 0.6,  ambInt: 0.18, top: 0x3a7bd5, bot: 0xffc98a, fog: 0xd9ac7f, exp: 1.0,  stars: 0.0 },
-  { t: 18.5, sun: 0xff6b6b, sunInt: 0.4, hemiInt: 0.36, ambInt: 0.12,  top: 0x2b3a67, bot: 0xff8e63, fog: 0x8a6a72, exp: 0.9, stars: 0.2 },
-  { t: 19.5, sun: 0x8fb4ff, sunInt: 0.0, hemiInt: 0.38, ambInt: 0.22, top: 0x0a1428, bot: 0x1b3350, fog: 0x16283a, exp: 0.9, stars: 1.0 },
-  { t: 24, sun: 0x8fb4ff, sunInt: 0.0,   hemiInt: 0.38, ambInt: 0.22, top: 0x0a1428, bot: 0x1b3350, fog: 0x16283a, exp: 0.9, stars: 1.0 },
+  { t: 0,    sun: 0x8fb4ff, sunInt: 0.0,  hemiInt: 0.38, ambInt: 0.22, top: 0x0a1428, bot: 0x1b3350, fog: 0x16283a, exp: 0.9, stars: 1.0 },
+  { t: 4.5,  sun: 0x8fb4ff, sunInt: 0.0,  hemiInt: 0.38, ambInt: 0.22, top: 0x0a1428, bot: 0x1b3350, fog: 0x16283a, exp: 0.9, stars: 1.0 },
+  // SUNRISE — vivid orange/amber glow
+  { t: 5.5,  sun: 0xff6600, sunInt: 0.55, hemiInt: 0.42, ambInt: 0.16, top: 0x3d2a6e, bot: 0xff7730, fog: 0xff8850, exp: 0.88, stars: 0.2 },
+  { t: 6.5,  sun: 0xffb060, sunInt: 0.9,  hemiInt: 0.55, ambInt: 0.18, top: 0x4a6fa5, bot: 0xffa060, fog: 0xe8905a, exp: 0.95, stars: 0.0 },
+  { t: 7,    sun: 0xffd9a8, sunInt: 1.1,  hemiInt: 0.6,  ambInt: 0.18, top: 0x3d9be9, bot: 0xcfeef7, fog: 0xb8ddef, exp: 1.0,  stars: 0.0 },
+  { t: 9,    sun: 0xfff3e0, sunInt: 1.9,  hemiInt: 0.95, ambInt: 0.25, top: 0x2f9de4, bot: 0xbfe9f5, fog: 0xa8dcf0, exp: 1.1,  stars: 0.0 },
+  { t: 15.5, sun: 0xfff3e0, sunInt: 1.9,  hemiInt: 0.95, ambInt: 0.25, top: 0x2f9de4, bot: 0xbfe9f5, fog: 0xa8dcf0, exp: 1.1,  stars: 0.0 },
+  // GOLDEN HOUR
+  { t: 16.5, sun: 0xffaa44, sunInt: 1.5,  hemiInt: 0.75, ambInt: 0.2,  top: 0x3a7bd5, bot: 0xffcc88, fog: 0xf0a866, exp: 1.05, stars: 0.0 },
+  // SUNSET — deep amber top, vivid coral/orange bottom
+  { t: 17.5, sun: 0xff5500, sunInt: 1.1,  hemiInt: 0.5,  ambInt: 0.16, top: 0x1e2d6e, bot: 0xff6a00, fog: 0xff7733, exp: 0.95, stars: 0.0 },
+  { t: 18.2, sun: 0xff3355, sunInt: 0.5,  hemiInt: 0.38, ambInt: 0.13, top: 0x160d38, bot: 0xcc3322, fog: 0x7a3040, exp: 0.88, stars: 0.25 },
+  { t: 19.0, sun: 0x8fb4ff, sunInt: 0.0,  hemiInt: 0.38, ambInt: 0.22, top: 0x0a1428, bot: 0x1b3350, fog: 0x16283a, exp: 0.9, stars: 1.0 },
+  { t: 24,   sun: 0x8fb4ff, sunInt: 0.0,  hemiInt: 0.38, ambInt: 0.22, top: 0x0a1428, bot: 0x1b3350, fog: 0x16283a, exp: 0.9, stars: 1.0 },
 ];
 
 // Weather modifiers applied on top of the time-of-day sample.
@@ -447,6 +452,16 @@ export function createEnvironment(scene, opts = {}) {
   }
   buildHud();
 
+  // ---- Sunset / sunrise CSS overlay (zero GPU cost, pure CSS) ----
+  // A radial gradient div that fades in when sun is near the horizon,
+  // giving a warm orange god-ray bleed over the screen.
+  let sunsetOverlay = document.getElementById('sunset-overlay');
+  if (!sunsetOverlay) {
+    sunsetOverlay = document.createElement('div');
+    sunsetOverlay.id = 'sunset-overlay';
+    document.body.appendChild(sunsetOverlay);
+  }
+
   function fmtTime(t) {
     const h = Math.floor(t) % 24;
     const m = Math.floor((t - Math.floor(t)) * 60);
@@ -584,6 +599,12 @@ export function createEnvironment(scene, opts = {}) {
       sunMesh.position.set(focusV.x + sunDir.x * 130, sunDir.y * 130, focusV.z + sunDir.z * 130);
       sunMesh.visible = sunDir.y > -0.08;
       sunMesh.material.opacity = THREE.MathUtils.clamp(sunDir.y * 4 + 0.4, 0, 0.95);
+      // Horizon glow: sun grows dramatically near sunrise/sunset
+      const horizonProx = THREE.MathUtils.clamp(1 - Math.abs(sunDir.y) * 6, 0, 1);
+      const sunScale = 1 + horizonProx * 2.5;
+      sunMesh.scale.setScalar(sunScale);
+      sunMesh.material.color.setHex(horizonProx > 0.3 ? 0xff6600 : 0xfff6d8);
+
       moonMesh.position.set(focusV.x + moonDir.x * 130, moonDir.y * 130, focusV.z + moonDir.z * 130);
       moonMesh.visible = moonDir.y > -0.05;
       // Overcast / rain veils the moon; drifting clouds cross it for an
@@ -593,6 +614,17 @@ export function createEnvironment(scene, opts = {}) {
       moonHalo.position.copy(moonMesh.position);
       moonHalo.visible = moonMesh.visible;
       moonHalo.material.opacity = nightF * 0.16 * veil;
+
+      // --- Sunset CSS overlay: warm orange radial glow near horizon ---
+      if (sunsetOverlay) {
+        // Intensity: max when sun is at horizon ±15° (|sunDir.y| < 0.26)
+        const isSunset = state.timeOfDay > 14 && state.timeOfDay < 21;
+        const isSunrise = state.timeOfDay > 4 && state.timeOfDay < 9;
+        const overlayIntensity = (isSunset || isSunrise)
+          ? THREE.MathUtils.clamp(1 - Math.abs(sunDir.y) * 4.5, 0, 1) * 0.55 * wx.sun
+          : 0;
+        sunsetOverlay.style.opacity = overlayIntensity.toFixed(3);
+      }
 
       // --- clouds: thicker + grayer when overcast/rain, dark blue-grey at night ---
       if (cloudMat) {

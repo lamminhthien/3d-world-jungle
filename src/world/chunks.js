@@ -240,11 +240,22 @@ export function createWorldManager(scene, seedStr) {
             snowy ? 0xb9c2c9 : 0x7d848b);
         }
       } else {
-        // BEACH: sparse palms + shells (rocks tinted sand) + dune grass.
-        if (roll < 0.12 && bucket.ri < POOL.rocks) {
-          placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.3, 0.6), rng, 0xd9c9a3);
-        } else if (roll < 0.22 && bucket.gi < POOL.grass) {
-          placeGrass(meshes, bucket, x, y, z, rand(rng, 0.4, 0.8), rng, PALETTES.dryGrass);
+        // BEACH: tropical palms, seashells (cream rocks), dune grass.
+        if (roll < 0.15 && bucket.ti < POOL.trees && bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.bi + 1 <= POOL.crowns) {
+          // Beach palms: shorter, wider spread
+          placePalm(meshes, bucket, obstacles, x, y, z, rand(rng, 0.65, 1.1), rng);
+        } else if (roll < 0.28 && bucket.ri < POOL.rocks) {
+          // Seashells: tiny cream-tinted rocks
+          placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.18, 0.45), rng, 0xf5f0e8);
+        } else if (roll < 0.38 && bucket.ri < POOL.rocks) {
+          // Sandy rocks
+          placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.3, 0.55), rng, 0xd9c9a3);
+        } else if (roll < 0.56 && bucket.gi < POOL.grass) {
+          // Dune grass — taller and denser
+          placeGrass(meshes, bucket, x, y, z, rand(rng, 0.5, 1.0), rng, PALETTES.dryGrass);
+        } else if (roll < 0.62 && bucket.bu < POOL.bushes) {
+          // Coastal shrubs
+          placeBush(meshes, bucket, x, y, z, rand(rng, 0.4, 0.7), rng, 0x8aac5a);
         }
       }
     }

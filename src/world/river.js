@@ -15,16 +15,16 @@ export function createRiver(scene) {
   // plane is pure overdraw on a tiled GPU; opaque lets it early-z against
   // the terrain (which sits above y=-0.32 outside the channel anyway).
   const waterMat = QUALITY.low
-    ? new THREE.MeshLambertMaterial({ color: 0x3da9c4, map: waterDetail })
+    ? new THREE.MeshLambertMaterial({ color: 0x1a95d4, map: waterDetail })
     : new THREE.MeshStandardMaterial({
-      color: 0x3da9c4,
+      color: 0x1a8fbf,
       map: waterDetail,
       bumpMap: waterBump,
-      bumpScale: 0.05,
-      roughness: 0.25,
-      metalness: 0.05,
+      bumpScale: 0.08,
+      roughness: 0.18,
+      metalness: 0.12,
       transparent: true,
-      opacity: 0.92,
+      opacity: 0.88,
     });
 
   const water = new THREE.Mesh(new THREE.PlaneGeometry(130, 130), waterMat);
@@ -37,9 +37,9 @@ export function createRiver(scene) {
 
   // Perf: foam streaks were 26 individual Meshes (= 26 draw calls). One
   // InstancedMesh keeps the exact same look for 1 draw call.
-  const foamGeo = new THREE.PlaneGeometry(0.28, 0.7);
+  const foamGeo = new THREE.PlaneGeometry(0.32, 0.85);
   foamGeo.rotateX(-Math.PI / 2);
-  const foamMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 });
+  const foamMat = new THREE.MeshBasicMaterial({ color: 0xeef8ff, transparent: true, opacity: 0.5 });
   const foamMesh = new THREE.InstancedMesh(foamGeo, foamMat, FOAM_COUNT);
   foamMesh.frustumCulled = false;
   foamMesh.renderOrder = 2;
@@ -83,9 +83,12 @@ export function createRiver(scene) {
     water.position.x = fx;
     water.position.z = fz;
     // Flow the surface grain downstream (+z) so the river visibly streams.
+    const now = performance.now();
     waterDetail.offset.y -= dt * 0.08;
-    waterBump.offset.y -= dt * 0.08;
-    waterDetail.offset.x = Math.sin(performance.now() * 0.0002) * 0.02;
+    waterDetail.offset.x = Math.sin(now * 0.0002) * 0.022;
+    // Second caustic layer: bump scrolls at 45° to detail for organic shimmer.
+    waterBump.offset.y -= dt * 0.055;
+    waterBump.offset.x += dt * 0.055;
     let moved = false;
     for (let i = 0; i < foams.length; i++) {
       const f = foams[i];
