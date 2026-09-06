@@ -111,6 +111,40 @@ export function getBiome(x, z) {
   return BIOMES.JUNGLE;
 }
 
+// ---- Hot-loop fast path (tessellation rebuilds) ----
+// buildGroundChunk + collectChunk used to call proceduralGroundHeight() AND
+// getBiome() back-to-back for the same (x,z) — each one re-runs riverDist
+// (2× fbm-3 river noise) + steppedHeight (fbm-4 height noise), i.e. ~2x the
+// noise evals. sampleGround() evaluates each noise field once and returns
+// height + biome + river distance together.
+export function sampleGround(x, z) {
+  const d = riverDist(x, z);
+  let y;
+  if (d < GEN.riverHalf) y = -0.55;
+  else if (d < GEN.riverHalf + 1.5) y = -0.25;
+  else if (d < GEN.bankOuter) y = 0.05;
+  else {
+    const s = smoothHeight(x, z);
+    const lvl = Math.min(GEN.levels, Math.floor((s / GEN.maxHeight) * GEN.levels));
+    y = lvl * GEN.stepSize;
+  }
+  let biome;
+  if (d < GEN.riverHalf + 0.4) biome = BIOMES.RIVER;
+  else if (d < GEN.bankOuter) biome = BIOMES.BEACH;
+  else {
+    // Reuse y directly instead of re-running steppedHeight().
+    const h = y;
+    if (h >= GEN.snowLine) biome = BIOMES.SNOW;
+    else if (h >= GEN.rockLine) biome = BIOMES.MOUNTAIN;
+    else {
+      const moist = moistureAt(x, z);
+      const temp = temperatureAt(x, z);
+      biome = (temp > 0.62 && moist < 0.42) ? BIOMES.DESERT : BIOMES.JUNGLE;
+    }
+  }
+  return { y, biome, d };
+}
+
 // Vertex / ground colors per biome (low-poly flat look).
 const biomeColors = {
   [BIOMES.RIVER]: [0xd9c27a, 0xcbb26a],
@@ -123,24 +157,28 @@ const biomeColors = {
 
 const _bcB = new THREE.Color();
 const _bcScratch = new THREE.Color();
-// Deterministic 0..1 hash from world coords — no extra noise evals, no rng
-// sequence shift (called ~15k×/rebuild on desktop SEG 24).
-function hashXZ(x, z) {
-  const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453;
-  return s - Math.floor(s);
+// Fast deterministic 0..1 hash from world coords — integer imul chain, no
+// Math.sin (sin stalls the FPU pipeline and was called ~15k×/rebuild).
+// Quantize to decimeters so adjacent verts in a flat tread hash consistently.
+export function hashXZ(x, z) {
+  let h = Math.imul(Math.floor(x * 10) | 0, 374761393) + Math.imul(Math.floor(z * 10) | 0, 668265263);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 export function biomeGroundColor(biome, random, target = _bcScratch, x = 0, z = 0, y = 0) {
   const [a, b] = biomeColors[biome] || biomeColors[BIOMES.JUNGLE];
-  // Perf: called per ground vertex (~7k times per full chunk rebuild), so this
-  // writes into a shared scratch color instead of allocating 2 Colors per call.
+  // Perf: called per ground vertex (~15k times per full rebuild on SEG 24).
+  // Writes into a shared scratch color (no allocs). The two lightness tweaks
+  // (random grain ±0.02 + terrace stripe ±0.012) are fused into ONE offsetHSL:
+  // each offsetHSL does an RGB->HSL->RGB round trip, so two calls = 2x cost.
   // Read r/g/b synchronously — do not hold the reference.
+  //
+  // NOTE: y here is already the stepped height, so lvl = y / stepSize needs
+  // no extra noise (Math.round matches the old behavior).
   target.setHex(a).lerp(_bcB.setHex(b), random());
-  target.offsetHSL(0, 0, (random() - 0.5) * 0.04);
-  // P0 mountain tessellation (color-only, 0 tris): alternate terrace stripes
-  // keyed to the step level so risers read as strata, plus a ragged snow edge
-  // (rock patches in snow, snow dust on high mountain) via coord hash.
   const lvl = Math.round(y / GEN.stepSize);
-  target.offsetHSL(0, 0, lvl % 2 === 0 ? 0.012 : -0.012);
+  const dl = (random() - 0.5) * 0.04 + (lvl % 2 === 0 ? 0.012 : -0.012);
+  target.offsetHSL(0, 0, dl);
   if (biome === BIOMES.SNOW) {
     if (hashXZ(x, z) < 0.18) target.lerp(_bcB.setHex(0x8d9299), 0.45);
   } else if (biome === BIOMES.MOUNTAIN) {

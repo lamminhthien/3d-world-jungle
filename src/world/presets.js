@@ -90,30 +90,50 @@ function createPalmFrondGeometry() {
 export const PALM_FRONDS = 6;
 
 // ---- P0 tessellation (docs/tessellation-improvement-plan.md) ----
-// Deterministic string hash: same position => same offset. Polyhedron
-// geometries are non-indexed soups (verts duplicated per face); keying the
-// offset by position keeps shared corners welded instead of cracking faces.
-function hashStr(s) {
+// Static pre-baked kit: every geometry below is built ONCE per page load and
+// shared by all chunks/bridges/previews (this is the "static tessellation"
+// idea — no per-frame or per-rebuild math in JS, just reuse of baked
+// ArrayBuffers uploaded to the GPU once). createVegetationKit() returns the
+// singleton; jitter/sag/bend loops never re-run on chunk crossings.
+function hashSeedInt(s) {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
-  return (h >>> 0) / 4294967296;
+  return h | 0;
+}
+
+function hashInt(n, seedInt) {
+  let h = Math.imul(n ^ seedInt, 2654435761);
+  h ^= h >>> 15;
+  h = Math.imul(h, 2246822519);
+  h ^= h >>> 13;
+  return ((h >>> 0) / 4294967296);
 }
 
 // Radial jitter: displaces each unique vertex along its radius by ±amt.
 // Same tri count, asymmetric silhouette; per-instance rotation supplies the
 // variety (3 geometries would need 3 pools = +2 draw calls, deferred to P1).
+// Integer-quantized keys (no `${toFixed}` string allocs) + imul hash (no
+// per-vertex string concat/char loop). Runs once at kit build, not per frame.
 function jitterRadial(geo, amt, seed) {
+  const seedInt = hashSeedInt(seed);
   const pos = geo.attributes.position;
+  const arr = pos.array;
   const seen = new Map();
   for (let i = 0; i < pos.count; i++) {
-    const key = `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`;
+    const xi = Math.round(arr[i * 3] * 1e4);
+    const yi = Math.round(arr[i * 3 + 1] * 1e4);
+    const zi = Math.round(arr[i * 3 + 2] * 1e4);
+    const key = (Math.imul(xi, 73856093) ^ Math.imul(yi, 19349663) ^ Math.imul(zi, 83492791)) | 0;
     let f = seen.get(key);
     if (f === undefined) {
-      f = 1 + (hashStr(seed + key) - 0.5) * 2 * amt;
+      f = 1 + (hashInt(key, seedInt) - 0.5) * 2 * amt;
       seen.set(key, f);
     }
-    pos.setXYZ(i, pos.getX(i) * f, pos.getY(i) * f, pos.getZ(i) * f);
+    arr[i * 3] *= f;
+    arr[i * 3 + 1] *= f;
+    arr[i * 3 + 2] *= f;
   }
+  pos.needsUpdate = true;
   geo.computeVertexNormals();
   return geo;
 }
@@ -184,7 +204,13 @@ function createGrassTuftGeometry() {
   return merged;
 }
 
+let _kit = null;
 export function createVegetationKit() {
+  // Singleton: tessellated geometries are static binary buffers — baking them
+  // once (~a few ms at boot) instead of per preview/per regenerate. Before,
+  // buildPresetGroup() called createVegetationKit() fresh every time, re-running
+  // jitter + grass-merge + computeVertexNormals needlessly.
+  if (_kit) return _kit;
   const geometries = {
     // P0: 7 sides + butt flare (was 6-sided hexagon, visible at spawn distance).
     trunk: new THREE.CylinderGeometry(0.22, 0.34, 1.4, 7),
@@ -208,16 +234,28 @@ export function createVegetationKit() {
     rock: texturedMat(0xffffff, getRockTexture(), getRockBump(), 0.07, { roughness: 1 }),
     grass: texturedMat(0xffffff, getLeafTexture(), getLeafBump(), 0.03, { side: THREE.DoubleSide }),
   };
-  return { geometries, materials };
+  _kit = { geometries, materials };
+  return _kit;
 }
 
 // ---- Small helpers (rng-injected so chunk gen stays deterministic) ----
 const rand = (rng, a, b) => a + rng() * (b - a);
 const pick = (rng, arr) => arr[(rng() * arr.length) | 0];
 const _col = new THREE.Color(); // shared scratch; setColorAt copies values
+// Fast tint: offsetHSL() does RGB->HSL->RGB (branchy, ~10x slower than a
+// multiply). Lightness-only jitter is visually identical as a scale, so use
+// direct channel scaling. dl in [-0.08, 0.08] typical.
+function tintFast(hex, dl) {
+  _col.set(hex);
+  const f = 1 + dl;
+  _col.r = _col.r * f > 1 ? 1 : _col.r * f;
+  _col.g = _col.g * f > 1 ? 1 : _col.g * f;
+  _col.b = _col.b * f > 1 ? 1 : _col.b * f;
+  return _col;
+}
 
 function setTrunk(meshes, bucket, obstacles, x, y, z, s, rng, tint = PALETTES.trunk) {
-  meshes.trunk.setColorAt(bucket.ti, _col.set(tint).offsetHSL(0, 0, rand(rng, -0.03, 0.03)));
+  meshes.trunk.setColorAt(bucket.ti, tintFast(tint, rand(rng, -0.03, 0.03)));
   dummy.position.set(x, y, z);
   dummy.rotation.set(rand(rng, -0.08, 0.08), rand(rng, 0, 6.28), rand(rng, -0.08, 0.08));
   dummy.scale.setScalar(s);
@@ -273,7 +311,7 @@ export function placePalm(meshes, bucket, obstacles, x, y, z, s, rng) {
     const a = (j / 3) * Math.PI * 2 + (outer ? 0 : Math.PI / 3) + rand(rng, -0.15, 0.15);
     const yaw = Math.PI / 2 - a;
     const pitch = outer ? rand(rng, 0.45, 0.65) : rand(rng, 0.08, 0.26);
-    meshes.palm.setColorAt(bucket.palmi, _col.set(PALETTES.palmLeaf).offsetHSL(0, 0, rand(rng, -0.03, 0.03)));
+    meshes.palm.setColorAt(bucket.palmi, tintFast(PALETTES.palmLeaf, rand(rng, -0.03, 0.03)));
     dummy.position.set(topX, topY + (outer ? -0.05 : 0.14) * s, topZ);
     dummy.rotation.order = 'YXZ'; // yaw, then droop pitch
     dummy.rotation.set(pitch, yaw, rand(rng, -0.12, 0.12));
@@ -292,7 +330,14 @@ export function placePalm(meshes, bucket, obstacles, x, y, z, s, rng) {
 }
 
 export function placeBush(meshes, bucket, x, y, z, s, rng, tint = PALETTES.bush) {
-  meshes.bush.setColorAt(bucket.bu, _col.set(tint).offsetHSL(rand(rng, -0.02, 0.02), 0, rand(rng, -0.04, 0.04)));
+  // Was offsetHSL(hue±0.02, 0, light±0.04): hue shift baked as r/b skew, ~10x cheaper.
+  _col.set(tint);
+  const h = rand(rng, -0.02, 0.02);
+  const l = rand(rng, -0.04, 0.04);
+  _col.r *= (1 + h + l);
+  _col.b *= (1 - h + l);
+  _col.g *= (1 + l);
+  meshes.bush.setColorAt(bucket.bu, _col);
   dummy.position.set(x, y + 0.3, z);
   dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), 0);
   dummy.scale.setScalar(s);
@@ -301,7 +346,12 @@ export function placeBush(meshes, bucket, x, y, z, s, rng, tint = PALETTES.bush)
 }
 
 export function placeCactus(meshes, bucket, obstacles, x, y, z, s, rng) {
-  meshes.cactus.setColorAt(bucket.ci, _col.set(PALETTES.cactus).offsetHSL(rand(rng, -0.02, 0.02), 0.05, rand(rng, -0.03, 0.03)));
+  _col.set(PALETTES.cactus);
+  const l = rand(rng, -0.03, 0.03) + 0.05;
+  _col.r *= (1 + l);
+  _col.g *= (1 + l);
+  _col.b *= (1 + l);
+  meshes.cactus.setColorAt(bucket.ci, _col);
   dummy.position.set(x, y + 1.1 * s, z);
   dummy.rotation.set(0, rand(rng, 0, 6.28), 0);
   dummy.scale.set(s, s, s);
@@ -313,7 +363,7 @@ export function placeCactus(meshes, bucket, obstacles, x, y, z, s, rng) {
 // Grass tuft: walkable (no obstacle), base sits exactly on the ground.
 // Caller guards `bucket.gi < POOL.grass`; POOL lives in chunks.js.
 export function placeGrass(meshes, bucket, x, y, z, s, rng, tint = PALETTES.grass) {
-  meshes.grass.setColorAt(bucket.gi, _col.set(tint).offsetHSL(rand(rng, -0.02, 0.02), 0, rand(rng, -0.04, 0.04)));
+  meshes.grass.setColorAt(bucket.gi, tintFast(tint, rand(rng, -0.04, 0.04)));
   dummy.position.set(x, y, z);
   dummy.rotation.set(0, rand(rng, 0, 6.28), 0);
   dummy.scale.setScalar(s);
@@ -322,7 +372,13 @@ export function placeGrass(meshes, bucket, x, y, z, s, rng, tint = PALETTES.gras
 }
 
 export function placeRock(meshes, bucket, obstacles, x, y, z, s, rng, tint = 0x9aa0a3, collide = false) {
-  meshes.rock.setColorAt(bucket.ri, _col.set(tint).offsetHSL(0, -0.05, rand(rng, -0.05, 0.02)));
+  // Was offsetHSL(0, -0.05, ±): saturation dip ≈ pull r/b toward g; do it directly.
+  _col.set(tint);
+  const l = rand(rng, -0.05, 0.02);
+  _col.r *= (1 + l * 0.9);
+  _col.g *= (1 + l);
+  _col.b *= (1 + l * 0.9);
+  meshes.rock.setColorAt(bucket.ri, _col);
   dummy.position.set(x, y + s * 0.25, z);
   dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), rand(rng, 0, 3));
   dummy.scale.set(s * rand(rng, 0.8, 1.3), s * rand(rng, 0.6, 1), s * rand(rng, 0.8, 1.3));

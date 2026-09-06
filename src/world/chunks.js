@@ -27,11 +27,10 @@ import {
   GEN,
   biomeGroundColor,
   findSpawn,
-  getBiome,
   getSeed,
   initProcedural,
-  proceduralGroundHeight,
   riverXAt,
+  sampleGround,
 } from './procedural.js';
 
 export const CHUNK_SIZE = 16;
@@ -118,18 +117,24 @@ export function createWorldManager(scene, seedStr) {
     const pos = geo.attributes.position;
     const rng = rngFromString(`${getSeed()}|color|${cx},${cz}`);
     const colors = new Float32Array(pos.count * 3);
+    // Direct array access: getX/getZ/setY are function calls per vert (~625×
+    // per chunk). Raw .array indexing cuts ~3 call overheads per vertex.
+    const arr = pos.array;
     for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const z = pos.getZ(i);
-      const y = proceduralGroundHeight(x, z);
-      pos.setY(i, y);
-      // P0 banding: altitude stripe + ragged snow edge need x/z/y (no extra
-      // noise — hash-based, see procedural.js).
-      const c = biomeGroundColor(getBiome(x, z), rng, undefined, x, z, y);
+      const x = arr[i * 3];
+      const z = arr[i * 3 + 2];
+      // Single noise pass for height+biome (was: proceduralGroundHeight +
+      // getBiome = 2x river fbm + 2x height fbm per vert).
+      const s = sampleGround(x, z);
+      arr[i * 3 + 1] = s.y;
+      // P0 banding: altitude stripe + ragged snow edge need x/z/y (integer
+      // hash, no extra noise — see procedural.js).
+      const c = biomeGroundColor(s.biome, rng, undefined, x, z, s.y);
       colors[i * 3] = c.r;
       colors[i * 3 + 1] = c.g;
       colors[i * 3 + 2] = c.b;
     }
+    pos.needsUpdate = true;
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.computeVertexNormals();
     const mesh = new THREE.Mesh(geo, groundMat);
@@ -138,20 +143,34 @@ export function createWorldManager(scene, seedStr) {
   }
 
   function nearBridge(x, z) {
-    return bridgePts.some((b) => Math.hypot(x - b.x, z - b.z) < 3.2);
+    // Squared distance: Math.hypot = sqrt per bridge per try (~1500 sqrts per
+    // rebuild). Compare against 3.2² instead.
+    for (let i = 0; i < bridgePts.length; i++) {
+      const dx = x - bridgePts[i].x;
+      const dz = z - bridgePts[i].z;
+      if (dx * dx + dz * dz < 10.24) return true;
+    }
+    return false;
   }
 
   function collectChunk(cx, cz, bucket, spawnPt) {
     const rng = rngFromString(`${getSeed()}|veg|${cx},${cz}`);
     const TRIES = 30;
+    const sx = spawnPt.x;
+    const sz = spawnPt.z;
     for (let t = 0; t < TRIES; t++) {
       const x = cx * CHUNK_SIZE + rng() * CHUNK_SIZE;
       const z = cz * CHUNK_SIZE + rng() * CHUNK_SIZE;
-      const biome = getBiome(x, z);
+      // Single noise pass (was: getBiome + proceduralGroundHeight = ~25 noise
+      // evals per try). Also hoists spawn/bridge checks before any placement.
+      const s = sampleGround(x, z);
+      const biome = s.biome;
       if (biome === BIOMES.RIVER) continue;
-      if (Math.hypot(x - spawnPt.x, z - spawnPt.z) < 4.5) continue;
+      const sdx = x - sx;
+      const sdz = z - sz;
+      if (sdx * sdx + sdz * sdz < 20.25) continue; // 4.5², no sqrt
       if (nearBridge(x, z)) continue;
-      const y = proceduralGroundHeight(x, z);
+      const y = s.y;
       const roll = rng();
 
       // All shapes come from static presets (see ./presets.js) — same
