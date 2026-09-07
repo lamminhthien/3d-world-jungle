@@ -291,18 +291,31 @@ export function createWorldManager(scene, seedStr) {
           placeFlowerPatch(meshes, bucket, x, y, z, rand(rng, 0.7, 1.2), rng);
         } else if (roll < 0.75 && bucket.ri < POOL.rocks) {
           placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.4, 0.9), rng);
-        } else if (roll < 0.93) {
-          // Meadow mask: moist lowland = denser grass (phase 4)
+        } else if (roll < 0.97) {
+          // Meadow mask: moist lowland = denser grass (phase 4) — scatter 2-4 tufts per hit for field density
           const moist = moistureAt(x, z);
-          const threshold = moist > 0.65 ? 0.96 : moist < 0.35 ? 0.88 : 0.93;
+          const threshold = moist > 0.65 ? 0.98 : moist < 0.35 ? 0.9 : 0.97;
           if (roll >= threshold) {
             // sparse on dry ridges — skip
-          } else if (rng() < 0.2 && bucket.reedi < POOL.reed && POOL.reed > 0 && s.d < 12) {
-            // Tall reed near river bank (20% of jungle grass)
-            placeReed(meshes, bucket, x, y, z, rand(rng, 0.6, 1.15), rng, PALETTES.grass);
-          } else if (bucket.gi < POOL.grass) {
-            const tint = rng() < 0.2 ? PALETTES.grassGold : PALETTES.grass;
-            placeGrass(meshes, bucket, x, y, z, rand(rng, 0.5, 1.1), rng, tint);
+          } else {
+            const isReed = rng() < 0.22 && bucket.reedi < POOL.reed && POOL.reed > 0 && s.d < 14;
+            const scatter = moist > 0.65 ? 5 : moist > 0.5 ? 3 : 2; // moist meadow dense 5, normal 3
+            for (let g = 0; g < scatter; g++) {
+              if (isReed) {
+                if (bucket.reedi >= POOL.reed) break;
+                const rx = x + rand(rng, -0.9, 0.9);
+                const rz = z + rand(rng, -0.9, 0.9);
+                const ry = sampleGround(rx, rz).y;
+                placeReed(meshes, bucket, rx, ry, rz, rand(rng, 0.6, 1.15), rng, rng() < 0.3 ? PALETTES.grassGold : PALETTES.grass);
+              } else {
+                if (bucket.gi >= POOL.grass) break;
+                const rx = x + rand(rng, -0.9, 0.9);
+                const rz = z + rand(rng, -0.9, 0.9);
+                const ry = sampleGround(rx, rz).y;
+                const tint = rng() < 0.22 ? PALETTES.grassGold : rng() < 0.5 ? PALETTES.grass : PALETTES.dryGrass;
+                placeGrass(meshes, bucket, rx, ry, rz, rand(rng, 0.55, 1.25), rng, tint);
+              }
+            }
           }
         }
       } else if (biome === BIOMES.DESERT) {
@@ -335,11 +348,21 @@ export function createWorldManager(scene, seedStr) {
           // Sandy rocks
           placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.3, 0.55), rng, 0xd9c9a3);
         } else if (roll < 0.56) {
-          if (rng() < 0.25 && bucket.reedi < POOL.reed && POOL.reed > 0) {
-            placeReed(meshes, bucket, x, y, z, rand(rng, 0.5, 1.1), rng, PALETTES.dryGrass);
-          } else if (bucket.gi < POOL.grass) {
-            // Dune grass — taller and denser
-            placeGrass(meshes, bucket, x, y, z, rand(rng, 0.5, 1.0), rng, PALETTES.dryGrass);
+          // Dune field: scatter 2-3 clumps per hit (was 1, looked polka-dot)
+          const isReed = rng() < 0.28 && bucket.reedi < POOL.reed && POOL.reed > 0;
+          const n = 2 + (rng() < 0.5 ? 1 : 0);
+          for (let g = 0; g < n; g++) {
+            if (isReed) {
+              if (bucket.reedi >= POOL.reed) break;
+              const rx = x + rand(rng, -0.9, 0.9);
+              const rz = z + rand(rng, -0.9, 0.9);
+              placeReed(meshes, bucket, rx, sampleGround(rx, rz).y, rz, rand(rng, 0.5, 1.1), rng, PALETTES.dryGrass);
+            } else {
+              if (bucket.gi >= POOL.grass) break;
+              const rx = x + rand(rng, -0.9, 0.9);
+              const rz = z + rand(rng, -0.9, 0.9);
+              placeGrass(meshes, bucket, rx, sampleGround(rx, rz).y, rz, rand(rng, 0.5, 1.15), rng, PALETTES.dryGrass);
+            }
           }
         } else if (roll < 0.62 && bucket.bu < POOL.bushes) {
           // Coastal shrubs (sometimes blooming)

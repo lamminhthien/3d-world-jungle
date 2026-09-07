@@ -355,11 +355,11 @@ export function createEnvironment(scene, opts = {}) {
   // ---- Sun + moon billboards ----
   const sunMesh = new THREE.Mesh(
     new THREE.SphereGeometry(4, 12, 12),
-    new THREE.MeshBasicMaterial({ color: 0xfff6d8, fog: false, transparent: true, opacity: 0.95 }),
+    new THREE.MeshBasicMaterial({ color: 0xfff6d8, fog: false, transparent: true, opacity: 0.95, toneMapped: false }),
   );
   const moonMesh = new THREE.Mesh(
     new THREE.SphereGeometry(2.8, 12, 12),
-    new THREE.MeshBasicMaterial({ color: 0xdce8ff, fog: false, transparent: true, opacity: 0.9 }),
+    new THREE.MeshBasicMaterial({ color: 0xdce8ff, fog: false, transparent: true, opacity: 0.9, toneMapped: false }),
   );
   sunMesh.frustumCulled = moonMesh.frustumCulled = false;
   scene.add(sunMesh); scene.add(moonMesh);
@@ -368,7 +368,7 @@ export function createEnvironment(scene, opts = {}) {
     new THREE.SphereGeometry(5.4, 16, 16),
     new THREE.MeshBasicMaterial({
       color: 0xa1c4fd, fog: false, transparent: true, opacity: 0,
-      blending: THREE.AdditiveBlending, depthWrite: false,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
     }),
   );
   moonHalo.frustumCulled = false;

@@ -495,12 +495,12 @@ function setTrunk(meshes, bucket, obstacles, x, y, z, s, rng, tint = PALETTES.tr
 }
 
 // Dense foliage helpers — desktop only (tier-gated via bucket capacity checks).
-// Reuse the blob pool for 2 satellite puffs per tree: overlap ±0.4u, scale 0.7-0.9
+// Reuse the blob pool for 3 satellite puffs per tree: overlap ±0.4u, scale 0.7-0.9
 // Leaf cards: cheap 2-tri billboards around the canopy shell (alphaTest).
 function addSatelliteBlobs(meshes, bucket, x, y, z, s, rng, baseTint) {
   if (QUALITY.low) return;
-  if (bucket.bi + 2 > (meshes.blob?.count ?? Infinity) && bucket.bi + 2 > 5600) return;
-  for (let k = 0; k < 2; k++) {
+  if (bucket.bi + 3 > (meshes.blob?.count ?? Infinity) && bucket.bi + 3 > 5600) return;
+  for (let k = 0; k < 3; k++) {
     if (bucket.bi >= (meshes.blob?.instanceMatrix?.count ?? 5600)) break;
     // Guard against overflow: pool sizing lives in chunks.js POOL.crowns
     if (bucket.bi >= 5600) break;
@@ -517,7 +517,7 @@ function addSatelliteBlobs(meshes, bucket, x, y, z, s, rng, baseTint) {
 function addLeafCards(meshes, bucket, x, y, z, s, rng, tint) {
   if (QUALITY.low) return;
   if (!meshes.leafCard || bucket.lci === undefined) return;
-  const n = 2 + ((rng() * 3) | 0); // 2-4 cards per tree
+  const n = 4 + ((rng() * 3) | 0); // 4-6 cards per tree (denser canopy)
   for (let k = 0; k < n; k++) {
     if (bucket.lci >= (meshes.leafCard?.instanceMatrix?.count ?? 3000)) break;
     meshes.leafCard.setColorAt(bucket.lci, tintFast(tint, rand(rng, -0.03, 0.03)));

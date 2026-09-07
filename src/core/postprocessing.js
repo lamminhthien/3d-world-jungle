@@ -12,9 +12,9 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { QUALITY } from './setup.js';
 
 const STORAGE_KEY = 'jungle_bloom';
-const BLOOM_STRENGTH = 0.35;
-const BLOOM_RADIUS = 0.4;
-const BLOOM_THRESHOLD = 0.85;
+const BLOOM_STRENGTH = 0.90;
+const BLOOM_RADIUS = 0.55;
+const BLOOM_THRESHOLD = 0.48;
 
 // Query param `?bloom=1` forces bloom on for testing; `?bloom=0` forces off.
 function bloomOverride() {
@@ -72,12 +72,13 @@ export function createComposer(renderer, scene, camera) {
 
 export function updateBloomForEnvironment(composer, env) {
   if (!composer?.userData?.bloomPass || !env) return;
-  // Tie bloom strength to sun intensity + night + campfire proximity (warm glow at night).
-  // Day: bloom stays at baseline; night + fire proximity pushes slightly higher.
+  // Tie bloom strength to night + fire: day 0.85 baseline, night + fire pushes to ~1.1 (visible)
   const nf = env.nightFactor || 0;
-  const fire = env.ambience ? 0 : 0; // placeholder — fire proximity could be threaded via env extra
-  const strength = THREE.MathUtils.clamp(BLOOM_STRENGTH + nf * 0.12 + fire * 0.08, 0.25, 0.55);
+  // Fire proximity is not yet threaded; use nightFactor as proxy for fire glow at night
+  const strength = THREE.MathUtils.clamp(BLOOM_STRENGTH + nf * 0.32, 0.75, 1.15);
   composer.userData.bloomPass.strength = strength;
+  composer.userData.bloomPass.radius = BLOOM_RADIUS;
+  composer.userData.bloomPass.threshold = BLOOM_THRESHOLD;
 }
 
 export function disposeComposer(composer) {

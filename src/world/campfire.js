@@ -31,8 +31,8 @@ const GEO = {
   flameOuter: new THREE.ConeGeometry(0.32, 0.8, 7),
   flameInner: new THREE.ConeGeometry(0.17, 0.5, 6),
 };
-const flameOuterMat = new THREE.MeshBasicMaterial({ color: 0xff6a1f, transparent: true, opacity: 0.92 });
-const flameInnerMat = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.95 });
+const flameOuterMat = new THREE.MeshBasicMaterial({ color: 0xff6a1f, transparent: true, opacity: 0.92, toneMapped: false });
+const flameInnerMat = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.95, toneMapped: false });
 
 function isFlat(x, z) {
   const h0 = proceduralGroundHeight(x, z);
