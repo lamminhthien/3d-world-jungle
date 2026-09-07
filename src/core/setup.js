@@ -147,8 +147,8 @@ export function setupCore(canvas) {
   renderer.shadowMap.type = isMobileDevice ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  // M4 XDR is ~600 nits SDR — 1.1 blows midday out when bloom threshold was 0.48. Tiered exposure.
-  renderer.toneMappingExposure = deviceTier === 'high' || deviceTier === 'ultra' ? 0.95 : deviceTier === 'medium' ? 1.0 : 1.05;
+  // Slightly brighter for lush jungle — previous 0.95 muted greens on high tier
+  renderer.toneMappingExposure = deviceTier === 'high' || deviceTier === 'ultra' ? 1.02 : deviceTier === 'medium' ? 1.08 : 1.12;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(WORLD.fogColor);
@@ -198,9 +198,9 @@ export function setupCore(canvas) {
   addEventListener('orientationchange', () => setTimeout(onResize, 120));
 
   // Bright daylight look (driven per-frame by the environment system).
-  const hemi = new THREE.HemisphereLight(0xcdeffd, 0x8a9a6b, 0.95);
+  const hemi = new THREE.HemisphereLight(0xd6f0ff, 0x8fbf6a, 1.05);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xfff1d6, 1.9);
+  const sun = new THREE.DirectionalLight(0xfff4e0, 2.1);
   sun.position.set(14, 24, 10);
   sun.castShadow = QUALITY.shadowsEnabled;
   sun.shadow.mapSize.set(QUALITY.shadowSize, QUALITY.shadowSize);
@@ -212,7 +212,7 @@ export function setupCore(canvas) {
   sun.shadow.bias = -0.0006;
   scene.add(sun);
   scene.add(sun.target);
-  const ambient = new THREE.AmbientLight(0xffffff, 0.25);
+  const ambient = new THREE.AmbientLight(0xffffff, 0.32);
   scene.add(ambient);
 
   return { renderer, scene, camera, camTarget, sun, hemi, ambient, state, updateCameraPos, onResize };

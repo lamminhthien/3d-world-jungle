@@ -19,14 +19,14 @@ export const CLOUD_COUNT = 9;
 export const FOAM_COUNT = 26;
 
 // Vegetation tuning. Centralized so chunk-streamed world + static previews stay in sync.
-// Genshin-style: you can push tree/grass/flower density to make Mondstadt meadows or Sumeru jungles.
+// Densities tuned for a lush rainforest first impression — screenshot showed sparse, barren park.
 export const VEGETATION = {
-  treeDensity: 0.65,   // 0.35 sparse park → 1.2 Sumeru rainforest
-  treeScale: 0.9,      // 0.65 bonsai → 1.25 Natlan giants
-  grassDensity: 1.0,   // 0.5 barren → 1.8 Fontaine meadow (multiplies POOL.grass scatter)
-  flowerDensity: 1.0,  // 0.5 few blooms → 1.5 Inazuma flower fields
-  bambooDensity: 0.6,  // 0 full jungle → 1.0 bamboo forest (Liyue/Sumeru)
-  willowDensity: 0.5,  // riverbank willows (Fontaine)
+  treeDensity: 0.92,   // 0.35 sparse park → 1.2 Sumeru rainforest (was 0.65 too sparse)
+  treeScale: 1.02,     // 0.65 bonsai → 1.25 Natlan giants (slightly bigger for presence)
+  grassDensity: 1.45,  // 0.5 barren → 1.8 Fontaine meadow (was 1.0 left gray floor exposed)
+  flowerDensity: 1.25, // 0.5 few blooms → 1.5 Inazuma flower fields (more color pops)
+  bambooDensity: 0.75, // 0 full jungle → 1.0 bamboo forest (Liyue/Sumeru)
+  willowDensity: 0.65, // riverbank willows (Fontaine) — more river life
 };
 
 // Genshin-inspired world nations — each is just GEN params + palette, still seeded.
@@ -59,10 +59,10 @@ export const WORLD = {
   size: 90,
   groundSegments: 64,
   playRadius: 37,
-  fogColor: 0xa8dcf0,
-  // Genshin-like: each nation can override near/far for vibe (e.g. Inazuma foggy, Natlan clear)
-  fogNear: 80,
-  fogFar: 160,
+  fogColor: 0xaee3f5,
+  // Tighter fog gives depth without washing to gray at distance (screenshot looked hazy gray)
+  fogNear: 45,
+  fogFar: 110,
   // Meadow / beach polish
   grassFieldAmp: 1.8,    // Fontaine meadow extra scatter radius
   beachPalmBoost: 1.4,   // beach.cove + Inazuma beach get 40% more palms

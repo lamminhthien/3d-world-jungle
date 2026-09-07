@@ -29,21 +29,24 @@ export const SURFACES = {
 };
 
 // Tunables for the generator.
+// Jungle-first: most of the map should be lush lowland (green) with rare
+// rocky peaks. Previous defaults (maxHeight 5, rock 1.4, snow 2.0) made ~55%
+// of non-river terrain read as gray mountain, which is what the screenshot shows.
 export const GEN = {
-  maxHeight: 5, // top of stepped terrain
-  levels: 6, // number of discrete steps
-  stepSize: 0.55, // visual height of one step
-  heightFreq: 0.035, // base terrain frequency
+  maxHeight: 4.4, // top of stepped terrain (lower = fewer high peaks)
+  levels: 5, // number of discrete steps (fewer terraces = cleaner jungle)
+  stepSize: 0.52, // visual height of one step
+  heightFreq: 0.032, // base terrain frequency (smoother hills)
   moistureFreq: 0.03,
   tempFreq: 0.022,
   riverFreq: 0.045, // winding of the river along z
   riverAmp: 13, // how far the river meanders on x
   riverHalf: 3.1, // half-width of water channel (matches RIVER_HALF)
   bankOuter: 6.2, // outer edge of sandy/stepped banks
-  snowLine: 2.0, // stepped height above which snow appears (lvl >= 4)
-  rockLine: 1.4, // above this => mountain rock (lvl >= 3)
-  desertTemp: 0.62, // temp threshold for desert
-  desertMoist: 0.42, // moist threshold for desert
+  snowLine: 2.05, // stepped height above which snow appears (rare peaks only)
+  rockLine: 1.45, // above this => mountain rock (mid slopes stay green, was 1.4 = too much gray)
+  desertTemp: 0.68, // temp threshold for desert (rarer)
+  desertMoist: 0.38, // moist threshold for desert (rarer)
 };
 
 export function updateProceduralGen(config) {
@@ -199,12 +202,14 @@ export function isBuildableSurface(surface) {
 }
 
 // Vertex / ground colors per biome (vivid cartoon look).
+// Jungle greens pushed slightly more saturated/warm so the world reads lush
+// even in shadow; mountain gray warmed toward stone brown to avoid cold wash.
 const biomeColors = {
   [BIOMES.RIVER]: [0xe8cf7e, 0xd4b45e],
   [BIOMES.BEACH]: [0xf2d789, 0xe9c86e],
-  [BIOMES.JUNGLE]: [0x5fd44e, 0x2fa84f],
+  [BIOMES.JUNGLE]: [0x6be05a, 0x2e9d3a],
   [BIOMES.DESERT]: [0xf2cf6e, 0xdd9f3f],
-  [BIOMES.MOUNTAIN]: [0x9aa3b0, 0x6f7a8e],
+  [BIOMES.MOUNTAIN]: [0xa8a99a, 0x7e8378],
   [BIOMES.SNOW]: [0xffffff, 0xd8ecf7],
 };
 
@@ -234,17 +239,18 @@ export function biomeGroundColor(biome, random, target = _bcScratch, x = 0, z = 
   // no extra noise (Math.round matches the old behavior).
   target.setHex(a).lerp(_bcB.setHex(b), random());
   const lvl = Math.round(y / GEN.stepSize);
-  const dl = (random() - 0.5) * 0.04 + (lvl % 2 === 0 ? 0.012 : -0.012);
+  // Softer terrace banding: was ±0.012 which carved harsh grid on gray peaks
+  const dl = (random() - 0.5) * 0.036 + (lvl % 2 === 0 ? 0.008 : -0.008);
   target.offsetHSL(0, 0, dl);
   if (biome === BIOMES.JUNGLE) {
     // Lime/teal patches + tiny petal dots: the floor blooms with color.
     const h = hashXZ(x, z);
-    if (h > 0.86) {
-      target.lerp(_bcB.setHex(h > 0.93 ? 0x2fd6a0 : 0xaee63f), 0.5);
-    } else if (h < 0.05) {
-      target.lerp(_bcB.setHex(MEADOW_DOTS[(h * 9973 | 0) % MEADOW_DOTS.length]), 0.65);
+    if (h > 0.84) {
+      target.lerp(_bcB.setHex(h > 0.92 ? 0x2fd6a0 : 0xb8e63a), 0.45);
+    } else if (h < 0.055) {
+      target.lerp(_bcB.setHex(MEADOW_DOTS[(h * 9973 | 0) % MEADOW_DOTS.length]), 0.6);
     }
-    target.offsetHSL(0, 0.03, 0); // gentle saturation lift for the jungle
+    target.offsetHSL(0, 0.045, 0); // stronger saturation lift for the jungle
   } else if (biome === BIOMES.SNOW) {
     if (hashXZ(x, z) < 0.18) target.lerp(_bcB.setHex(0x8d9299), 0.45);
   } else if (biome === BIOMES.MOUNTAIN) {

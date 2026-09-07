@@ -117,12 +117,12 @@ async function boot() {
   // Each nation is just GEN + VEGETATION params, still seeded infinite.
   // Icon/hue matches the nation so the grid reads like Teyvat.
   const WORLD_CONFIGS = {
-    JUNGLE_PRIME: { gen: {}, veg: {}, timeOverride: null, label: 'Jungle' },
+    JUNGLE_PRIME: { gen: { maxHeight: 4.4, levels: 5, rockLine: 1.45, snowLine: 2.05, desertTemp: 0.68, desertMoist: 0.38 }, veg: { treeDensity: 0.92, treeScale: 1.02, grassDensity: 1.45, flowerDensity: 1.25 }, timeOverride: null, label: 'Jungle', fog: { near: 45, far: 110 } },
     DESERT_WINDS: { gen: { desertTemp: 0.3, desertMoist: 0.6, riverAmp: 5, riverFreq: 0.02 }, veg: { grassDensity: 0.6, flowerDensity: 0.5 }, timeOverride: null },
     MOUNTAIN_PEAKS: { gen: { maxHeight: 8, levels: 8, rockLine: 1.0, snowLine: 3.0 }, veg: {}, timeOverride: null },
     BEACH_COVE: { gen: { bankOuter: 12, riverHalf: 4, riverAmp: 6 }, veg: { grassDensity: 1.1, willowDensity: 0.7 }, timeOverride: null },
-    NIGHT_FOREST: { gen: {}, timeOverride: 0.5, label: 'Night' },
-    VILLAGE_HUB: { gen: {}, veg: {}, timeOverride: null, focusVillage: true, label: 'Village' },
+    NIGHT_FOREST: { gen: { maxHeight: 4.4, levels: 5, rockLine: 1.45, snowLine: 2.05 }, veg: { treeDensity: 0.92, grassDensity: 1.45 }, timeOverride: 0.5, label: 'Night', fog: { near: 40, far: 95 } },
+    VILLAGE_HUB: { gen: { maxHeight: 4.4, levels: 5, rockLine: 1.45, snowLine: 2.05 }, veg: { treeDensity: 0.82, grassDensity: 1.3 }, timeOverride: null, focusVillage: true, label: 'Village', fog: { near: 45, far: 110 } },
     // --- Genshin nations ---
     MONDSTADT_ANEMO: { // Mondstadt — windy meadow, dandelion flower fields (Monstadt)
       gen: { maxHeight: 4.5, levels: 5, rockLine: 1.8, snowLine: 3.2, desertTemp: 0.75, desertMoist: 0.35 },
@@ -215,8 +215,8 @@ async function boot() {
       WORLD.fogNear = config.fog.near; WORLD.fogFar = config.fog.far;
       if (scene?.fog) { scene.fog.near = config.fog.near; scene.fog.far = config.fog.far; }
     } else {
-      WORLD.fogNear = 80; WORLD.fogFar = 160;
-      if (scene?.fog) { scene.fog.near = 80; scene.fog.far = 160; }
+      WORLD.fogNear = 45; WORLD.fogFar = 110;
+      if (scene?.fog) { scene.fog.near = 45; scene.fog.far = 110; }
     }
 
     const actualSeed = effectiveSeed;
