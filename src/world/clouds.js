@@ -4,6 +4,7 @@ import { CLOUD_COUNT } from '../config.js';
 import { QUALITY, isMobileDevice } from '../core/setup.js';
 import { rand } from '../utils.js';
 import { windState } from './wind.js';
+import { getGraphics } from '../core/graphics.js';
 
 // Low-poly drifting clouds (docs/enhance_for_night_screen.md section 3).
 // - Merged icosahedron puffs, flat-shaded.
@@ -22,10 +23,14 @@ export function createClouds(scene) {
     depthWrite: false,
   });
   const clouds = [];
-  // Low tier: fewer transparent overdraw layers (each cloud is fullscreen-ish).
-  const count = QUALITY.low ? 4 : isMobileDevice ? 6 : CLOUD_COUNT;
+  const tierCount = QUALITY.low ? 4 : isMobileDevice ? 6 : CLOUD_COUNT;
+  // Always allocate tier max so live toggle can show more without recreation.
+  const maxCount = tierCount;
+  let gfxClouds = CLOUD_COUNT;
+  try { const g = getGraphics(); if (g?.cloudCount != null) gfxClouds = g.cloudCount; if (g?.clouds === false) gfxClouds = 0; } catch {}
+  const initialVisible = Math.min(maxCount, gfxClouds);
 
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < maxCount; i++) {
     const n = 3 + ((Math.random() * 3) | 0);
     const parts = [];
     for (let k = 0; k < n; k++) {
@@ -50,11 +55,14 @@ export function createClouds(scene) {
     g.userData.driftZ = rand(-0.15, 0.15);
     g.userData.bobPhase = rand(0, Math.PI * 2);
     g.userData.baseY = g.position.y;
+    g.visible = i < initialVisible;
     scene.add(g);
     clouds.push(g);
   }
 
   function update(dt, focus, elapsed = 0) {
+    if (clouds.length === 0) return;
+    try { const g = getGraphics(); if (g?.clouds === false) return; } catch {}
     const fx = focus ? focus.x : 0;
     const fz = focus ? focus.z : 0;
     // Wind modulates cloud drift (stronger wind → faster drift along windDir)
@@ -74,5 +82,11 @@ export function createClouds(scene) {
     }
   }
 
-  return { clouds, cloudMat, update };
+  function applyGraphics(g) {
+    const want = g?.clouds === false ? 0 : (g?.cloudCount ?? CLOUD_COUNT);
+    const visible = Math.min(want, clouds.length);
+    for (let i = 0; i < clouds.length; i++) clouds[i].visible = i < visible;
+  }
+
+  return { clouds, cloudMat, update, applyGraphics };
 }

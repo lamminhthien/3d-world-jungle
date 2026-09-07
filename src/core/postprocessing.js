@@ -11,6 +11,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { QUALITY } from './setup.js';
+import { getGraphics } from './graphics.js';
 import { createVolumetricPass } from './volumetrics.js';
 import { createLensFlarePass } from './lensFlare.js';
 import { createAOPass } from './globalIllumination.js';
@@ -33,6 +34,11 @@ function bloomOverride() {
 export function isBloomEnabled() {
   const ov = bloomOverride();
   if (ov !== null) return ov && !QUALITY.low;
+  try {
+    const g = getGraphics();
+    if (g?.bloom === false) return false;
+    if (g?.bloom === true) return !QUALITY.low;
+  } catch {}
   if (QUALITY.low) return false;
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -59,14 +65,17 @@ function setFxToggles(v) {
 }
 export function isRaysEnabled() {
   if (QUALITY.low) return false;
+  try { const g = getGraphics(); if (g?.rays === false) return false; } catch {}
   return getFxToggles().rays !== false;
 }
 export function isFlareEnabled() {
   if (QUALITY.low) return false;
+  try { const g = getGraphics(); if (g?.flare === false) return false; } catch {}
   return getFxToggles().flare !== false;
 }
 export function isGIEnabled() {
   if (QUALITY.low) return false;
+  try { const g = getGraphics(); if (g?.gi === false) return false; } catch {}
   return getFxToggles().gi !== false;
 }
 export function setRaysEnabled(on) {
@@ -96,6 +105,7 @@ export function createComposer(renderer, scene, camera) {
   if (!isBloomEnabled()) return null;
   try {
     const composer = new EffectComposer(renderer);
+    composer.userData = composer.userData || {};
     composer.addPass(new RenderPass(scene, camera));
 
     // Soft GI: screen-space AO (desktop only, disabled on low)

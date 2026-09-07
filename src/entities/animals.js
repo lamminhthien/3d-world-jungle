@@ -27,7 +27,12 @@ function compose(px, py, pz, ry, sx, sy, sz) {
 // ============================================================
 // BIRDS — Genshin sky gliders over Mondstadt plains
 // ============================================================
-const BIRD_COUNT = QUALITY.low ? ANIMALS.birdCount - 10 : ANIMALS.birdCount;
+const BASE_BIRD_COUNT = ANIMALS.birdCount;
+function birdCount() {
+  const mul = QUALITY.animalsMul ?? 1;
+  const base = QUALITY.low ? BASE_BIRD_COUNT - 10 : BASE_BIRD_COUNT;
+  return Math.max(4, Math.round(base * mul));
+}
 
 function buildBirdWingGeo() {
   // Single flat diamond "wing" centred at origin, swept up/down in update.
@@ -49,15 +54,17 @@ function buildBirdWingGeo() {
 export function createBirds(scene) {
   const mat = new THREE.MeshLambertMaterial({ color: 0x2c1e0f, side: THREE.DoubleSide });
   const geo = buildBirdWingGeo();
-  const mesh = new THREE.InstancedMesh(geo, mat, BIRD_COUNT);
+  const n = birdCount();
+  const mesh = new THREE.InstancedMesh(geo, mat, BASE_BIRD_COUNT);
+  mesh.count = n;
   mesh.frustumCulled = false;
   mesh.castShadow = false;
   scene.add(mesh);
 
   // Each bird: position, orbit radius, orbit speed, phase, altitude, flapPhase
   const birds = [];
-  for (let i = 0; i < BIRD_COUNT; i++) {
-    const angle = (i / BIRD_COUNT) * Math.PI * 2;
+  for (let i = 0; i < BASE_BIRD_COUNT; i++) {
+    const angle = (i / BASE_BIRD_COUNT) * Math.PI * 2;
     const radius = 8 + Math.random() * 18;
     birds.push({
       cx: (Math.random() - 0.5) * 30,     // flock centre X
@@ -73,10 +80,13 @@ export function createBirds(scene) {
   }
 
   let t = 0;
+  function applyDensity() { mesh.count = birdCount(); }
   function update(dt, playerPos) {
     t += dt;
+    const n = mesh.count;
+    if (n === 0) return;
     // Slowly drift flock centres toward the player
-    for (let i = 0; i < birds.length; i++) {
+    for (let i = 0; i < n; i++) {
       const b = birds[i];
       const dx = playerPos.x - b.cx;
       const dz = playerPos.z - b.cz;
@@ -105,13 +115,18 @@ export function createBirds(scene) {
     mesh.instanceMatrix.needsUpdate = true;
   }
 
-  return { mesh, update };
+  return { mesh, update, applyDensity };
 }
 
 // ============================================================
 // DEER  (simple low-poly quadruped)
 // ============================================================
-const DEER_COUNT = QUALITY.low ? 3 : 6;
+const BASE_DEER_COUNT = 6;
+function deerCount() {
+  const mul = QUALITY.animalsMul ?? 1;
+  const base = QUALITY.low ? 3 : BASE_DEER_COUNT;
+  return Math.max(1, Math.round(base * mul));
+}
 
 function buildDeerGeo() {
   // Body: stretched box + 4 legs cylinders + head box, merged into one geometry.
@@ -182,13 +197,14 @@ function buildDeerGeo() {
 export function createDeer(scene) {
   const deerGeo = buildDeerGeo();
   const deerMat = new THREE.MeshLambertMaterial({ color: 0x8b5e3c, flatShading: true });
-  const mesh = new THREE.InstancedMesh(deerGeo, deerMat, DEER_COUNT);
+  const mesh = new THREE.InstancedMesh(deerGeo, deerMat, BASE_DEER_COUNT);
+  mesh.count = deerCount();
   mesh.frustumCulled = false;
   mesh.castShadow = QUALITY.shadowsEnabled;
   scene.add(mesh);
 
   const deer = [];
-  for (let i = 0; i < DEER_COUNT; i++) {
+  for (let i = 0; i < BASE_DEER_COUNT; i++) {
     const angle = Math.random() * Math.PI * 2;
     deer.push({
       x: (Math.random() - 0.5) * 40,
@@ -205,9 +221,13 @@ export function createDeer(scene) {
   }
 
   let t = 0;
+  function applyDensity() { mesh.count = deerCount(); }
   function update(dt, playerPos) {
+    // Throttle deer AI on low: updates still run but mesh.count already reduced
     t += dt;
-    for (let i = 0; i < deer.length; i++) {
+    const n = mesh.count;
+    if (n === 0) return;
+    for (let i = 0; i < n; i++) {
       const d = deer[i];
 
       // State machine: idle ↔ walk
@@ -263,13 +283,18 @@ export function createDeer(scene) {
     mesh.instanceMatrix.needsUpdate = true;
   }
 
-  return { mesh, update };
+  return { mesh, update, applyDensity };
 }
 
 // ============================================================
 // FISH (animated near river surface)
 // ============================================================
-const FISH_COUNT = QUALITY.low ? 6 : 14;
+const BASE_FISH_COUNT = 14;
+function fishCount() {
+  const mul = QUALITY.animalsMul ?? 1;
+  const base = QUALITY.low ? 6 : BASE_FISH_COUNT;
+  return Math.max(2, Math.round(base * mul));
+}
 
 function buildFishGeo() {
   // Simple diamond body + triangle tail
@@ -300,13 +325,14 @@ function buildFishGeo() {
 export function createFish(scene) {
   const fishGeo = buildFishGeo();
   const fishMat = new THREE.MeshLambertMaterial({ color: 0xff7043, flatShading: true, transparent: true, opacity: 0.85 });
-  const mesh = new THREE.InstancedMesh(fishGeo, fishMat, FISH_COUNT);
+  const mesh = new THREE.InstancedMesh(fishGeo, fishMat, BASE_FISH_COUNT);
+  mesh.count = fishCount();
   mesh.frustumCulled = false;
   mesh.castShadow = false;
   scene.add(mesh);
 
   const fish = [];
-  for (let i = 0; i < FISH_COUNT; i++) {
+  for (let i = 0; i < BASE_FISH_COUNT; i++) {
     const pz = (Math.random() - 0.5) * 60;
     fish.push({
       z: pz,
@@ -320,9 +346,12 @@ export function createFish(scene) {
   }
 
   let t = 0;
+  function applyDensity() { mesh.count = fishCount(); }
   function update(dt, playerPos) {
     t += dt;
-    for (let i = 0; i < fish.length; i++) {
+    const n = mesh.count;
+    if (n === 0) return;
+    for (let i = 0; i < n; i++) {
       const f = fish[i];
       // Swim along river: drift in Z
       f.z += f.speed * dt;
@@ -356,13 +385,18 @@ export function createFish(scene) {
     mesh.instanceMatrix.needsUpdate = true;
   }
 
-  return { mesh, update };
+  return { mesh, update, applyDensity };
 }
 
 // ============================================================
 // BUTTERFLIES — Inazuma/Monstadt flower fields (Genshin gliders)
 // ============================================================
-const BUTTERFLY_COUNT = QUALITY.low ? 8 : ANIMALS.butterflyCount;
+const BASE_BUTTERFLY_COUNT = ANIMALS.butterflyCount;
+function butterflyCount() {
+  const mul = QUALITY.animalsMul ?? 1;
+  const base = QUALITY.low ? 8 : BASE_BUTTERFLY_COUNT;
+  return Math.max(2, Math.round(base * mul));
+}
 
 function buildButterflyGeo() {
   const geo = new THREE.BufferGeometry();
@@ -383,12 +417,13 @@ function buildButterflyGeo() {
 export function createButterflies(scene) {
   const geo = buildButterflyGeo();
   const mat = new THREE.MeshLambertMaterial({ color: 0xff7ee8, side: THREE.DoubleSide, transparent: true, opacity: 0.95 });
-  const mesh = new THREE.InstancedMesh(geo, mat, BUTTERFLY_COUNT);
+  const mesh = new THREE.InstancedMesh(geo, mat, BASE_BUTTERFLY_COUNT);
+  mesh.count = butterflyCount();
   mesh.frustumCulled = false; scene.add(mesh);
   const colors = [0xff7ee8, 0x7de8ff, 0xffd93b, 0x7dff7a, 0xff9a7a];
   const col = new THREE.Color();
   const b = [];
-  for (let i=0;i<BUTTERFLY_COUNT;i++) {
+  for (let i=0;i<BASE_BUTTERFLY_COUNT;i++) {
     mesh.setColorAt(i, col.setHex(colors[i % colors.length]));
     b.push({
       x:(Math.random()-0.5)*30, z:(Math.random()-0.5)*30,
@@ -398,9 +433,12 @@ export function createButterflies(scene) {
   }
   mesh.instanceColor.needsUpdate = true;
   let t=0;
+  function applyDensity() { mesh.count = butterflyCount(); }
   function update(dt, playerPos) {
     t+=dt;
-    for(let i=0;i<b.length;i++){
+    const n = mesh.count;
+    if (n === 0) return;
+    for(let i=0;i<n;i++){
       const bf=b[i];
       bf.wander+=dt*0.6;
       bf.x += Math.cos(bf.wander)*bf.speed*dt*0.4;
@@ -417,13 +455,18 @@ export function createButterflies(scene) {
     }
     mesh.instanceMatrix.needsUpdate=true;
   }
-  return { mesh, update };
+  return { mesh, update, applyDensity };
 }
 
 // ============================================================
 // CRABS — Fontaine beach tide pools
 // ============================================================
-const CRAB_COUNT = QUALITY.low ? 6 : ANIMALS.crabCount;
+const BASE_CRAB_COUNT = ANIMALS.crabCount;
+function crabCount() {
+  const mul = QUALITY.animalsMul ?? 1;
+  const base = QUALITY.low ? 6 : BASE_CRAB_COUNT;
+  return Math.max(2, Math.round(base * mul));
+}
 
 function buildCrabGeo(){
   const g=new THREE.BoxGeometry(0.32,0.14,0.24);
@@ -440,10 +483,11 @@ function buildCrabGeo(){
 export function createCrabs(scene){
   const geo=buildCrabGeo();
   const mat=new THREE.MeshLambertMaterial({ color:0xff6b35, flatShading:true });
-  const mesh=new THREE.InstancedMesh(geo, mat, CRAB_COUNT);
+  const mesh=new THREE.InstancedMesh(geo, mat, BASE_CRAB_COUNT);
+  mesh.count = crabCount();
   mesh.frustumCulled=false; scene.add(mesh);
   const crabs=[];
-  for(let i=0;i<CRAB_COUNT;i++){
+  for(let i=0;i<BASE_CRAB_COUNT;i++){
     const z=(Math.random()-0.5)*50;
     const rx=riverXAt(z);
     // place on beach band (bankOuter +-1.5)
@@ -451,9 +495,12 @@ export function createCrabs(scene){
     crabs.push({ z, x: rx + side*(4.5+Math.random()*1.8), ry:Math.random()*6.28, phase:Math.random()*6.28, speed:0.5+Math.random()*0.7, scale:0.7+Math.random()*0.3, dir: side });
   }
   let t=0;
+  function applyDensity() { mesh.count = crabCount(); }
   function update(dt, playerPos){
     t+=dt;
-    for(let i=0;i<crabs.length;i++){
+    const n = mesh.count;
+    if (n === 0) return;
+    for(let i=0;i<n;i++){
       const c=crabs[i];
       c.z += c.dir * c.speed * dt * 0.6;
       // side-walk waddle
@@ -466,28 +513,37 @@ export function createCrabs(scene){
     }
     mesh.instanceMatrix.needsUpdate=true;
   }
-  return { mesh, update };
+  return { mesh, update, applyDensity };
 }
 
 // ============================================================
 // BOARS — Sumeru forest (chunky deer variant)
 // ============================================================
-const BOAR_COUNT = QUALITY.low ? 2 : ANIMALS.boarCount;
+const BASE_BOAR_COUNT = ANIMALS.boarCount;
+function boarCount() {
+  const mul = QUALITY.animalsMul ?? 1;
+  const base = QUALITY.low ? 2 : BASE_BOAR_COUNT;
+  return Math.max(1, Math.round(base * mul));
+}
 
 export function createBoars(scene){
   const geo=buildDeerGeo();
   // scale slightly chunkier via instance scale, darker tint
   const mat=new THREE.MeshLambertMaterial({ color:0x4a2f1a, flatShading:true });
-  const mesh=new THREE.InstancedMesh(geo, mat, BOAR_COUNT);
+  const mesh=new THREE.InstancedMesh(geo, mat, BASE_BOAR_COUNT);
+  mesh.count = boarCount();
   mesh.frustumCulled=false; mesh.castShadow=QUALITY.shadowsEnabled; scene.add(mesh);
   const boars=[];
-  for(let i=0;i<BOAR_COUNT;i++){
+  for(let i=0;i<BASE_BOAR_COUNT;i++){
     boars.push({ x:(Math.random()-0.5)*35, z:(Math.random()-0.5)*35, ry:Math.random()*6.28, speed:0.35+Math.random()*0.5, phase:Math.random()*6.28, wander:Math.random()*6.28, scale:0.95+Math.random()*0.25, idle:1+Math.random()*2, state:'walk' });
   }
   let t=0;
+  function applyDensity() { mesh.count = boarCount(); }
   function update(dt, playerPos){
     t+=dt;
-    for(let i=0;i<boars.length;i++){
+    const n = mesh.count;
+    if (n === 0) return;
+    for(let i=0;i<n;i++){
       const b=boars[i];
       b.wander+=dt*0.4;
       if(b.state==='walk'){
@@ -502,7 +558,7 @@ export function createBoars(scene){
     }
     mesh.instanceMatrix.needsUpdate=true;
   }
-  return { mesh, update };
+  return { mesh, update, applyDensity };
 }
 
 // ============================================================
@@ -516,14 +572,45 @@ export function createAnimals(scene) {
   const crabs = createCrabs(scene);
   const boars = createBoars(scene);
 
+  // Throttle secondary critters on low-end/battery saver: update every other frame.
+  let frame = 0;
+  function shouldRunHeavy() {
+    if ((QUALITY.animalsMul ?? 1) > 0.6) return true;
+    return (frame & 1) === 0;
+  }
+
   return {
     update(dt, playerPos) {
+      frame++;
       birds.update(dt, playerPos);
-      deer.update(dt, playerPos);
       fish.update(dt, playerPos);
-      butterflies.update(dt, playerPos);
-      crabs.update(dt, playerPos);
-      boars.update(dt, playerPos);
+      // Heavy ground critters can run at half rate on low.
+      if (shouldRunHeavy() || frame % 3 === 0) {
+        deer.update(dt, playerPos);
+        boars.update(dt, playerPos);
+      } else {
+        // Still need to keep matrices valid once.
+        deer.update(0, playerPos);
+        boars.update(0, playerPos);
+      }
+      if (shouldRunHeavy()) {
+        butterflies.update(dt, playerPos);
+        crabs.update(dt, playerPos);
+      } else if (frame % 2 === 0) {
+        butterflies.update(dt, playerPos);
+        crabs.update(dt, playerPos);
+      }
+    },
+    applyDensity() {
+      birds.applyDensity();
+      deer.applyDensity();
+      fish.applyDensity();
+      butterflies.applyDensity();
+      crabs.applyDensity();
+      boars.applyDensity();
+    },
+    setVisible(v) {
+      for (const m of [birds.mesh, deer.mesh, fish.mesh, butterflies.mesh, crabs.mesh, boars.mesh]) m.visible = v;
     },
   };
 }

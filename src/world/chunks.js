@@ -55,8 +55,12 @@ export const CHUNK_SIZE = 16;
 // P0 tessellation: desktop samples the stepped terrain at 0.66m (risers stop
 // aliasing); low tier keeps 1.0m sampling (fill-rate bound). 24²×2 = 1152
 // tris/chunk (+16k total on desktop, fine without extra draw calls).
-export const CHUNK_SEG = QUALITY.low ? 16 : 24;
-export const CHUNK_RADIUS = 2; // (2*R+1)^2 = 25 chunks ~ 80x80 units visible
+// Apple Silicon / iPad sit at 24; medium Android at 16; low at 12.
+export const CHUNK_SEG = QUALITY.tier === 'low' ? 12 : QUALITY.tier === 'medium' ? 16 : 24;
+export let CHUNK_RADIUS = QUALITY.viewDistance || 2; // (2*R+1)^2 chunks visible
+export function setChunkRadius(r) {
+  CHUNK_RADIUS = Math.max(1, Math.min(3, r | 0));
+}
 
 const POOL = {
   // Genshin meadow: grass up to 1.8x denser, willow/bamboo add trunks, sakura adds petals.
@@ -148,7 +152,8 @@ export function createWorldManager(scene, seedStr) {
   let pendingBuild = [];
   let pendingWant = null;
   let pendingCenterKey = '';
-  const MAX_CHUNK_BUILDS_PER_FRAME = 2;
+  // Low tier builds 1 chunk/frame (thermal + hitch guard); others 2.
+  const MAX_CHUNK_BUILDS_PER_FRAME = QUALITY.tier === 'low' ? 1 : 2;
 
   function buildOneChunk(key) {
     if (groundChunks.has(key)) return;
@@ -220,7 +225,9 @@ export function createWorldManager(scene, seedStr) {
 
   function collectChunk(cx, cz, bucket, spawnPt) {
     const rng = rngFromString(`${getSeed()}|veg|${cx},${cz}`);
-    const TRIES = 30;
+    // Graphics vegetation slider scales scatter tries (CPU + instance cost).
+    const vegMul = QUALITY.vegetationMul ?? 1;
+    const TRIES = Math.max(8, Math.round(30 * vegMul));
     const sx = spawnPt.x;
     const sz = spawnPt.z;
     for (let t = 0; t < TRIES; t++) {
@@ -521,6 +528,24 @@ export function createWorldManager(scene, seedStr) {
       // collision obstacles using the current vegetation settings.
       if (pendingBuild.length > 0) flush();
       rebuildVegetation(new Set(groundChunks.keys()));
+    },
+    setViewDistance(r) {
+      setChunkRadius(r);
+      // Force a re-stream around the player on next update().
+      visibleKey = '';
+    },
+    rebuildAll(px = 0, pz = 0) {
+      for (const [, mesh] of groundChunks) {
+        scene.remove(mesh);
+        mesh.geometry.dispose();
+      }
+      groundChunks.clear();
+      pendingBuild = [];
+      pendingWant = null;
+      pendingCenterKey = '';
+      visibleKey = '';
+      ensureAround(px, pz);
+      flush();
     },
     regenerate,
     getSpawn: () => ({ ...spawn }),

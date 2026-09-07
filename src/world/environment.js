@@ -9,6 +9,7 @@
 // - Audio: tiny procedural WebAudio ambience (wind / rain / birds / crickets).
 import * as THREE from 'three';
 import { QUALITY } from '../core/setup.js';
+import { getGraphics } from '../core/graphics.js';
 import { createCozyMusic, MUSIC_TRACKS } from '../audio/cozy.js';
 import { windState, updateWind } from './wind.js';
 
@@ -395,7 +396,11 @@ export function createEnvironment(scene, opts = {}) {
   // ---- Rain particles (box around focus, wraps) ----
   // Lower density + size so the iso view never whites out.
   // Low tier halves the count (CPU sim + point overdraw both cost).
-  const RAIN_N = QUALITY.low ? 200 : 450;
+  // Graphics particles scales count; Apple Silicon can handle full 450.
+  const RAIN_N_BASE = QUALITY.low ? 200 : 450;
+  const RAIN_N = (() => {
+    try { const g = getGraphics(); if (g?.rain === false) return 0; return Math.max(0, Math.round(RAIN_N_BASE * (g?.particles ?? 1))); } catch { return RAIN_N_BASE; }
+  })();
   const RAIN_BOX = 36;
   const RAIN_H = 18;
   const rainPos = new Float32Array(RAIN_N * 3);
@@ -716,14 +721,20 @@ export function createEnvironment(scene, opts = {}) {
       }
 
       // --- rain ---
-      const targetRain = wx.rain;
+      let targetRain = wx.rain;
+      try { if (getGraphics()?.rain === false) targetRain = 0; } catch {}
+      // Disable rain when graphics says off (saves CPU + overdraw on low/iPad).
+      if (RAIN_N === 0) targetRain = 0;
       rainMat.opacity += ((targetRain * 0.55) - rainMat.opacity) * Math.min(1, dt * 2);
-      rain.visible = rainMat.opacity > 0.02;
+      rain.visible = rainMat.opacity > 0.02 && RAIN_N > 0;
       if (rain.visible) {
         const p = rainGeo.attributes.position.array;
         const slant = -1.2 * targetRain;
         const half = RAIN_BOX / 2;
-        for (let i = 0; i < RAIN_N; i++) {
+        // On low particles, step rain every other particle to halve CPU.
+        const gMul = (() => { try { return getGraphics()?.particles ?? 1; } catch { return 1; }})();
+        const rainStep = gMul < 0.5 ? 2 : 1;
+        for (let i = 0; i < RAIN_N; i += rainStep) {
           p[i * 3 + 1] -= rainVel[i] * dt;
           p[i * 3] += slant * dt;
           if (p[i * 3 + 1] < 0) {
@@ -733,6 +744,7 @@ export function createEnvironment(scene, opts = {}) {
           }
           if (p[i * 3] < -half) p[i * 3] += RAIN_BOX;
         }
+        // Keep untouched particles frozen (step 2) — still valid.
         rainGeo.attributes.position.needsUpdate = true;
         rain.position.set(focusV.x, 0, focusV.z);
       }

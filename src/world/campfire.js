@@ -11,8 +11,13 @@ import { proceduralGroundHeight, riverDist } from './procedural.js';
 import { rngFromString } from './noise.js';
 
 const SITE_COUNT = 5;
-const EMBERS_PER_FIRE = QUALITY.low ? 12 : 22;
-const SMOKE_PER_FIRE = QUALITY.low ? 4 : 8;
+import { getGraphics } from '../core/graphics.js';
+const EMBERS_BASE = QUALITY.low ? 12 : 22;
+const SMOKE_BASE = QUALITY.low ? 4 : 8;
+function emberCount() { try { const g = getGraphics(); return Math.max(0, Math.round(EMBERS_BASE * (g?.particles ?? 1))); } catch { return EMBERS_BASE; } }
+function smokeCount() { try { const g = getGraphics(); return Math.max(0, Math.round(SMOKE_BASE * (g?.particles ?? 1))); } catch { return SMOKE_BASE; } }
+const EMBERS_PER_FIRE = emberCount();
+const SMOKE_PER_FIRE = smokeCount();
 // Beyond this distance a fire is off-screen (ortho view spans ~±20u) — its
 // light, flame pulse and particle uploads are skipped entirely.
 const FIRE_CULL_DIST = 42;
@@ -316,34 +321,50 @@ export function createCampsites(scene, seed = 'FOREST_123') {
         s.flameOuter.rotation.y += dt * 2;
         s.flameInner.rotation.y -= dt * 3;
 
-        // Embers rise + respawn.
-        const ep = s.embers.geo.attributes.position.array;
-        for (let i = 0; i < EMBERS_PER_FIRE; i++) {
-          ep[i * 3 + 1] += s.emberVel[i] * dt;
-          ep[i * 3] += Math.sin(elapsed * 3 + i) * dt * 0.3;
-          s.emberLife[i] += dt * 0.7;
-          if (ep[i * 3 + 1] > 2.2 || s.emberLife[i] > 1.6) {
-            ep[i * 3] = (Math.random() - 0.5) * 0.5;
-            ep[i * 3 + 1] = 0;
-            ep[i * 3 + 2] = (Math.random() - 0.5) * 0.5;
-            s.emberLife[i] = 0;
+        // Embers rise + respawn. Skip when particles ~0.
+        const ec = emberCount();
+        if (ec > 0) {
+          const ep = s.embers.geo.attributes.position.array;
+          for (let i = 0; i < ec; i++) {
+            ep[i * 3 + 1] += s.emberVel[i] * dt;
+            ep[i * 3] += Math.sin(elapsed * 3 + i) * dt * 0.3;
+            s.emberLife[i] += dt * 0.7;
+            if (ep[i * 3 + 1] > 2.2 || s.emberLife[i] > 1.6) {
+              ep[i * 3] = (Math.random() - 0.5) * 0.5;
+              ep[i * 3 + 1] = 0;
+              ep[i * 3 + 2] = (Math.random() - 0.5) * 0.5;
+              s.emberLife[i] = 0;
+            }
           }
+          s.embers.geo.attributes.position.needsUpdate = true;
+          s.embers.geo.setDrawRange(0, ec);
+          s.embers.mat.opacity = 0.45 + nf * 0.5;
+          s.embers.pts.visible = true;
+        } else {
+          s.embers.pts.visible = false;
+          s.embers.geo.setDrawRange(0, 0);
         }
-        s.embers.geo.attributes.position.needsUpdate = true;
-        s.embers.mat.opacity = 0.45 + nf * 0.5;
 
         // Smoke drifts up, wraps.
-        const mp = s.smoke.geo.attributes.position.array;
-        for (let i = 0; i < SMOKE_PER_FIRE; i++) {
-          mp[i * 3 + 1] += s.smokeVel[i] * dt;
-          mp[i * 3] += dt * 0.35;
-          if (mp[i * 3 + 1] > 3.2) {
-            mp[i * 3] = (Math.random() - 0.5) * 0.4;
-            mp[i * 3 + 1] = 0.8;
-            mp[i * 3 + 2] = (Math.random() - 0.5) * 0.4;
+        const sc = smokeCount();
+        if (sc > 0) {
+          const mp = s.smoke.geo.attributes.position.array;
+          for (let i = 0; i < sc; i++) {
+            mp[i * 3 + 1] += s.smokeVel[i] * dt;
+            mp[i * 3] += dt * 0.35;
+            if (mp[i * 3 + 1] > 3.2) {
+              mp[i * 3] = (Math.random() - 0.5) * 0.4;
+              mp[i * 3 + 1] = 0.8;
+              mp[i * 3 + 2] = (Math.random() - 0.5) * 0.4;
+            }
           }
+          s.smoke.geo.attributes.position.needsUpdate = true;
+          s.smoke.geo.setDrawRange(0, sc);
+          s.smoke.pts.visible = true;
+        } else {
+          s.smoke.pts.visible = false;
+          s.smoke.geo.setDrawRange(0, 0);
         }
-        s.smoke.geo.attributes.position.needsUpdate = true;
       }
     },
     dispose() {

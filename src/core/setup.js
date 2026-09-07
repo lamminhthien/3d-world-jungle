@@ -3,35 +3,129 @@ import { CAMERA, WORLD } from '../config.js';
 
 // Coarse device tier used to scale quality (shadows, pixel ratio, AA).
 // Mobile GPUs are fill-rate bound: MSAA + high DPR + PCFSoft shadows kill them.
+import { detectDeviceTier, getEffectiveGraphics, getGraphicsState, isAndroidDevice, isIPadDevice, isIPhoneDevice } from './graphics.js';
+
 export const isMobileDevice =
   typeof navigator !== 'undefined' &&
   (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
-    (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 820));
+    (navigator.maxTouchPoints > 1 && typeof screen !== 'undefined' && Math.min(screen.width, screen.height) < 820));
 
-// Low tier: iPhones (A13-class and older tile-based GPUs) + old/small Androids.
-// These are fill-rate + thermally bound in Safari: start at DPR 1.0 with no
-// shadow maps and cheap materials instead of starting high and adapting down
-// (Safari thermally caps fast and never recovers). See docs/perf-iphone11-safari.md.
-export const isLowTierDevice =
+// iPadOS 13+ reports as Macintosh — touch points reveal it.
+export const isIPadOSDevice =
   typeof navigator !== 'undefined' &&
-  (/iPhone|iPod/i.test(navigator.userAgent) ||
-    (/iPad/i.test(navigator.userAgent) && typeof devicePixelRatio !== 'undefined' && devicePixelRatio >= 2) ||
-    (/Android/i.test(navigator.userAgent) &&
-      (navigator.deviceMemory <= 4 ||
-        (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4))));
+  (isIPadDevice() || (/Mac/i.test(navigator.userAgent || '') && navigator.maxTouchPoints > 1));
+
+// Apple Silicon Mac heuristic (see graphics.js): fast unified memory, but
+// Retina DPR 2 + bloom is still heavy — default to high, not ultra.
+export const isAppleSiliconMac =
+  typeof navigator !== 'undefined' &&
+  /Mac/i.test(navigator.userAgent || '') && !isIPadOSDevice &&
+  ((navigator.hardwareConcurrency || 0) >= 8);
+
+// Device tier: low (battery saver) / medium (balanced) / high / ultra.
+// Auto preset in graphics.js resolves to one of these at boot.
+export const deviceTier = (() => {
+  try { return detectDeviceTier(); } catch { return 'medium'; }
+})();
+
+// Low tier: old iPhones / small Androids / weak GPUs. Start at DPR ~1.0 with
+// no shadow maps and cheap materials instead of starting high and adapting
+// down (mobile Safari thermally caps fast and never recovers).
+// See docs/perf-iphone11-safari.md.
+export const isLowTierDevice =
+  deviceTier === 'low' ||
+  (typeof navigator !== 'undefined' &&
+    (isIPhoneDevice() ||
+      (isIPadOSDevice && typeof devicePixelRatio !== 'undefined' && devicePixelRatio >= 2 && Math.min(screen.width, screen.height) < 500) ||
+      (isAndroidDevice() &&
+        (navigator.deviceMemory <= 4 ||
+          (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4)))));
+
+export const isMidTierDevice = deviceTier === 'medium';
+
+function shadowSizeForTier() {
+  if (deviceTier === 'low') return 512;
+  if (deviceTier === 'medium') return 1024;
+  return 2048;
+}
 
 export const QUALITY = {
   isMobile: isMobileDevice,
-  low: isLowTierDevice || (isMobileDevice && Math.min(screen.width, screen.height) < 420),
-  // Desktop keeps crisp 2x; mobile caps at 1.5; low tier starts at 1.0 (huge
-  // fill-rate win on 828x1792-class screens). Adaptive quality may go lower.
-  maxPixelRatio: isLowTierDevice ? 1 : isMobileDevice ? 1.5 : 2,
-  minPixelRatio: isLowTierDevice ? 0.85 : 1,
-  shadowSize: isLowTierDevice ? 512 : isMobileDevice ? 1024 : 2048,
+  isIPad: isIPadOSDevice,
+  isAppleSilicon: isAppleSiliconMac,
+  tier: deviceTier,
+  low: isLowTierDevice || (isMobileDevice && typeof screen !== 'undefined' && Math.min(screen.width, screen.height) < 420),
+  mid: isMidTierDevice,
+  // DPR caps by tier: low 1.0 / medium 1.5 / high 1.75 (Retina MacBook + iPad
+  // thermal guard — full 2x is ~1.8x the pixels of 1.5x) / ultra 2.
+  // Multiplied at runtime by graphics resolution 0.5..1.0. Adaptive may go lower.
+  maxPixelRatio: isLowTierDevice ? 1 : deviceTier === 'medium' ? 1.5 : deviceTier === 'high' ? 1.75 : 2,
+  minPixelRatio: isLowTierDevice ? 0.6 : 0.75,
+  shadowSize: shadowSizeForTier(),
+  shadowMode: isLowTierDevice ? 'off' : deviceTier === 'medium' ? 'low' : 'high',
   shadowsEnabled: !isLowTierDevice,
   // Anisotropy cap for generated material textures (textures.js reads this).
-  maxAnisotropy: isLowTierDevice ? 1 : isMobileDevice ? 4 : 8,
+  maxAnisotropy: isLowTierDevice ? 1 : deviceTier === 'medium' ? 4 : 8,
+  // Runtime-tunable (mutated by applyGraphicsToRenderer, read by world code).
+  resolution: 1,
+  viewDistance: deviceTier === 'low' ? 1 : deviceTier === 'ultra' ? 3 : 2,
+  vegetationMul: 1,
+  animalsMul: 1,
+  windSway: !isLowTierDevice,
 };
+
+// Apply stored graphics settings to the mutable QUALITY fields + renderer.
+// Called at boot and on every settings change (live, no reload).
+export function refreshQualityFromGraphics() {
+  let g;
+  try { g = getEffectiveGraphics(getGraphicsState()); } catch { return; }
+  QUALITY.resolution = g.resolution ?? 1;
+  QUALITY.viewDistance = g.viewDistance ?? 2;
+  QUALITY.vegetationMul = g.vegetation ?? 1;
+  QUALITY.animalsMul = g.animals ?? 1;
+  QUALITY.windSway = g.windSway !== false && !QUALITY.low;
+  const mode = g.shadows || 'off';
+  QUALITY.shadowMode = mode;
+  QUALITY.shadowsEnabled = mode !== 'off';
+  QUALITY.shadowSize = mode === 'ultra' ? 2048 : mode === 'high' ? 2048 : mode === 'low' ? 1024 : 512;
+  // DPR cap follows tier, scaled by resolution slider. Apple Silicon Retina:
+  // resolution 1.0 + cap 1.75 keeps native-ish sharpness minus the worst
+  // fill-rate cliff; battery preset drops to ~0.7 effective.
+  const tierCap = deviceTier === 'low' ? 1 : deviceTier === 'medium' ? 1.5 : deviceTier === 'high' ? 1.75 : 2;
+  QUALITY.maxPixelRatio = Math.max(0.6, tierCap * (g.resolution ?? 1));
+}
+
+try { refreshQualityFromGraphics(); } catch { /* boot defaults stand */ }
+
+export function effectivePixelRatio() {
+  const dpr = typeof devicePixelRatio !== 'undefined' ? devicePixelRatio || 1 : 1;
+  return Math.min(dpr, QUALITY.maxPixelRatio);
+}
+
+export function applyGraphicsToRenderer(renderer, sun = null) {
+  if (!renderer) return;
+  refreshQualityFromGraphics();
+  renderer.setPixelRatio(effectivePixelRatio());
+  const wantShadows = QUALITY.shadowsEnabled;
+  // Toggling shadowMap.enabled at runtime needs materials refreshed once.
+  if (renderer.shadowMap.enabled !== wantShadows) {
+    renderer.shadowMap.enabled = wantShadows;
+    try {
+      renderer.shadowMap.needsUpdate = true;
+      if (renderer.materials) renderer.materials.needsUpdate = true;
+    } catch { /* ignore */ }
+  }
+  renderer.shadowMap.type = QUALITY.isMobile
+    ? THREE.PCFShadowMap
+    : THREE.PCFSoftShadowMap;
+  if (sun) {
+    sun.castShadow = wantShadows;
+    try { sun.shadow.mapSize.set(QUALITY.shadowSize, QUALITY.shadowSize); } catch { /* ignore */ }
+    if (sun.shadow.map) {
+      try { sun.shadow.map.dispose(); sun.shadow.map = null; } catch { /* ignore */ }
+    }
+  }
+}
 
 // Renderer / Scene / Isometric camera / Lights.
 // Returns everything main.js needs to run the frame loop.

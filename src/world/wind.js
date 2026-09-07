@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { QUALITY } from '../core/setup.js';
+import { getGraphics } from '../core/graphics.js';
 
 export const windState = {
   direction: new THREE.Vector2(1, 0.25).normalize(), // slowly rotates 15°/min
@@ -22,6 +23,17 @@ const _shaders = []; // { shader, material }
  */
 export function updateWind(dt, weather = 'clear') {
   windState.time += dt;
+  // Graphics toggle: wind sway off => zero strength (saves vertex ALU, still updates time).
+  let swayOn = !QUALITY.low;
+  try { swayOn = getGraphics()?.windSway !== false && !QUALITY.low; } catch { swayOn = !QUALITY.low; }
+  if (!swayOn) {
+    windState.strength = 0;
+    for (const entry of _shaders) {
+      if (entry.shader?.uniforms?.windStrength) entry.shader.uniforms.windStrength.value = 0;
+      if (entry.shader?.uniforms?.windTime) entry.shader.uniforms.windTime.value = windState.time;
+    }
+    return;
+  }
   // Direction drifts slowly (~15° per minute)
   _windAngle += dt * (0.00436); // 15°/60s = 0.00436 rad/s
   windState.direction.set(Math.cos(_windAngle), Math.sin(_windAngle));

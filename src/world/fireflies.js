@@ -6,11 +6,21 @@
 // - Ortho-camera safe: fixed pixel point size (no perspective attenuation).
 import * as THREE from 'three';
 import { QUALITY } from '../core/setup.js';
+import { getGraphics } from '../core/graphics.js';
 import { groundHeight, riverDist } from '../utils.js';
 import { riverXAt } from './procedural.js';
 
-// Low tier halves the swarm (CPU sine sim + additive overdraw both cost).
-const COUNT = QUALITY.low ? 70 : 140;
+// Max swarm; live count is throttled by graphics particles + tier.
+const COUNT_MAX = 140;
+function initialFireflyCount() {
+  const base = QUALITY.low ? 70 : 140;
+  try {
+    const g = getGraphics();
+    if (g?.fireflies === false) return 0;
+    return Math.max(0, Math.round(base * (g?.particles ?? 1)));
+  } catch { return base; }
+}
+let COUNT = initialFireflyCount();
 const RANGE = 22; // respawn box half-size around the player
 const DESPAWN = 28;
 
@@ -26,17 +36,17 @@ function nightFactor(timeOfDay) {
 
 export function createFireflies(scene) {
   const geo = new THREE.BufferGeometry();
-  const pos = new Float32Array(COUNT * 3);
-  const phase = new Float32Array(COUNT);
-  const speed = new Float32Array(COUNT);
-  const pscale = new Float32Array(COUNT);
+  const pos = new Float32Array(COUNT_MAX * 3);
+  const phase = new Float32Array(COUNT_MAX);
+  const speed = new Float32Array(COUNT_MAX);
+  const pscale = new Float32Array(COUNT_MAX);
 
   // Per-point wander state (CPU).
-  const bx = new Float32Array(COUNT);
-  const by = new Float32Array(COUNT);
-  const bz = new Float32Array(COUNT);
-  const amp = new Float32Array(COUNT);
-  const seed2 = new Float32Array(COUNT);
+  const bx = new Float32Array(COUNT_MAX);
+  const by = new Float32Array(COUNT_MAX);
+  const bz = new Float32Array(COUNT_MAX);
+  const amp = new Float32Array(COUNT_MAX);
+  const seed2 = new Float32Array(COUNT_MAX);
 
   function place(i, fx, fz, first = false) {
     let x; let z;
@@ -63,7 +73,7 @@ export function createFireflies(scene) {
     }
   }
 
-  for (let i = 0; i < COUNT; i++) {
+  for (let i = 0; i < COUNT_MAX; i++) {
     place(i, 0, 0, true);
     phase[i] = Math.random() * Math.PI * 2;
     speed[i] = 1.2 + Math.random() * 2.2; // flicker speed
@@ -73,6 +83,7 @@ export function createFireflies(scene) {
   geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
   geo.setAttribute('aSpeed', new THREE.BufferAttribute(speed, 1));
   geo.setAttribute('aScale', new THREE.BufferAttribute(pscale, 1));
+  geo.setDrawRange(0, COUNT);
 
   const uniforms = {
     uTime: { value: 0 },
@@ -119,12 +130,31 @@ export function createFireflies(scene) {
   scene.add(points);
 
   let visible = false;
+  let enabled = COUNT > 0;
+
+  function applyGraphics(g) {
+    enabled = g?.fireflies !== false && (g?.particles ?? 1) > 0.05;
+    const base = QUALITY.low ? 70 : 140;
+    const mul = g?.particles ?? 1;
+    const next = enabled ? Math.max(0, Math.round(base * mul)) : 0;
+    COUNT = next;
+    geo.setDrawRange(0, COUNT);
+    if (!enabled || COUNT === 0) { points.visible = false; return; }
+    // Scale point size with particle slider so low still reads.
+    for (let i = 0; i < COUNT_MAX; i++) {
+      if (pscale[i] !== undefined) pscale[i] = (5 + Math.random() * 7) * (0.7 + mul * 0.3);
+    }
+    geo.attributes.aScale.needsUpdate = true;
+  }
 
   return {
     points,
     nightFactor,
     get visible() { return visible; },
+    applyGraphics,
     update(dt, elapsed, focus, timeOfDay) {
+      try { if (getGraphics()?.fireflies === false) { points.visible = false; return; } } catch {}
+      if (!enabled || COUNT === 0) { points.visible = false; return; }
       const f = nightFactor(timeOfDay);
       uniforms.uTime.value = elapsed;
       // Fade the whole swarm; hide entirely by day (skip draw cost).
@@ -139,7 +169,10 @@ export function createFireflies(scene) {
       // Budget recycles: place() runs river + ground noise; after a fast
       // move/teleport dozens could recycle in one frame => hitch. Spread it.
       let recycled = 0;
-      for (let i = 0; i < COUNT; i++) {
+      // On low-end, update only half the fireflies per frame (even/odd).
+      const step = (getGraphics()?.particles ?? 1) < 0.6 ? 2 : 1;
+      const start = (Math.floor(elapsed * 30) % 2);
+      for (let i = start; i < COUNT; i += step) {
         // Recycle strays back around the player.
         const dx = bx[i] - fx;
         const dz = bz[i] - fz;

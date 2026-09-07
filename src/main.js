@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { DEFAULT_SEED, DEFAULT_MAX_FPS, ENV, RIVER_HALF, SPEED, VEGETATION, WORLD } from './config.js';
+import { DEFAULT_SEED, ENV, RIVER_HALF, SPEED, VEGETATION, WORLD } from './config.js';
 import { groundHeight, isOnBridge, obstacles, riverDist } from './utils.js';
-import { QUALITY, setupCore } from './core/setup.js';
+import { getGraphics, getGraphicsState, setPreset, setOverride, onGraphicsChange, defaultFpsCap } from './core/graphics.js';
+import { QUALITY, setupCore, applyGraphicsToRenderer, effectivePixelRatio } from './core/setup.js';
 import { runPreGameCache } from './core/bootCache.js';
 import { createWorldManager } from './world/chunks.js';
 import { updateProceduralGen } from './world/procedural.js';
@@ -25,7 +26,7 @@ import { createVillage } from './gameplay/village.js';
 import { createLandmarks } from './world/landmarks.js';
 
 // ============ Loop State ============
-let targetFps = DEFAULT_MAX_FPS;
+let targetFps = defaultFpsCap();
 let lastFrameTime = 0;
 
 // ============ Seed (docs section 4.1): ?seed= in URL, else default ============
@@ -267,13 +268,214 @@ async function boot() {
   });
 
 
+  // ============ Graphics settings (presets + live overrides) ============
+  // Sync FPS cap from graphics preset (auto => low 30, medium 45, high/ultra 60).
   const fpsSelect = document.getElementById('fpsSelect');
-  if (fpsSelect && targetFps) {
-    fpsSelect.value = String(targetFps);
-    fpsSelect.addEventListener('change', (e) => {
-      targetFps = parseInt(e.target.value, 10);
+  const gfxPreset = document.getElementById('gfxPreset');
+  const gfxBadge = document.getElementById('gfxPresetBadge');
+  const gfxResolution = document.getElementById('gfxResolution');
+  const gfxResolutionValue = document.getElementById('gfxResolutionValue');
+  const gfxShadows = document.getElementById('gfxShadows');
+  const gfxViewDistance = document.getElementById('gfxViewDistance');
+  const gfxViewDistanceValue = document.getElementById('gfxViewDistanceValue');
+  const gfxAnimals = document.getElementById('gfxAnimals');
+  const gfxAnimalsValue = document.getElementById('gfxAnimalsValue');
+  const gfxParticles = document.getElementById('gfxParticles');
+  const gfxParticlesValue = document.getElementById('gfxParticlesValue');
+  const gfxCloudsToggle = document.getElementById('gfxCloudsToggle');
+  const gfxRainToggle = document.getElementById('gfxRainToggle');
+  const gfxFirefliesToggle = document.getElementById('gfxFirefliesToggle');
+  const gfxWindToggle = document.getElementById('gfxWindToggle');
+  const gfxWaterToggle = document.getElementById('gfxWaterToggle');
+  const gfxReset = document.getElementById('gfxReset');
+
+  function syncGraphicsUI() {
+    const eff = getGraphics();
+    const state = getGraphicsState();
+    if (gfxPreset) gfxPreset.value = state.preset;
+    if (gfxBadge) {
+      const tier = QUALITY.tier;
+      gfxBadge.textContent = state.preset === 'auto' ? `Auto · ${tier}` : eff.presetName;
+      gfxBadge.style.background = state.preset === 'auto' ? '#66bb6a' : '#43a047';
+    }
+    if (fpsSelect) fpsSelect.value = String(eff.fpsCap || targetFps);
+    if (fpsSelect && eff.fpsCap) targetFps = eff.fpsCap;
+    if (gfxResolution) gfxResolution.value = String(eff.resolution);
+    if (gfxResolutionValue) gfxResolutionValue.textContent = `${Math.round(eff.resolution * 100)}%`;
+    if (gfxShadows) gfxShadows.value = state.overrides?.shadows ?? '';
+    if (gfxViewDistance) gfxViewDistance.value = String(eff.viewDistance);
+    if (gfxViewDistanceValue) gfxViewDistanceValue.textContent = `${eff.viewDistance} (${eff.viewDistance === 1 ? '9' : eff.viewDistance === 2 ? '25' : '49'} chunks)`;
+    if (gfxAnimals) gfxAnimals.value = String(eff.animals);
+    if (gfxAnimalsValue) gfxAnimalsValue.textContent = `${Math.round(eff.animals * 100)}%`;
+    if (gfxParticles) gfxParticles.value = String(eff.particles);
+    if (gfxParticlesValue) gfxParticlesValue.textContent = `${Math.round(eff.particles * 100)}%`;
+    if (gfxCloudsToggle) gfxCloudsToggle.textContent = eff.clouds === false ? '☁️ Clouds: Off' : '☁️ Clouds: On';
+    if (gfxRainToggle) gfxRainToggle.textContent = eff.rain === false ? '🌧️ Rain: Off' : '🌧️ Rain: On';
+    if (gfxFirefliesToggle) gfxFirefliesToggle.textContent = eff.fireflies === false ? '✨ Fireflies: Off' : '✨ Fireflies: On';
+    if (gfxWindToggle) gfxWindToggle.textContent = eff.windSway === false ? '🍃 Wind: Off' : '🍃 Wind: On';
+    if (gfxWaterToggle) gfxWaterToggle.textContent = eff.waterHigh === false ? '💧 Water HQ: Off' : '💧 Water HQ: On';
+    // FX toggles (query directly — buttons are defined later in file)
+    const _bloom = document.getElementById('bloomToggle');
+    if (_bloom) _bloom.textContent = eff.bloom === false ? 'Bloom: Off' : 'Bloom: On';
+    const _rays = document.getElementById('godRaysToggle');
+    if (_rays) _rays.textContent = eff.rays === false ? 'Rays: Off' : 'Rays: On';
+    const _flare = document.getElementById('lensFlareToggle');
+    if (_flare) _flare.textContent = eff.flare === false ? 'Flare: Off' : 'Flare: On';
+    const _gi = document.getElementById('giToggle');
+    if (_gi) _gi.textContent = eff.gi === false ? 'GI: Off' : 'GI: On';
+  }
+
+  function applyLiveGraphics() {
+    const eff = getGraphics();
+    // Renderer (DPR + shadows)
+    applyGraphicsToRenderer(renderer, sun);
+    // World view distance — rebuild if changed
+    try {
+      const curRadius = world.stats ? world.stats().chunks : null; // not used, just dummy
+      // Check if view distance changed (store last)
+      if (applyLiveGraphics._lastView !== eff.viewDistance) {
+        applyLiveGraphics._lastView = eff.viewDistance;
+        if (world.setViewDistance) world.setViewDistance(eff.viewDistance);
+        // Rebuild around current player if started, else around spawn
+        const px = typeof player !== 'undefined' ? player.position.x : spawn.x;
+        const pz = typeof player !== 'undefined' ? player.position.z : spawn.z;
+        if (world.rebuildAll) world.rebuildAll(px, pz);
+        else world.refreshVegetation?.();
+      } else if (applyLiveGraphics._lastVeg !== eff.vegetation) {
+        world.refreshVegetation?.();
+      }
+      applyLiveGraphics._lastVeg = eff.vegetation;
+    } catch {}
+    // Vegetation density already via QUALITY.vegetationMul, force rebuild on change
+    try { sky.applyGraphics?.(eff); } catch {}
+    try { fireflies.applyGraphics?.(eff); } catch {}
+    try { river.applyGraphics?.(eff); } catch {}
+    try { animals.applyDensity?.(); } catch {}
+    // FPS cap follows preset unless user manually overrode via fpsSelect
+    targetFps = eff.fpsCap || targetFps;
+    if (fpsSelect) fpsSelect.value = String(targetFps);
+    // Composer: recreate/dispose when bloom toggled
+    const wantBloom = eff.bloom !== false && !QUALITY.low;
+    if (wantBloom && !composer) {
+      try { composer = createComposer(renderer, scene, camera); if (typeof window !== 'undefined') window.__composer = composer; } catch {}
+    } else if (!wantBloom && composer) {
+      disposeComposer(composer);
+      composer = null;
+      if (typeof window !== 'undefined') window.__composer = null;
+    }
+    // FX passes enable via graphics store (postprocessing reads it each frame)
+    try {
+      if (composer?.userData?.volumetric) composer.userData.volumetric.pass.enabled = eff.rays !== false;
+      if (composer?.userData?.lensFlare) composer.userData.lensFlare.pass.enabled = eff.flare !== false;
+      if (composer?.userData?.aoPass) composer.userData.aoPass.enabled = eff.gi !== false;
+      if (typeof window !== 'undefined' && window.__bounceLight) window.__bounceLight.visible = eff.gi !== false;
+    } catch {}
+    syncGraphicsUI();
+  }
+  // Expose for other modules / console
+  if (typeof window !== 'undefined') {
+    window.__getGraphics = getGraphics;
+    window.__graphicsModule = { getGraphics };
+  }
+
+  // Wire preset + overrides
+  if (gfxPreset) {
+    gfxPreset.value = getGraphicsState().preset;
+    gfxPreset.addEventListener('change', (e) => {
+      setPreset(e.target.value);
+      applyLiveGraphics();
     });
   }
+  if (fpsSelect) {
+    fpsSelect.value = String(targetFps);
+    fpsSelect.addEventListener('change', (e) => {
+      const v = parseInt(e.target.value, 10);
+      targetFps = v;
+      setOverride('fpsCap', v);
+      syncGraphicsUI();
+    });
+  }
+  if (gfxResolution) {
+    gfxResolution.addEventListener('input', (e) => {
+      const v = Number(e.target.value);
+      if (gfxResolutionValue) gfxResolutionValue.textContent = `${Math.round(v * 100)}%`;
+    });
+    gfxResolution.addEventListener('change', (e) => {
+      setOverride('resolution', Number(e.target.value));
+      applyLiveGraphics();
+    });
+  }
+  if (gfxShadows) {
+    gfxShadows.addEventListener('change', (e) => {
+      const v = e.target.value;
+      setOverride('shadows', v || null);
+      applyLiveGraphics();
+    });
+  }
+  if (gfxViewDistance) {
+    gfxViewDistance.addEventListener('input', (e) => {
+      const v = Number(e.target.value);
+      if (gfxViewDistanceValue) gfxViewDistanceValue.textContent = `${v} (${v === 1 ? '9' : v === 2 ? '25' : '49'} chunks)`;
+    });
+    gfxViewDistance.addEventListener('change', (e) => {
+      setOverride('viewDistance', Number(e.target.value));
+      applyLiveGraphics();
+    });
+  }
+  if (gfxAnimals) {
+    gfxAnimals.addEventListener('input', (e) => {
+      const v = Number(e.target.value);
+      if (gfxAnimalsValue) gfxAnimalsValue.textContent = `${Math.round(v * 100)}%`;
+    });
+    gfxAnimals.addEventListener('change', (e) => {
+      setOverride('animals', Number(e.target.value));
+      applyLiveGraphics();
+    });
+  }
+  if (gfxParticles) {
+    gfxParticles.addEventListener('input', (e) => {
+      const v = Number(e.target.value);
+      if (gfxParticlesValue) gfxParticlesValue.textContent = `${Math.round(v * 100)}%`;
+    });
+    gfxParticles.addEventListener('change', (e) => {
+      setOverride('particles', Number(e.target.value));
+      applyLiveGraphics();
+    });
+  }
+  function bindToggle(btn, key) {
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const eff = getGraphics();
+      const cur = eff[key];
+      // cur is boolean or undefined; toggle to opposite bool
+      const next = cur === false ? true : false;
+      setOverride(key, next ? null : false);
+      // For bloom/rays/flare/gi, also keep legacy localStorage in sync
+      if (key === 'bloom') setBloomEnabled(next);
+      if (key === 'rays') setRaysEnabled(next);
+      if (key === 'flare') setFlareEnabled(next);
+      if (key === 'gi') setGIEnabled(next);
+      applyLiveGraphics();
+    });
+  }
+  bindToggle(gfxCloudsToggle, 'clouds');
+  bindToggle(gfxRainToggle, 'rain');
+  bindToggle(gfxFirefliesToggle, 'fireflies');
+  bindToggle(gfxWindToggle, 'windSway');
+  bindToggle(gfxWaterToggle, 'waterHigh');
+  if (gfxReset) {
+    gfxReset.addEventListener('click', () => {
+      const state = getGraphicsState();
+      // Clear overrides, keep preset
+      setPreset(state.preset);
+      applyLiveGraphics();
+    });
+  }
+  // React to external graphics changes (e.g. console)
+  onGraphicsChange(() => applyLiveGraphics());
+  // Initial sync + apply (ensures renderer + world match stored preset)
+  syncGraphicsUI();
+  applyLiveGraphics();
 
   // Vegetation settings rebuild the currently visible chunks so the change is
   // immediate and does not require regenerating the terrain or changing seed.
@@ -604,21 +806,34 @@ async function boot() {
   }
 
   // ============ Loop ============
-  const prCap = Math.min(devicePixelRatio || 1, QUALITY.maxPixelRatio);
+  // prCap is dynamic — follows graphics resolution + tier (Apple Silicon can
+  // sustain higher DPR than low/medium Android).
+  const getPrCap = () => Math.min(devicePixelRatio || 1, QUALITY.maxPixelRatio);
   let qualityCooldown = 0;
   let downVotes = 0;
   let upVotes = 0;
 
   // Bloom auto-off when FPS <50 for 2 votes (fill-rate killer fallback)
   let bloomLowVotes = 0;
-  // Wire bloom toggle in menu if present (Phase 6)
+  // FX toggles — now driven by graphics preset + overrides (kept in sync with syncGraphicsUI).
+  // These handlers update both the legacy localStorage keys and the graphics overrides.
   const bloomBtn = document.getElementById('bloomToggle');
+  const raysBtn = document.getElementById('godRaysToggle');
+  const flareBtn = document.getElementById('lensFlareToggle');
+  const giBtn = document.getElementById('giToggle');
+  function syncFxButtons() {
+    if (bloomBtn) bloomBtn.textContent = isBloomEnabled() ? 'Bloom: On' : 'Bloom: Off';
+    if (raysBtn) raysBtn.textContent = isRaysEnabled() ? 'Rays: On' : 'Rays: Off';
+    if (flareBtn) flareBtn.textContent = isFlareEnabled() ? 'Flare: On' : 'Flare: Off';
+    if (giBtn) giBtn.textContent = isGIEnabled() ? 'GI: On' : 'GI: Off';
+  }
+  syncFxButtons();
   if (bloomBtn) {
-    bloomBtn.textContent = isBloomEnabled() ? 'Bloom: On' : 'Bloom: Off';
     bloomBtn.onclick = () => {
       const nowOn = !isBloomEnabled();
       setBloomEnabled(nowOn);
-      bloomBtn.textContent = nowOn ? 'Bloom: On' : 'Bloom: Off';
+      setOverride('bloom', nowOn ? null : false);
+      syncFxButtons(); syncGraphicsUI();
       if (nowOn && !composer && !QUALITY.low) {
         composer = createComposer(renderer, scene, camera);
         if (typeof window !== 'undefined') window.__composer = composer;
@@ -629,36 +844,32 @@ async function boot() {
       }
     };
   }
-  // Phase 7 FX toggles (rays / flare / GI)
-  const raysBtn = document.getElementById('godRaysToggle');
-  const flareBtn = document.getElementById('lensFlareToggle');
-  const giBtn = document.getElementById('giToggle');
   if (raysBtn) {
-    raysBtn.textContent = isRaysEnabled() ? 'Rays: On' : 'Rays: Off';
     raysBtn.onclick = () => {
       const nowOn = !isRaysEnabled();
       setRaysEnabled(nowOn);
-      raysBtn.textContent = nowOn ? 'Rays: On' : 'Rays: Off';
+      setOverride('rays', nowOn ? null : false);
+      syncFxButtons(); syncGraphicsUI();
     };
   }
   if (flareBtn) {
-    flareBtn.textContent = isFlareEnabled() ? 'Flare: On' : 'Flare: Off';
     flareBtn.onclick = () => {
       const nowOn = !isFlareEnabled();
       setFlareEnabled(nowOn);
-      flareBtn.textContent = nowOn ? 'Flare: On' : 'Flare: Off';
+      setOverride('flare', nowOn ? null : false);
+      syncFxButtons(); syncGraphicsUI();
     };
   }
   if (giBtn) {
-    giBtn.textContent = isGIEnabled() ? 'GI: On' : 'GI: Off';
     giBtn.onclick = () => {
       const nowOn = !isGIEnabled();
       setGIEnabled(nowOn);
-      giBtn.textContent = nowOn ? 'GI: On' : 'GI: Off';
+      setOverride('gi', nowOn ? null : false);
+      syncFxButtons(); syncGraphicsUI();
       if (bounceLight) bounceLight.visible = nowOn;
     };
   }
-  // Init bounce visibility from stored GI toggle
+  // Init bounce visibility from stored GI toggle / graphics
   if (bounceLight && !isGIEnabled()) bounceLight.visible = false;
 
   function animate(now) {
@@ -714,11 +925,11 @@ async function boot() {
             renderer.setPixelRatio(Math.max(QUALITY.minPixelRatio, pr - 0.25));
             if (composer) composer.setPixelRatio?.(renderer.getPixelRatio());
           }
-        } else if (avg > targetFps * 0.95 && pr < prCap) {
+        } else if (avg > targetFps * 0.95 && pr < getPrCap()) {
           downVotes = 0;
           if (++upVotes >= 2) {
             upVotes = 0;
-            renderer.setPixelRatio(Math.min(prCap, pr + 0.25));
+            renderer.setPixelRatio(Math.min(getPrCap(), pr + 0.25));
             if (composer) composer.setPixelRatio?.(renderer.getPixelRatio());
           }
         } else {
