@@ -17,9 +17,19 @@ import { createLensFlarePass } from './lensFlare.js';
 import { createAOPass } from './globalIllumination.js';
 
 const STORAGE_KEY = 'jungle_bloom';
-const BLOOM_STRENGTH = 0.90;
-const BLOOM_RADIUS = 0.55;
-const BLOOM_THRESHOLD = 0.48;
+// MacBook M4 / high DPR was blowing out at 0.90/0.48 — whole terrain bloomed at midday (see screenshot 10:28, 31 FPS).
+// Tiered values keep glow on emissives (fruit, fire, sun halo) without washing the ground.
+function bloomParamsForTier() {
+  const t = QUALITY.tier;
+  if (t === 'ultra') return { strength: 0.38, radius: 0.38, threshold: 0.88 };
+  if (t === 'high') return { strength: 0.32, radius: 0.35, threshold: 0.85 };
+  if (t === 'medium') return { strength: 0.45, radius: 0.42, threshold: 0.75 };
+  return { strength: 0.90, radius: 0.55, threshold: 0.48 };
+}
+const _bp = bloomParamsForTier();
+const BLOOM_STRENGTH = _bp.strength;
+const BLOOM_RADIUS = _bp.radius;
+const BLOOM_THRESHOLD = _bp.threshold;
 
 // Query param `?bloom=1` forces bloom on for testing; `?bloom=0` forces off.
 function bloomOverride() {
@@ -162,11 +172,14 @@ export function createComposer(renderer, scene, camera) {
 
 export function updateBloomForEnvironment(composer, env) {
   if (!composer?.userData?.bloomPass || !env) return;
-  // Tie bloom strength to night + fire: day 0.85 baseline, night + fire pushes to ~1.1 (visible)
   const nf = env.nightFactor || 0;
-  // Fire proximity is not yet threaded; use nightFactor as proxy for fire glow at night
-  const strength = THREE.MathUtils.clamp(BLOOM_STRENGTH + nf * 0.32, 0.75, 1.15);
-  composer.userData.bloomPass.strength = strength;
+  // Night boost stays subtle on high/ultra (otherwise M4 midday is already hot).
+  const tier = QUALITY.tier;
+  const nightBoost = tier === 'high' || tier === 'ultra' ? nf * 0.14 : nf * 0.32;
+  const s = BLOOM_STRENGTH + nightBoost;
+  const maxS = tier === 'high' || tier === 'ultra' ? 0.55 : 1.15;
+  const minS = BLOOM_STRENGTH * 0.9;
+  composer.userData.bloomPass.strength = THREE.MathUtils.clamp(s, minS, maxS);
   composer.userData.bloomPass.radius = BLOOM_RADIUS;
   composer.userData.bloomPass.threshold = BLOOM_THRESHOLD;
 }

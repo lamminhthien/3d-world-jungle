@@ -147,7 +147,8 @@ export function setupCore(canvas) {
   renderer.shadowMap.type = isMobileDevice ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.1;
+  // M4 XDR is ~600 nits SDR — 1.1 blows midday out when bloom threshold was 0.48. Tiered exposure.
+  renderer.toneMappingExposure = deviceTier === 'high' || deviceTier === 'ultra' ? 0.95 : deviceTier === 'medium' ? 1.0 : 1.05;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(WORLD.fogColor);

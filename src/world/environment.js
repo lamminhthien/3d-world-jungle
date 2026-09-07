@@ -655,7 +655,12 @@ export function createEnvironment(scene, opts = {}) {
         hemi.color.setHex(0xcdeffd).lerp(_ca.setHex(0x8fb4ff), nightF * 0.7);
       }
       if (ambient) ambient.intensity = Math.max(sample.ambInt, 0.15);
-      if (renderer) renderer.toneMappingExposure = sample.exp;
+      if (renderer) {
+        // High/ultra caps exposure 15% lower — matches the lower bloom threshold fix for M4 XDR.
+        const t = QUALITY.tier;
+        const expMul = t === 'high' || t === 'ultra' ? 0.85 : t === 'medium' ? 0.92 : 1.0;
+        renderer.toneMappingExposure = sample.exp * expMul;
+      }
 
       // --- sky / fog / background ---
       // Ease off the fogTint lerp to avoid washing out the whole screen.
