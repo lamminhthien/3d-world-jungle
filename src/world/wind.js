@@ -39,7 +39,9 @@ export function updateWind(dt, weather = 'clear') {
   windState.direction.set(Math.cos(_windAngle), Math.sin(_windAngle));
 
   // Base strength by weather — tuned for visible sway (previous 0.2 was imperceptible under ortho)
-  const base = weather === 'rain' ? 0.85 : weather === 'overcast' ? 0.5 : weather === 'fog' ? 0.35 : 0.45;
+  // Expanded for 8 weathers: storm is wild, mist is calm
+  const baseMap = { clear: 0.45, partlyCloudy: 0.5, overcast: 0.52, mist: 0.28, drizzle: 0.55, rain: 0.85, storm: 1.05, fog: 0.3 };
+  const base = baseMap[weather] ?? 0.45;
   // Gust: low-freq noise, larger amplitude for obvious gusts
   const gust = 0.22 * Math.sin(windState.time * 0.32) + 0.16 * Math.sin(windState.time * 0.68 + 1.3) + 0.08 * Math.sin(windState.time * 1.7 + 0.7);
   windState.gust = THREE.MathUtils.clamp(gust, -0.3, 0.4);

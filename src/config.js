@@ -47,6 +47,25 @@ export const ANIMALS = {
   butterflyCount: 18, // new: Inazuma/Monstadt fields
   boarCount: 4,       // new: forest boar
   crabCount: 10,      // new: beach crabs
+  dragonflyCount: 10, // river jewel — day only, clear sky
+  batCount: 9,        // nocturnal — dusk to dawn
+};
+
+export const LIFECYCLE = {
+  // Vibrant time windows where each beauty peaks (hours)
+  dawn: [4.8, 7.2],       // mist, dew, dawn chorus, first light
+  morning: [7.0, 11.0],   // rainbow after rain, dragonflies
+  midday: [11.0, 14.5],   // heat haze, pollen, brightest butterflies
+  goldenHour: [15.5, 18.6], // amber sun, long shadows, pollen motes
+  dusk: [18.6, 20.2],     // bats emerge, crickets start, fireflies ignite
+  night: [20.2, 4.8],     // aurora 22-03, shooting stars, owl hoots
+};
+
+export const WEATHER_CONFIG = {
+  weathers: ['clear', 'partlyCloudy', 'overcast', 'mist', 'drizzle', 'rain', 'storm', 'fog'],
+  intervalSec: 75,
+  // Probability weights for the rollNextWeather rng (sum to 1)
+  weights: { clear: 0.28, partlyCloudy: 0.14, overcast: 0.14, mist: 0.10, drizzle: 0.10, rain: 0.10, storm: 0.06, fog: 0.08 },
 };
 
 export const SCENE = {

@@ -17,9 +17,9 @@ import { windState, updateWind } from './wind.js';
 // Prefer sampled jungle soundtrack if files present, else fall back to generative cozy
 const MUSIC_TRACKS = SAMPLED_TRACKS.length ? SAMPLED_TRACKS : COZY_TRACKS;
 
-export const WEATHERS = ['clear', 'overcast', 'rain', 'fog'];
-const WEATHER_LABEL = { clear: 'Clear', overcast: 'Overcast', rain: 'Rain', fog: 'Fog' };
-const WEATHER_ICON = { clear: '☀️', overcast: '☁️', rain: '🌧️', fog: '🌫️' };
+export const WEATHERS = ['clear', 'partlyCloudy', 'overcast', 'mist', 'drizzle', 'rain', 'storm', 'fog'];
+const WEATHER_LABEL = { clear: 'Clear', partlyCloudy: 'Partly Cloudy', overcast: 'Overcast', mist: 'Misty', drizzle: 'Drizzle', rain: 'Rain', storm: 'Storm', fog: 'Fog' };
+const WEATHER_ICON = { clear: '☀️', partlyCloudy: '⛅', overcast: '☁️', mist: '🌫️', drizzle: '🌦️', rain: '🌧️', storm: '⛈️', fog: '🌁' };
 
 // ---- Day keyframes (lerped) ----
 // t: hour, sun: color/intensity (day star), sky top/bottom, fog, exposure, stars
@@ -45,11 +45,16 @@ const STOPS = [
 // fogNear/fogFar multipliers are tuned for the isometric ortho camera
 // (camera sits ~60 units from the focus): even the densest 'fog' weather
 // keeps the focus at ~30% fog, never full whiteout.
+// Expanded to 8 weathers for a more vibrant lifecycle.
 const WX = {
-  clear:    { sun: 1.0,  hemi: 1.0,  fogNear: 1.0,  fogFar: 1.0,  fogTint: 0xffffff, cloud: 0.75, rain: 0, fogMul: 1.0, wet: 0 },
-  overcast: { sun: 0.55, hemi: 0.8,  fogNear: 0.85, fogFar: 0.85, fogTint: 0xc9d2d6, cloud: 0.85, rain: 0, fogMul: 1.0, wet: 0.15 },
-  rain:     { sun: 0.32, hemi: 0.6,  fogNear: 0.75, fogFar: 0.7,  fogTint: 0x8fa3ad, cloud: 0.85, rain: 1, fogMul: 1.0, wet: 1 },
-  fog:      { sun: 0.7,  hemi: 0.85, fogNear: 0.6,  fogFar: 0.55, fogTint: 0xdde7ea, cloud: 0.4,  rain: 0, fogMul: 1.0, wet: 0.3 },
+  clear:        { sun: 1.0,  hemi: 1.02, fogNear: 1.0,  fogFar: 1.0,  fogTint: 0xffffff, cloud: 0.55, rain: 0,    fogMul: 1.0, wet: 0,    windBoost: 0 },
+  partlyCloudy: { sun: 0.88, hemi: 0.95, fogNear: 0.92, fogFar: 0.92, fogTint: 0xe8eef2, cloud: 0.9,  rain: 0,    fogMul: 1.0, wet: 0.05, windBoost: 0.1 },
+  overcast:     { sun: 0.55, hemi: 0.8,  fogNear: 0.85, fogFar: 0.85, fogTint: 0xc9d2d6, cloud: 0.85, rain: 0,    fogMul: 1.0, wet: 0.15, windBoost: 0.15 },
+  mist:         { sun: 0.68, hemi: 0.85, fogNear: 0.55, fogFar: 0.6,  fogTint: 0xdde7ea, cloud: 0.5,  rain: 0,    fogMul: 1.0, wet: 0.25, windBoost: 0 },
+  drizzle:      { sun: 0.5,  hemi: 0.7,  fogNear: 0.8,  fogFar: 0.78, fogTint: 0xb8cbd6, cloud: 0.85, rain: 0.35, fogMul: 1.0, wet: 0.5,  windBoost: 0.1 },
+  rain:         { sun: 0.32, hemi: 0.6,  fogNear: 0.75, fogFar: 0.7,  fogTint: 0x8fa3ad, cloud: 0.85, rain: 1,    fogMul: 1.0, wet: 1,    windBoost: 0.25 },
+  storm:        { sun: 0.18, hemi: 0.45, fogNear: 0.65, fogFar: 0.62, fogTint: 0x6e8290, cloud: 0.95, rain: 1.2,  fogMul: 1.0, wet: 1,    windBoost: 0.55 },
+  fog:          { sun: 0.7,  hemi: 0.85, fogNear: 0.6,  fogFar: 0.55, fogTint: 0xdde7ea, cloud: 0.4,  rain: 0,    fogMul: 1.0, wet: 0.3,  windBoost: -0.1 },
 };
 
 const _ca = new THREE.Color();
@@ -76,19 +81,24 @@ function sampleStops(t, out) {
 }
 
 function mixWx(prev, next, blend, out) {
-  const A = WX[prev];
-  const B = WX[next];
+  const A = WX[prev] || WX.clear;
+  const B = WX[next] || WX.clear;
   const o = out || {};
-  for (const k of ['sun', 'hemi', 'fogNear', 'fogFar', 'cloud', 'rain', 'wet']) o[k] = THREE.MathUtils.lerp(A[k], B[k], blend);
+  for (const k of ['sun', 'hemi', 'fogNear', 'fogFar', 'cloud', 'rain', 'wet', 'windBoost']) o[k] = THREE.MathUtils.lerp(A[k], B[k], blend);
   (o.fogTint || (o.fogTint = new THREE.Color())).set(A.fogTint).lerp(_ca.set(B.fogTint), blend);
   return o;
 }
 
 function rollNextWeather(rng = Math.random) {
   const r = rng();
-  if (r < 0.45) return 'clear';
-  if (r < 0.7) return 'overcast';
-  if (r < 0.85) return 'rain';
+  // More vibrant distribution: 8 weathers with distinct odds
+  if (r < 0.28) return 'clear';
+  if (r < 0.42) return 'partlyCloudy';
+  if (r < 0.56) return 'overcast';
+  if (r < 0.66) return 'mist';
+  if (r < 0.76) return 'drizzle';
+  if (r < 0.86) return 'rain';
+  if (r < 0.92) return 'storm';
   return 'fog';
 }
 
@@ -196,9 +206,11 @@ function createAmbience() {
     }
   }
 
+  let thunderTimer = 5 + Math.random() * 8;
+  let frogTimer = 3 + Math.random() * 4;
   // dt-driven critter scheduler: birds by day, crickets by night,
-  // campfire crackle when the player camps nearby.
-  function update(dt, { isNight, rain, fire = 0 }) {
+  // campfire crackle when the player camps nearby + frogs after rain + thunder.
+  function update(dt, { isNight, rain, fire = 0, weather = 'clear', timeOfDay = 12 }) {
     if (!ctx || !enabled) return;
     // Generative cozy music sits alongside the wind/rain/critters.
     if (cozy) cozy.update(dt, { isNight, rain });
@@ -209,9 +221,29 @@ function createAmbience() {
     chirpTimer -= dt;
     if (chirpTimer <= 0) {
       const t0 = ctx.currentTime + 0.05;
+      const isDawn = timeOfDay >= 5 && timeOfDay < 7;
+      const isDusk = timeOfDay >= 18 && timeOfDay < 20;
       if (isNight) {
-        for (let k = 0; k < 3; k++) blip(4200, t0 + k * 0.09, 0.05, 0.03);
-        chirpTimer = 1.5 + Math.random() * 3;
+        // Night: crickets + soft owl hoot occasionally
+        if (Math.random() < 0.12) {
+          blip(320, t0, 0.5, 0.045, 280);
+          blip(380, t0 + 0.3, 0.45, 0.04, 340);
+          chirpTimer = 4 + Math.random() * 5;
+        } else {
+          for (let k = 0; k < 3; k++) blip(4200, t0 + k * 0.09, 0.05, 0.03);
+          chirpTimer = 1.5 + Math.random() * 3;
+        }
+      } else if (isDawn) {
+        // Dawn chorus: rich multi-bird warble
+        const f = 1800 + Math.random() * 1400;
+        blip(f, t0, 0.15, 0.055, f * 1.3);
+        blip(f * 1.25, t0 + 0.12, 0.12, 0.045, f * 1.1);
+        blip(f * 0.8, t0 + 0.26, 0.1, 0.035);
+        chirpTimer = 0.9 + Math.random() * 1.8;
+      } else if (isDusk) {
+        // Dusk: crickets starting + evening birds
+        blip(2600, t0, 0.1, 0.035, 2100);
+        chirpTimer = 1.2 + Math.random() * 2.5;
       } else if (rain < 0.5) {
         const f = 2200 + Math.random() * 1200;
         blip(f, t0, 0.12, 0.05, f * 1.4);
@@ -220,6 +252,24 @@ function createAmbience() {
       } else {
         chirpTimer = 2;
       }
+    }
+    // Frogs after rain / mist near river (especially dawn/dusk)
+    frogTimer -= dt;
+    if ((weather === 'rain' || weather === 'drizzle' || weather === 'mist') && frogTimer <= 0) {
+      const t0 = ctx.currentTime + 0.05;
+      const base = 180 + Math.random() * 80;
+      blip(base, t0, 0.25, 0.05, base * 0.85);
+      blip(base * 1.15, t0 + 0.32, 0.22, 0.04, base * 1.0);
+      frogTimer = 2.5 + Math.random() * 4;
+    } else if (frogTimer <= -10) frogTimer = 3;
+    // Thunder rumble during storm
+    thunderTimer -= dt;
+    if (weather === 'storm' && thunderTimer <= 0) {
+      const t0 = ctx.currentTime + 0.05;
+      // Low rumble: stacked sine blips at 60-120Hz
+      for (let k = 0; k < 3; k++) blip(65 + k * 22, t0 + k * 0.15, 0.9, 0.07, 45);
+      blip(140, t0 + 0.6, 0.4, 0.03, 90);
+      thunderTimer = 6 + Math.random() * 10;
     }
     // Fire crackle: short sharp pops, rate + volume scale with proximity.
     crackleTimer -= dt;
@@ -448,6 +498,138 @@ export function createEnvironment(scene, opts = {}) {
   rain.frustumCulled = false;
   rain.visible = false;
   scene.add(rain);
+
+  // ---- Vibrant time-specific beauties ----
+  // Rainbow: curved tube that appears after rain when sun is opposite rain direction. Cheap tube with 7 colors.
+  let rainbow = null;
+  let rainbowMat = null;
+  try {
+    const arcPts = [];
+    for (let i = 0; i <= 24; i++) {
+      const t = i / 24;
+      const ang = Math.PI * t; // semicircle
+      const r = 32;
+      arcPts.push(new THREE.Vector3(Math.cos(ang) * r * 0.55, Math.sin(ang) * 14 + 6, -18 - t * 4));
+    }
+    const curve = new THREE.CatmullRomCurve3(arcPts);
+    const rainbowGeo = new THREE.TubeGeometry(curve, 24, 0.9, 6, false);
+    const rainbowColors = [];
+    const c = new THREE.Color();
+    const palette = [0xff0000, 0xff7f00, 0xffff00, 0x00ff00, 0x00ffff, 0x0000ff, 0x8b00ff];
+    const posAttr = rainbowGeo.attributes.position;
+    const count = posAttr.count;
+    const radialSeg = 6;
+    for (let i = 0; i < count; i++) {
+      const tubeIdx = i % (radialSeg + 1);
+      const t = tubeIdx / radialSeg;
+      const idx = Math.min(palette.length - 1, Math.floor(t * palette.length));
+      c.setHex(palette[idx]);
+      rainbowColors.push(c.r, c.g, c.b);
+    }
+    rainbowGeo.setAttribute('color', new THREE.Float32BufferAttribute(rainbowColors, 3));
+    rainbowMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0, side: THREE.DoubleSide, fog: false, depthWrite: false });
+    rainbow = new THREE.Mesh(rainbowGeo, rainbowMat);
+    rainbow.frustumCulled = false;
+    rainbow.visible = false;
+    rainbow.renderOrder = -5;
+    scene.add(rainbow);
+  } catch { /* rainbow fallback: skip */ }
+
+  // Aurora borealis: shimmering plane at northern sky, visible on clear nights 22-03
+  let aurora = null;
+  let auroraMat = null;
+  try {
+    const auroraGeo = new THREE.PlaneGeometry(120, 28, 24, 6);
+    auroraMat = new THREE.ShaderMaterial({
+      transparent: true, side: THREE.DoubleSide, depthWrite: false, fog: false,
+      uniforms: { uTime: { value: 0 }, uOpacity: { value: 0 } },
+      vertexShader: `varying vec2 vUv; void main(){ vUv=uv; vec3 p=position; p.y += sin(uv.x*6.0)*1.2; gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0); }`,
+      fragmentShader: `
+        uniform float uTime; uniform float uOpacity; varying vec2 vUv;
+        void main(){
+          float wave = sin(vUv.x*8.0 + uTime*0.6)*0.5 + sin(vUv.x*3.0 - uTime*0.3)*0.3;
+          float band = smoothstep(0.35, 0.55, vUv.y + wave*0.12) * smoothstep(1.0, 0.65, vUv.y + wave*0.12);
+          vec3 c1 = vec3(0.1, 0.9, 0.55); vec3 c2 = vec3(0.2, 0.45, 1.0); vec3 c3 = vec3(0.9, 0.3, 0.9);
+          float t = fract(vUv.x*0.7 + uTime*0.05);
+          vec3 col = mix(mix(c1,c2, smoothstep(0.0,0.5,t)), c3, smoothstep(0.5,1.0,t));
+          float a = band * 0.55 * uOpacity * (0.7 + 0.3*sin(uTime*1.2 + vUv.x*10.0));
+          gl_FragColor = vec4(col, a);
+        }`,
+    });
+    aurora = new THREE.Mesh(auroraGeo, auroraMat);
+    aurora.position.set(0, 42, -55);
+    aurora.rotation.x = 0.18;
+    aurora.frustumCulled = false;
+    aurora.visible = true;
+    aurora.renderOrder = -6;
+    scene.add(aurora);
+  } catch { /* aurora skip on low */ }
+
+  // Pollen / dust motes: floating golden specks visible in sunbeams (10-17, clear/partlyCloudy)
+  const POLLEN_N = QUALITY.low ? 0 : 120;
+  const pollenPos = POLLEN_N ? new Float32Array(POLLEN_N * 3) : null;
+  const pollenPhase = POLLEN_N ? new Float32Array(POLLEN_N) : null;
+  let pollen = null; let pollenMat = null; let pollenGeo = null;
+  if (POLLEN_N && pollenPos) {
+    for (let i = 0; i < POLLEN_N; i++) {
+      pollenPos[i * 3] = (Math.random() - 0.5) * 44;
+      pollenPos[i * 3 + 1] = 1 + Math.random() * 7;
+      pollenPos[i * 3 + 2] = (Math.random() - 0.5) * 44;
+      pollenPhase[i] = Math.random() * Math.PI * 2;
+    }
+    pollenGeo = new THREE.BufferGeometry();
+    pollenGeo.setAttribute('position', new THREE.BufferAttribute(pollenPos, 3));
+    pollenMat = new THREE.PointsMaterial({ color: 0xffe9a8, size: 0.18, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+    pollen = new THREE.Points(pollenGeo, pollenMat);
+    pollen.frustumCulled = false;
+    pollen.visible = true;
+    scene.add(pollen);
+  }
+
+  // Shooting stars: occasional streaks at night (clear). Reuses a single Points with trail.
+  const SHOOT_N = QUALITY.low ? 0 : 1;
+  let shootingStar = null; let shootingMat = null; let shootTimer = 8 + Math.random() * 10; let shootActive = 0; let shootDir = new THREE.Vector3();
+  if (SHOOT_N) {
+    const sg = new THREE.BufferGeometry();
+    const sp = new Float32Array(12 * 3); // 12 points trail
+    sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+    shootingMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.9, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+    shootingStar = new THREE.Points(sg, shootingMat);
+    shootingStar.frustumCulled = false;
+    shootingStar.visible = false;
+    scene.add(shootingStar);
+    shootDir.set(-0.8, -0.35, 0.15).normalize();
+  }
+
+  // Lightning flash: full-screen white overlay + sun intensity spike for storm
+  let lightningOverlay = document.getElementById('lightning-overlay');
+  if (!lightningOverlay) {
+    lightningOverlay = document.createElement('div');
+    lightningOverlay.id = 'lightning-overlay';
+    lightningOverlay.style.cssText = 'position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:5;transition:opacity 0.08s;';
+    document.body.appendChild(lightningOverlay);
+  }
+  let lightningTimer = 3 + Math.random() * 5;
+  let lightningFlash = 0;
+
+  // Dew / mist particles at dawn (5-7, mist/fog): ground-hugging sparkles
+  const DEW_N = QUALITY.low ? 0 : 80;
+  const dewPos = DEW_N ? new Float32Array(DEW_N * 3) : null;
+  let dew = null; let dewMat = null; let dewGeo = null;
+  if (DEW_N && dewPos) {
+    for (let i = 0; i < DEW_N; i++) {
+      dewPos[i * 3] = (Math.random() - 0.5) * 40;
+      dewPos[i * 3 + 1] = 0.08 + Math.random() * 0.35;
+      dewPos[i * 3 + 2] = (Math.random() - 0.5) * 40;
+    }
+    dewGeo = new THREE.BufferGeometry();
+    dewGeo.setAttribute('position', new THREE.BufferAttribute(dewPos, 3));
+    dewMat = new THREE.PointsMaterial({ color: 0xcff0ff, size: 0.22, transparent: true, opacity: 0, depthWrite: false });
+    dew = new THREE.Points(dewGeo, dewMat);
+    dew.frustumCulled = false;
+    dew.visible = true;
+    scene.add(dew);
+  }
 
   // Cloud material (shared across puffs) for overcast tinting.
   let cloudMat = null;
@@ -789,8 +971,139 @@ export function createEnvironment(scene, opts = {}) {
         waterMat.color.copy(waterBase.color).multiplyScalar(1 - w * 0.25);
       }
 
-      // --- ambience (birds/crickets + rain + campfire crackle) ---
-      ambience.update(dt, { isNight: !isDay, rain: targetRain, fire: extra.fire || 0 });
+      // --- ambience (birds/crickets + rain + campfire crackle + thunder/frogs) ---
+      ambience.update(dt, { isNight: !isDay, rain: targetRain, fire: extra.fire || 0, weather: state.weather, timeOfDay: state.timeOfDay });
+
+      // --- Vibrant beauties: rainbow, aurora, pollen, shooting stars, lightning, dew ---
+      const t = state.timeOfDay;
+      const isDawn = t >= 4.8 && t < 7.2;
+      const isMorning = t >= 7 && t < 11;
+      const isMidday = t >= 11 && t < 14.5;
+      const isGolden = t >= 15.5 && t < 18.6;
+      const isDusk = t >= 18.6 && t < 20.2;
+      const isNightDeep = t >= 21 || t < 4.5;
+      const isAfterRain = state.prevWeather === 'rain' || state.prevWeather === 'storm';
+
+      // Rainbow: shows for ~30s after rain stops, when sun is out and not foggy
+      if (rainbow && rainbowMat) {
+        const wantRainbow = isAfterRain && state.blend > 0.85 && (state.weather === 'clear' || state.weather === 'partlyCloudy' || state.weather === 'mist') && isDay && isMorning && wx.sun > 0.6;
+        // Also allow drizzle -> clear within golden hour for dramatic sunset rainbow
+        const sunny = state.weather === 'clear' || state.weather === 'partlyCloudy';
+        const rainbowChance = (isAfterRain && sunny && wx.sun > 0.5 && state.blend > 0.7) ? 1 : (wantRainbow ? 1 : 0);
+        const rainbowTarget = rainbowChance ? 0.92 : 0;
+        rainbowMat.opacity += (rainbowTarget - rainbowMat.opacity) * Math.min(1, dt * 0.35);
+        rainbow.visible = rainbowMat.opacity > 0.02;
+        if (rainbow.visible) {
+          rainbow.position.set(focusV.x, 0, focusV.z);
+          // Face sun direction so arc is opposite sun
+          const ang = Math.atan2(sunDir.z, sunDir.x);
+          rainbow.rotation.y = -ang;
+        }
+      }
+
+      // Aurora: clear night 22-03, fades in slow
+      if (aurora && auroraMat) {
+        const wantAurora = isNightDeep && (state.weather === 'clear' || state.weather === 'partlyCloudy') && nightF > 0.75;
+        const targetA = wantAurora ? 0.9 : 0;
+        auroraMat.uniforms.uOpacity.value += (targetA - auroraMat.uniforms.uOpacity.value) * Math.min(1, dt * 0.25);
+        auroraMat.uniforms.uTime.value += dt;
+        aurora.visible = auroraMat.uniforms.uOpacity.value > 0.02;
+        if (aurora.visible) {
+          aurora.position.set(focusV.x, 42, focusV.z - 55);
+        }
+      }
+
+      // Pollen / dust motes: golden hour + midday sunbeams, clear/partlyCloudy
+      if (pollen && pollenMat && pollenGeo) {
+        const wantPollen = (isGolden || isMidday) && (state.weather === 'clear' || state.weather === 'partlyCloudy') && isDay && wx.sun > 0.6;
+        const targetP = wantPollen ? (isGolden ? 0.85 : 0.5) : 0;
+        pollenMat.opacity += (targetP - pollenMat.opacity) * Math.min(1, dt * 0.7);
+        pollen.visible = pollenMat.opacity > 0.02;
+        if (pollen.visible) {
+          const arr = pollenGeo.attributes.position.array;
+          for (let i = 0; i < POLLEN_N; i++) {
+            arr[i * 3 + 1] += Math.sin(performance.now() * 0.0005 + pollenPhase[i]) * dt * 0.12;
+            arr[i * 3] += Math.sin(performance.now() * 0.0003 + pollenPhase[i] * 1.3) * dt * 0.15;
+            // wrap around focus
+            if (arr[i * 3 + 1] > 8) arr[i * 3 + 1] = 1;
+            if (arr[i * 3 + 1] < 0.5) arr[i * 3 + 1] = 7;
+            if (Math.abs(arr[i * 3] - focusV.x) > 24) arr[i * 3] = focusV.x + (Math.random() - 0.5) * 44;
+            if (Math.abs(arr[i * 3 + 2] - focusV.z) > 24) arr[i * 3 + 2] = focusV.z + (Math.random() - 0.5) * 44;
+          }
+          pollenGeo.attributes.position.needsUpdate = true;
+          pollen.position.set(0, 0, 0);
+        }
+      }
+
+      // Dew sparkle at dawn in mist/fog, low ground
+      if (dew && dewMat && dewGeo) {
+        const wantDew = isDawn && (state.weather === 'mist' || state.weather === 'fog' || state.weather === 'drizzle');
+        const targetD = wantDew ? 0.75 : 0;
+        dewMat.opacity += (targetD - dewMat.opacity) * Math.min(1, dt * 0.5);
+        dew.visible = dewMat.opacity > 0.02;
+        if (dew.visible) {
+          dewMat.color.setHSL(0.55 + Math.sin(performance.now() * 0.001) * 0.03, 0.6, 0.85);
+          const arr = dewGeo.attributes.position.array;
+          // subtle twinkle via size pulse (opacity modulation per point is via global opacity)
+          dewGeo.attributes.position.needsUpdate = false;
+          dew.position.set(focusV.x, 0, focusV.z);
+        }
+      }
+
+      // Shooting stars: rare streaks at night clear
+      if (shootingStar && shootingMat) {
+        shootTimer -= dt;
+        if (shootActive > 0) {
+          shootActive -= dt;
+          const prog = 1 - shootActive / 0.9;
+          const arr = shootingStar.geometry.attributes.position.array;
+          const headX = focusV.x + 30 - prog * 70;
+          const headY = 48 - prog * 24;
+          const headZ = focusV.z + (Math.random() - 0.5) * 10;
+          for (let i = 0; i < 12; i++) {
+            const k = i / 11;
+            arr[i * 3] = headX + k * 6 * shootDir.x;
+            arr[i * 3 + 1] = headY + k * 6 * shootDir.y;
+            arr[i * 3 + 2] = headZ + k * 6 * shootDir.z;
+          }
+          shootingStar.geometry.attributes.position.needsUpdate = true;
+          shootingMat.opacity = Math.max(0, (1 - Math.abs(prog - 0.5) * 1.8) * 0.9);
+          shootingStar.visible = true;
+          shootingStar.position.set(0, 0, 0);
+          if (shootActive <= 0) { shootingMat.opacity = 0; shootingStar.visible = false; }
+        } else {
+          shootingStar.visible = false;
+          shootingMat.opacity = 0;
+          if (shootTimer <= 0 && isNightDeep && (state.weather === 'clear' || state.weather === 'partlyCloudy') && Math.random() < 0.6) {
+            shootActive = 0.9;
+            shootTimer = 12 + Math.random() * 18;
+            // randomize direction slightly
+            shootDir.set(-0.8 - Math.random() * 0.2, -0.3 - Math.random() * 0.2, (Math.random() - 0.5) * 0.3).normalize();
+          } else if (shootTimer <= 0) {
+            shootTimer = 6 + Math.random() * 10;
+          }
+        }
+      }
+
+      // Lightning flash for storm
+      if (state.weather === 'storm') {
+        lightningTimer -= dt;
+        if (lightningTimer <= 0) {
+          lightningFlash = 0.18 + Math.random() * 0.18;
+          lightningTimer = 2.5 + Math.random() * 5.5;
+          // also spike directional light for one frame
+          if (sun) sun.intensity += 3.5;
+          if (moonLight) moonLight.intensity += 2.0;
+        }
+      } else {
+        lightningTimer = 3 + Math.random() * 5;
+      }
+      if (lightningFlash > 0) {
+        lightningFlash -= dt * 2.5;
+        const lv = Math.max(0, lightningFlash);
+        if (lightningOverlay) lightningOverlay.style.opacity = (lv * 0.85).toFixed(3);
+        if (lv <= 0 && lightningOverlay) lightningOverlay.style.opacity = '0';
+      }
 
       // --- HUD text (throttled) ---
       hudAcc += dt;

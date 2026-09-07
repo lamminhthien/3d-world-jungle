@@ -771,7 +771,7 @@ async function boot() {
     // Fire proximity feeds the crackle ambience + warm/cool contrast logic.
     const fire = camps.getFireProximity(player.position.x, player.position.z);
     env.update(dt, player.position, { fire });
-    animals.update(dt, player.position);
+    animals.update(dt, player.position, { timeOfDay: env.timeOfDay, weather: env.weather, nightFactor: env.nightFactor, isNight: env.isNight });
     adventure.update(dt, player.position);
     village.update(dt, player.position, env.nightFactor);
     try { landmarks.update(dt, player.position); } catch {}

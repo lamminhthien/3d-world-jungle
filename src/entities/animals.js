@@ -562,7 +562,141 @@ export function createBoars(scene){
 }
 
 // ============================================================
-// COMBINED FACTORY — Genshin open world wildlife
+// DRAGONFLIES — river jewel gliders (day, clear/partlyCloudy, near water)
+// ============================================================
+const BASE_DRAGONFLY_COUNT = 10;
+function dragonflyCount() {
+  const mul = QUALITY.animalsMul ?? 1;
+  const base = QUALITY.low ? 5 : BASE_DRAGONFLY_COUNT;
+  return Math.max(2, Math.round(base * mul));
+}
+function buildDragonflyGeo() {
+  const geo = new THREE.BufferGeometry();
+  const v = new Float32Array([
+    0, 0, 0.28,  0, 0.02, -0.18,  -0.28, 0.02, 0.04,
+    0, 0, 0.28,  0, 0.02, -0.18,   0.28, 0.02, 0.04,
+  ]);
+  geo.setAttribute('position', new THREE.BufferAttribute(v, 3));
+  geo.setIndex([0,1,2, 3,4,5]);
+  geo.computeVertexNormals();
+  return geo;
+}
+export function createDragonflies(scene) {
+  const geo = buildDragonflyGeo();
+  const mat = new THREE.MeshLambertMaterial({ color: 0x2de2a8, transparent: true, opacity: 0.95, side: THREE.DoubleSide });
+  const mesh = new THREE.InstancedMesh(geo, mat, BASE_DRAGONFLY_COUNT);
+  mesh.count = dragonflyCount();
+  mesh.frustumCulled = false; scene.add(mesh);
+  const cols = [0x2de2a8, 0x3ac8ff, 0x7dff7a, 0xffd93b];
+  const col = new THREE.Color();
+  const df = [];
+  for (let i = 0; i < BASE_DRAGONFLY_COUNT; i++) {
+    mesh.setColorAt(i, col.setHex(cols[i % cols.length]));
+    const z = (Math.random() - 0.5) * 40;
+    df.push({ z, x: riverXAt(z) + (Math.random() - 0.5) * 2.5, y: 0.55 + Math.random() * 0.9, phase: Math.random() * 6.28, wander: Math.random() * 6.28, speed: 1.1 + Math.random() * 0.9, scale: 0.5 + Math.random() * 0.3 });
+  }
+  mesh.instanceColor.needsUpdate = true;
+  let t = 0;
+  function applyDensity() { mesh.count = dragonflyCount(); }
+  function update(dt, playerPos, env) {
+    // Lifecycle: only vibrant by day when clear/partlyCloudy/drizzle; hide at night/storm
+    const tod = env?.timeOfDay ?? 12;
+    const weather = env?.weather ?? 'clear';
+    const isDay = tod >= 6 && tod < 18.5;
+    const badWeather = weather === 'storm' || weather === 'fog';
+    const want = isDay && !badWeather;
+    const targetOpacity = want ? 0.95 : 0;
+    mat.opacity += (targetOpacity - mat.opacity) * Math.min(1, dt * 1.2);
+    mesh.visible = mat.opacity > 0.02;
+    if (!mesh.visible) return;
+    t += dt;
+    const n = mesh.count;
+    if (n === 0) return;
+    for (let i = 0; i < n; i++) {
+      const d = df[i];
+      d.wander += dt * (0.9 + d.speed * 0.3);
+      d.z += Math.cos(d.wander) * dt * 0.2;
+      d.x = riverXAt(d.z) + Math.sin(d.wander * 0.7 + d.phase) * 1.6;
+      const gy = 0.55 + Math.sin(t * 1.8 + d.phase) * 0.35;
+      const flap = Math.sin(t * 18 + d.phase) * 0.6;
+      _p.set(d.x, gy, d.z); _e.set(flap, d.wander, 0); _q.setFromEuler(_e); _s.setScalar(d.scale);
+      _m.compose(_p, _q, _s); mesh.setMatrixAt(i, _m);
+      if (Math.abs(d.z - playerPos.z) > 45) d.z = playerPos.z + (Math.random() - 0.5) * 20;
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+  return { mesh, update, applyDensity };
+}
+
+// ============================================================
+// BATS — nocturnal erratic fliers (19-05, clear/overcast/mist)
+// ============================================================
+const BASE_BAT_COUNT = 9;
+function batCount() {
+  const mul = QUALITY.animalsMul ?? 1;
+  const base = QUALITY.low ? 4 : BASE_BAT_COUNT;
+  return Math.max(2, Math.round(base * mul));
+}
+function buildBatGeo() {
+  const geo = new THREE.BufferGeometry();
+  const v = new Float32Array([
+    0, 0, 0,  -0.45, 0.08, 0.12,  -0.25, 0, -0.14,
+    0, 0, 0,   0.45, 0.08, 0.12,   0.25, 0, -0.14,
+    0, 0, 0,   0, 0.05, 0.22,      0, -0.04, -0.08,
+  ]);
+  geo.setAttribute('position', new THREE.BufferAttribute(v, 3));
+  geo.setIndex([0,1,2, 3,4,5, 6,7,8]);
+  geo.computeVertexNormals();
+  return geo;
+}
+export function createBats(scene) {
+  const geo = buildBatGeo();
+  const mat = new THREE.MeshLambertMaterial({ color: 0x1a1a2e, side: THREE.DoubleSide });
+  const mesh = new THREE.InstancedMesh(geo, mat, BASE_BAT_COUNT);
+  mesh.count = batCount();
+  mesh.frustumCulled = false; scene.add(mesh);
+  const bats = [];
+  for (let i = 0; i < BASE_BAT_COUNT; i++) {
+    bats.push({ cx: (Math.random() - 0.5) * 30, cz: (Math.random() - 0.5) * 30, angle: Math.random() * 6.28, radius: 4 + Math.random() * 7, speed: 1.2 + Math.random() * 0.9, alt: 6 + Math.random() * 7, phase: Math.random() * 6.28, scale: 0.45 + Math.random() * 0.2, jitter: Math.random() * 6.28 });
+  }
+  let t = 0;
+  function applyDensity() { mesh.count = batCount(); }
+  function update(dt, playerPos, env) {
+    const tod = env?.timeOfDay ?? 0;
+    const isNight = tod >= 19 || tod < 5.5;
+    const weather = env?.weather ?? 'clear';
+    const want = isNight && weather !== 'storm';
+    const targetOpacity = want ? 1 : 0;
+    mat.opacity = mat.opacity ?? 1;
+    if (mat.opacity !== targetOpacity) {
+      mat.transparent = true;
+      mat.opacity += (targetOpacity - mat.opacity) * Math.min(1, dt * 1.5);
+    }
+    mesh.visible = (mat.opacity ?? 1) > 0.02;
+    if (!mesh.visible) return;
+    t += dt;
+    const n = mesh.count;
+    for (let i = 0; i < n; i++) {
+      const b = bats[i];
+      b.angle += b.speed * dt * (1 + Math.sin(t * 2 + b.jitter) * 0.4);
+      b.jitter += dt * 3;
+      const bx = b.cx + Math.cos(b.angle) * b.radius + Math.sin(t * 3 + b.phase) * 1.2;
+      const bz = b.cz + Math.sin(b.angle) * b.radius + Math.cos(t * 2.7 + b.phase) * 1.0;
+      const by = b.alt + Math.sin(t * 4 + b.phase) * 1.1;
+      const flap = Math.sin(t * 14 + b.phase) * 0.75;
+      _p.set(bx, by, bz); _e.set(flap, b.angle + Math.PI * 0.5, Math.sin(t * 5 + b.phase) * 0.25); _q.setFromEuler(_e); _s.setScalar(b.scale);
+      _m.compose(_p, _q, _s); mesh.setMatrixAt(i, _m);
+      // follow player loosely
+      const dx = playerPos.x - b.cx, dz = playerPos.z - b.cz;
+      if (dx * dx + dz * dz > 40 * 40) { b.cx += dx * dt * 0.05; b.cz += dz * dt * 0.05; }
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+  return { mesh, update, applyDensity };
+}
+
+// ============================================================
+// COMBINED FACTORY — Genshin open world wildlife (vibrant lifecycle)
 // ============================================================
 export function createAnimals(scene) {
   const birds = createBirds(scene);
@@ -571,6 +705,8 @@ export function createAnimals(scene) {
   const butterflies = createButterflies(scene);
   const crabs = createCrabs(scene);
   const boars = createBoars(scene);
+  const dragonflies = createDragonflies(scene);
+  const bats = createBats(scene);
 
   // Throttle secondary critters on low-end/battery saver: update every other frame.
   let frame = 0;
@@ -579,17 +715,59 @@ export function createAnimals(scene) {
     return (frame & 1) === 0;
   }
 
+  // Lifecycle helper: returns 0..1 activity for butterflies/birds by time/weather
+  function lifecycleOpacity(kind, env) {
+    const tod = env?.timeOfDay ?? 12;
+    const w = env?.weather ?? 'clear';
+    const isDay = tod >= 6 && tod < 18.8;
+    const isNight = !isDay;
+    const isDawn = tod >= 5 && tod < 8;
+    const isDusk = tod >= 17.5 && tod < 20;
+    if (kind === 'butterfly') {
+      if (!isDay) return 0;
+      if (w === 'storm' || w === 'rain' || w === 'fog') return 0;
+      if (w === 'drizzle') return 0.25;
+      if (isDawn || isDusk) return 0.6;
+      return 1;
+    }
+    if (kind === 'bird') {
+      if (w === 'storm') return 0.15;
+      if (w === 'rain') return 0.35;
+      if (isNight) return 0.08;
+      return 1;
+    }
+    if (kind === 'deer') {
+      if (w === 'storm') return 0.3; // hide during storm, shelter
+      if (isNight) return 0.55;
+      return 1;
+    }
+    return 1;
+  }
+
   return {
-    update(dt, playerPos) {
+    update(dt, playerPos, env = null) {
       frame++;
+      // Pass env for lifecycle so individual meshes can fade
       birds.update(dt, playerPos);
+      // lifecycle dimming for birds (opacity via material, not count)
+      try {
+        const bOp = lifecycleOpacity('bird', env);
+        if (birds.mesh?.material) {
+          birds.mesh.material.transparent = bOp < 0.99;
+          birds.mesh.material.opacity = birds.mesh.material.opacity === undefined ? 1 : THREE.MathUtils.lerp(birds.mesh.material.opacity, bOp, Math.min(1, dt * 1.2));
+        }
+      } catch {}
       fish.update(dt, playerPos);
       // Heavy ground critters can run at half rate on low.
       if (shouldRunHeavy() || frame % 3 === 0) {
         deer.update(dt, playerPos);
         boars.update(dt, playerPos);
+        // deer/boar hide during storm (fade)
+        try {
+          const dOp = lifecycleOpacity('deer', env);
+          for (const m of [deer.mesh, boars.mesh]) if (m?.material) { m.material.transparent = dOp < 0.99; m.material.opacity = THREE.MathUtils.lerp(m.material.opacity ?? 1, dOp, Math.min(1, dt * 0.8)); }
+        } catch {}
       } else {
-        // Still need to keep matrices valid once.
         deer.update(0, playerPos);
         boars.update(0, playerPos);
       }
@@ -600,6 +778,16 @@ export function createAnimals(scene) {
         butterflies.update(dt, playerPos);
         crabs.update(dt, playerPos);
       }
+      // butterfly lifecycle: fade by time/weather
+      try {
+        const bfOp = lifecycleOpacity('butterfly', env);
+        if (butterflies.mesh?.material) {
+          butterflies.mesh.material.opacity = THREE.MathUtils.lerp(butterflies.mesh.material.opacity ?? 0.95, bfOp * 0.95, Math.min(1, dt * 1.0));
+          butterflies.mesh.material.transparent = true;
+        }
+      } catch {}
+      dragonflies.update(dt, playerPos, env);
+      bats.update(dt, playerPos, env);
     },
     applyDensity() {
       birds.applyDensity();
@@ -608,9 +796,11 @@ export function createAnimals(scene) {
       butterflies.applyDensity();
       crabs.applyDensity();
       boars.applyDensity();
+      dragonflies.applyDensity();
+      bats.applyDensity();
     },
     setVisible(v) {
-      for (const m of [birds.mesh, deer.mesh, fish.mesh, butterflies.mesh, crabs.mesh, boars.mesh]) m.visible = v;
+      for (const m of [birds.mesh, deer.mesh, fish.mesh, butterflies.mesh, crabs.mesh, boars.mesh, dragonflies.mesh, bats.mesh]) m.visible = v;
     },
   };
 }
