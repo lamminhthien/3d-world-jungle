@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { QUALITY } from '../core/setup.js';
 import { createCozyMusic, MUSIC_TRACKS } from '../audio/cozy.js';
+import { windState, updateWind } from './wind.js';
 
 export const WEATHERS = ['clear', 'overcast', 'rain', 'fog'];
 const WEATHER_LABEL = { clear: 'Clear', overcast: 'Overcast', rain: 'Rain', fog: 'Fog' };
@@ -178,7 +179,9 @@ function createAmbience() {
     if (!ctx || !enabled) return;
     // Generative cozy music sits alongside the wind/rain/critters.
     if (cozy) cozy.update(dt, { isNight, rain });
-    windGain.gain.value += ((rain > 0.5 ? 0.05 : 0.03) - windGain.gain.value) * Math.min(1, dt * 2);
+    // Wind audio now follows visual windStrength + rain gust
+    const windBase = windState.strength * 0.07;
+    windGain.gain.value += ((rain > 0.5 ? 0.05 + windBase : 0.02 + windBase) - windGain.gain.value) * Math.min(1, dt * 2);
     rainGain.gain.value += (rain * 0.14 - rainGain.gain.value) * Math.min(1, dt * 2);
     chirpTimer -= dt;
     if (chirpTimer <= 0) {
@@ -573,6 +576,8 @@ export function createEnvironment(scene, opts = {}) {
     },
 
     update(dt, focus, extra = {}) {
+      // Phase 5: global wind (affects foliage sway, water, clouds, audio)
+      updateWind(dt, state.weather);
       // Debug / tuning handle (e.g. `__env.setTime(0)` in the console).      // --- advance clock + weather machine ---
       if (!state.paused) state.timeOfDay = (state.timeOfDay + (dt * state.speed * 24) / state.dayLengthSec) % 24;
       state.blend = Math.min(1, state.blend + dt / 6); // ~6s crossfade

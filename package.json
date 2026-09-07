@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "vite",
     "build:textures": "node scripts/generate-textures.mjs",
-    "build": "npm run build:textures && vite build",
+    "build:assets": "node scripts/fetch-assets.mjs",
+    "build": "npm run build:textures && npm run build:assets && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

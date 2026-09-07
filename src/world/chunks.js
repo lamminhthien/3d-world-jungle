@@ -10,6 +10,7 @@ import { QUALITY } from '../core/setup.js';
 import { obstacles } from '../utils.js';
 import { rngFromString } from './noise.js';
 import { getGroundBump, getGroundTexture } from './textures.js';
+import { attachWindToKit } from './wind.js';
 import {
   createVegetationKit,
   PALETTES,
@@ -28,6 +29,7 @@ import {
   placePalm,
   placePine,
   placeRainbowTree,
+  placeReed,
   placeRock,
 } from './presets.js';
 import {
@@ -38,6 +40,7 @@ import {
   findSpawn,
   getSeed,
   initProcedural,
+  moistureAt,
   riverXAt,
   sampleFootprint,
   sampleGround,
@@ -55,12 +58,14 @@ const POOL = {
   // the trunk pool, 3-puff canopies, buttress roots): size trunks/crowns for
   // ~30 tries/chunk × 25 chunks with headroom.
   trees: QUALITY.low ? 1800 : 3200,
-  crowns: QUALITY.low ? 2600 : 4200, // pine tiers (3) + canopy puffs (3-5)
-  palms: 4800, // palms + banana clumps share the frond pool
+  crowns: QUALITY.low ? 2600 : 5600, // dense: +2 satellites per tree (Phase 2)
+  palms: QUALITY.low ? 3200 : 6400, // 6 low / 8 desktop fronds
   bushes: 900,
   cacti: 450,
   rocks: 1000,
-  grass: QUALITY.low ? 600 : 1500, // P0 grass tufts: 12 tris each, 1 draw call
+  grass: QUALITY.low ? 900 : 2400, // P4 fields: 12 tris each, 1 draw call (was 600/1500)
+  reed: QUALITY.low ? 0 : 900, // tall river-bank reed (1.1u) — desktop only
+  leafCard: QUALITY.low ? 0 : 3000, // Phase 2 foliage cards (2 tris, alphaTest)
   fruit: QUALITY.low ? 900 : 1600, // mango/orange/apple/banana/coconut orbs
   flowerStem: QUALITY.low ? 900 : 1600,
   flowerHead: QUALITY.low ? 900 : 1600,
@@ -92,6 +97,8 @@ export function createWorldManager(scene, seedStr) {
 
   // ---- Global vegetation pools (one draw call each, textured via presets) ----
   const kit = createVegetationKit();
+  // Phase 5: GPU sway (desktop only, low tier no-ops inside attachWindToKit)
+  attachWindToKit(kit);
   const trunkMesh = new THREE.InstancedMesh(kit.geometries.trunk, kit.materials.trunk, POOL.trees);
   const pineMesh = new THREE.InstancedMesh(kit.geometries.pine, kit.materials.pine, POOL.crowns);
   const blobMesh = new THREE.InstancedMesh(kit.geometries.blob, kit.materials.blob, POOL.crowns);
@@ -100,11 +107,13 @@ export function createWorldManager(scene, seedStr) {
   const cactusMesh = new THREE.InstancedMesh(kit.geometries.cactus, kit.materials.cactus, POOL.cacti);
   const rockMesh = new THREE.InstancedMesh(kit.geometries.rock, kit.materials.rock, POOL.rocks);
   const grassMesh = new THREE.InstancedMesh(kit.geometries.grass, kit.materials.grass, POOL.grass);
+  const reedMesh = new THREE.InstancedMesh(kit.geometries.reed, kit.materials.reed, Math.max(1, POOL.reed));
+  const leafCardMesh = new THREE.InstancedMesh(kit.geometries.leafCard, kit.materials.leafCard, Math.max(1, POOL.leafCard));
   const fruitMesh = new THREE.InstancedMesh(kit.geometries.fruit, kit.materials.fruit, POOL.fruit);
   const flowerStemMesh = new THREE.InstancedMesh(kit.geometries.flowerStem, kit.materials.flowerStem, POOL.flowerStem);
   const flowerHeadMesh = new THREE.InstancedMesh(kit.geometries.flowerHead, kit.materials.flowerHead, POOL.flowerHead);
-  const meshes = { trunk: trunkMesh, pine: pineMesh, blob: blobMesh, palm: palmMesh, bush: bushMesh, cactus: cactusMesh, rock: rockMesh, grass: grassMesh, fruit: fruitMesh, flowerStem: flowerStemMesh, flowerHead: flowerHeadMesh };
-  const pools = [trunkMesh, pineMesh, blobMesh, palmMesh, bushMesh, cactusMesh, rockMesh, grassMesh, fruitMesh, flowerStemMesh, flowerHeadMesh];
+  const meshes = { trunk: trunkMesh, pine: pineMesh, blob: blobMesh, palm: palmMesh, bush: bushMesh, cactus: cactusMesh, rock: rockMesh, grass: grassMesh, reed: reedMesh, leafCard: leafCardMesh, fruit: fruitMesh, flowerStem: flowerStemMesh, flowerHead: flowerHeadMesh };
+  const pools = [trunkMesh, pineMesh, blobMesh, palmMesh, bushMesh, cactusMesh, rockMesh, grassMesh, reedMesh, leafCardMesh, fruitMesh, flowerStemMesh, flowerHeadMesh];
   for (const m of pools) {
     // Perf: vegetation casts onto the ground but never receives — receiving
     // doubles the shadow-sampling cost on every instanced fragment, and the
@@ -118,6 +127,8 @@ export function createWorldManager(scene, seedStr) {
   // P0 grass: tufts are <0.5u tall — shadows add nothing even on desktop, so
   // never cast (saves depth-pass instances on both tiers).
   grassMesh.castShadow = false;
+  reedMesh.castShadow = false;
+  leafCardMesh.castShadow = false;
   // Petals + stems are tiny: skip them in the shadow depth pass.
   flowerStemMesh.castShadow = false;
   flowerHeadMesh.castShadow = false;
@@ -280,10 +291,19 @@ export function createWorldManager(scene, seedStr) {
           placeFlowerPatch(meshes, bucket, x, y, z, rand(rng, 0.7, 1.2), rng);
         } else if (roll < 0.75 && bucket.ri < POOL.rocks) {
           placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.4, 0.9), rng);
-        } else if (roll < 0.93 && bucket.gi < POOL.grass) {
-          // Grass tufts: mostly green, every 5th golden for meadow sparkle.
-          const tint = rng() < 0.2 ? PALETTES.grassGold : PALETTES.grass;
-          placeGrass(meshes, bucket, x, y, z, rand(rng, 0.5, 1.1), rng, tint);
+        } else if (roll < 0.93) {
+          // Meadow mask: moist lowland = denser grass (phase 4)
+          const moist = moistureAt(x, z);
+          const threshold = moist > 0.65 ? 0.96 : moist < 0.35 ? 0.88 : 0.93;
+          if (roll >= threshold) {
+            // sparse on dry ridges — skip
+          } else if (rng() < 0.2 && bucket.reedi < POOL.reed && POOL.reed > 0 && s.d < 12) {
+            // Tall reed near river bank (20% of jungle grass)
+            placeReed(meshes, bucket, x, y, z, rand(rng, 0.6, 1.15), rng, PALETTES.grass);
+          } else if (bucket.gi < POOL.grass) {
+            const tint = rng() < 0.2 ? PALETTES.grassGold : PALETTES.grass;
+            placeGrass(meshes, bucket, x, y, z, rand(rng, 0.5, 1.1), rng, tint);
+          }
         }
       } else if (biome === BIOMES.DESERT) {
         if (roll < 0.3 && bucket.ci < POOL.cacti) {
@@ -314,9 +334,13 @@ export function createWorldManager(scene, seedStr) {
         } else if (roll < 0.38 && bucket.ri < POOL.rocks) {
           // Sandy rocks
           placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.3, 0.55), rng, 0xd9c9a3);
-        } else if (roll < 0.56 && bucket.gi < POOL.grass) {
-          // Dune grass — taller and denser
-          placeGrass(meshes, bucket, x, y, z, rand(rng, 0.5, 1.0), rng, PALETTES.dryGrass);
+        } else if (roll < 0.56) {
+          if (rng() < 0.25 && bucket.reedi < POOL.reed && POOL.reed > 0) {
+            placeReed(meshes, bucket, x, y, z, rand(rng, 0.5, 1.1), rng, PALETTES.dryGrass);
+          } else if (bucket.gi < POOL.grass) {
+            // Dune grass — taller and denser
+            placeGrass(meshes, bucket, x, y, z, rand(rng, 0.5, 1.0), rng, PALETTES.dryGrass);
+          }
         } else if (roll < 0.62 && bucket.bu < POOL.bushes) {
           // Coastal shrubs (sometimes blooming)
           if (rng() < 0.4 && bucket.fhi + 6 <= POOL.flowerHead) {
@@ -333,7 +357,7 @@ export function createWorldManager(scene, seedStr) {
 
   function rebuildVegetation(cells) {
     obstacles.length = 0;
-    const bucket = { ti: 0, pi: 0, bi: 0, palmi: 0, bu: 0, ci: 0, ri: 0, gi: 0, fri: 0, fsti: 0, fhi: 0 };
+    const bucket = { ti: 0, pi: 0, bi: 0, palmi: 0, bu: 0, ci: 0, ri: 0, gi: 0, reedi: 0, lci: 0, fri: 0, fsti: 0, fhi: 0 };
     // Stable order => stable world for the same seed.
     const sorted = [...cells].sort();
     for (const key of sorted) {
@@ -348,6 +372,8 @@ export function createWorldManager(scene, seedStr) {
     cactusMesh.count = bucket.ci;
     rockMesh.count = bucket.ri;
     grassMesh.count = bucket.gi;
+    reedMesh.count = bucket.reedi;
+    leafCardMesh.count = bucket.lci;
     fruitMesh.count = bucket.fri;
     flowerStemMesh.count = bucket.fsti;
     flowerHeadMesh.count = bucket.fhi;

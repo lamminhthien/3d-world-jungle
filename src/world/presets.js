@@ -124,7 +124,8 @@ function createPalmFrondGeometry() {
 }
 
 // Fronds per palm — single source of truth for pool sizing (chunks/trees).
-export const PALM_FRONDS = 6;
+// Desktop: 8 in 2 tiers (4 outer skirt + 4 inner spears), low: 6 for perf.
+export const PALM_FRONDS = QUALITY.low ? 6 : 8;
 
 // ---- P0 tessellation (docs/tessellation-improvement-plan.md) ----
 // Static pre-baked kit: every geometry below is built ONCE per page load and
@@ -288,6 +289,69 @@ function createFlowerHeadGeometry() {
   return bakeTopLight(g, 0.8, 1.12);
 }
 
+// Leaf card: cheap billboard for dense foliage (2 tris, double-sided, vertex-colored).
+// Tier-gated: desktop only (~3000 cards), low tier 0. Reads as extra leaf volume
+// around the blob canopy without adding 80-tri puffs. Alpha masked via alphaTest.
+function createLeafCardGeometry() {
+  const geo = new THREE.PlaneGeometry(0.55, 0.78);
+  // Slight bend for volume — droop the tip
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    if (y > 0) pos.setZ(i, pos.getZ(i) + 0.11);
+  }
+  geo.computeVertexNormals();
+  bakeTopLight(geo, 0.75, 1.08);
+  return geo;
+}
+
+// Reed variant: taller river-bank grass (1.1u vs 0.65u tuft) for Phase 4.
+function createReedGeometry() {
+  const W = 0.35;
+  const H = 1.1;
+  const blades = [];
+  for (let b = 0; b < 3; b++) {
+    const p = new THREE.PlaneGeometry(W, H, 1, 3);
+    p.translate(0, H / 2, 0);
+    const pos = p.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const t = pos.getY(i) / H;
+      const w = t < 0.4 ? 1 - t * 0.3 : Math.max(0.08, 1 - t * 0.92);
+      const bend = t * t * 0.35 + t * 0.05 * (b - 1);
+      pos.setX(i, x * w);
+      pos.setZ(i, pos.getZ(i) * w + bend);
+    }
+    p.rotateY((b / 3) * Math.PI * 2 + 0.15);
+    blades.push(p);
+  }
+  let vTotal = 0, iTotal = 0;
+  for (const b of blades) { vTotal += b.attributes.position.count; iTotal += b.index.count; }
+  const merged = new THREE.BufferGeometry();
+  const mp = new Float32Array(vTotal * 3);
+  const mn = new Float32Array(vTotal * 3);
+  const mu = new Float32Array(vTotal * 2);
+  const mi = new Uint16Array(iTotal);
+  let vo = 0, io = 0;
+  for (const b of blades) {
+    mp.set(b.attributes.position.array, vo * 3);
+    mn.set(b.attributes.normal.array, vo * 3);
+    mu.set(b.attributes.uv.array, vo * 2);
+    const idx = b.index.array;
+    for (let i = 0; i < idx.length; i++) mi[io + i] = vo + idx[i];
+    vo += b.attributes.position.count;
+    io += idx.length;
+    b.dispose();
+  }
+  merged.setAttribute('position', new THREE.BufferAttribute(mp, 3));
+  merged.setAttribute('normal', new THREE.BufferAttribute(mn, 3));
+  merged.setAttribute('uv', new THREE.BufferAttribute(mu, 2));
+  merged.setIndex(new THREE.BufferAttribute(mi, 1));
+  merged.computeVertexNormals();
+  bakeTopLight(merged, 0.6, 1.12);
+  return merged;
+}
+
 // Fruit: small round cartoon orb (mango/orange/apple/coconut/berry differ by
 // tint + non-uniform placer scale, not geometry — one pool serves all).
 function createFruitGeometry() {
@@ -359,6 +423,8 @@ export function createVegetationKit() {
     pine: createPineGeometry(),
     blob: createCanopyGeometry(),
     palmLeaf: createPalmFrondGeometry(),
+    leafCard: createLeafCardGeometry(),
+    reed: createReedGeometry(),
     bush: bakeTopLight(jitterRadial(new THREE.IcosahedronGeometry(0.7, 0), 0.12, 'bush'), 0.7, 1.08),
     // P0: 8 sides (was 7), flat caps kept.
     cactus: new THREE.CylinderGeometry(0.32, 0.4, 2.4, 8),
@@ -384,6 +450,10 @@ export function createVegetationKit() {
     pine: foliageMat(0.9),
     blob: foliageMat(0.9),
     palmLeaf: foliageMat(0.85, { side: THREE.DoubleSide }),
+    // Leaf cards: alphaTest not transparent (avoids sorting, keeps tiled GPUs happy).
+    // Desktop only; low tier renders 0 cards (same draw call vanishes when count=0).
+    leafCard: foliageMat(0.85, { side: THREE.DoubleSide, alphaTest: 0.5 }),
+    reed: foliageMat(0.9, { side: THREE.DoubleSide }),
     bush: foliageMat(0.9),
     cactus: texturedMat(0xffffff, getCactusTexture(), getCactusBump(), 0.06),
     rock: texturedMat(0xffffff, getRockTexture(), getRockBump(), 0.07, { roughness: 1 }),
@@ -422,6 +492,43 @@ function setTrunk(meshes, bucket, obstacles, x, y, z, s, rng, tint = PALETTES.tr
   meshes.trunk.setMatrixAt(bucket.ti++, dummy.matrix);
   obstacles.push({ x, z, r: 0.55 * s });
   return bucket.ti - 1; // trunk instance index (palms overwrite it taller)
+}
+
+// Dense foliage helpers — desktop only (tier-gated via bucket capacity checks).
+// Reuse the blob pool for 2 satellite puffs per tree: overlap ±0.4u, scale 0.7-0.9
+// Leaf cards: cheap 2-tri billboards around the canopy shell (alphaTest).
+function addSatelliteBlobs(meshes, bucket, x, y, z, s, rng, baseTint) {
+  if (QUALITY.low) return;
+  if (bucket.bi + 2 > (meshes.blob?.count ?? Infinity) && bucket.bi + 2 > 5600) return;
+  for (let k = 0; k < 2; k++) {
+    if (bucket.bi >= (meshes.blob?.instanceMatrix?.count ?? 5600)) break;
+    // Guard against overflow: pool sizing lives in chunks.js POOL.crowns
+    if (bucket.bi >= 5600) break;
+    meshes.blob.setColorAt(bucket.bi, tintFast(baseTint, rand(rng, -0.04, 0.04)));
+    dummy.position.set(x + rand(rng, -0.4, 0.4) * s, y + rand(rng, 2.0, 3.2) * s, z + rand(rng, -0.4, 0.4) * s);
+    dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), 0);
+    const sc = rand(rng, 0.7, 0.9) * s;
+    dummy.scale.set(sc * rand(rng, 0.9, 1.1), sc * 0.85, sc * rand(rng, 0.9, 1.1));
+    dummy.updateMatrix();
+    meshes.blob.setMatrixAt(bucket.bi++, dummy.matrix);
+  }
+}
+
+function addLeafCards(meshes, bucket, x, y, z, s, rng, tint) {
+  if (QUALITY.low) return;
+  if (!meshes.leafCard || bucket.lci === undefined) return;
+  const n = 2 + ((rng() * 3) | 0); // 2-4 cards per tree
+  for (let k = 0; k < n; k++) {
+    if (bucket.lci >= (meshes.leafCard?.instanceMatrix?.count ?? 3000)) break;
+    meshes.leafCard.setColorAt(bucket.lci, tintFast(tint, rand(rng, -0.03, 0.03)));
+    const a = rng() * Math.PI * 2;
+    const r = rand(rng, 0.6, 1.2) * s;
+    dummy.position.set(x + Math.cos(a) * r, y + rand(rng, 2.0, 3.0) * s, z + Math.sin(a) * r);
+    dummy.rotation.set(rand(rng, -0.2, 0.4), a + rand(rng, -0.5, 0.5), rand(rng, -0.3, 0.3));
+    dummy.scale.setScalar(s * rand(rng, 0.8, 1.15));
+    dummy.updateMatrix();
+    meshes.leafCard.setMatrixAt(bucket.lci++, dummy.matrix);
+  }
 }
 
 // Branch: reuses the trunk pool (thin tilted instance, no collision).
@@ -505,6 +612,9 @@ export function placeBroadleaf(meshes, bucket, obstacles, x, y, z, s, rng) {
     dummy.updateMatrix();
     meshes.blob.setMatrixAt(bucket.bi++, dummy.matrix);
   }
+  // Dense upgrade (desktop): 2 satellite puffs + leaf cards around shell.
+  addSatelliteBlobs(meshes, bucket, x, y, z, s, rng, PALETTES.canopyMid);
+  addLeafCards(meshes, bucket, x, y, z, s, rng, PALETTES.canopyLight);
 }
 
 // Mango / orange / apple tree: stout trunk, rounded canopy, fruit ring.
@@ -531,6 +641,8 @@ export function placeFruitTree(meshes, bucket, obstacles, x, y, z, s, rng) {
     dummy.updateMatrix();
     meshes.blob.setMatrixAt(bucket.bi++, dummy.matrix);
   }
+  addSatelliteBlobs(meshes, bucket, x, y, z, s, rng, PALETTES.canopyMid);
+  addLeafCards(meshes, bucket, x, y, z, s, rng, PALETTES.canopyLight);
   // Fruit ring hanging on the canopy shell.
   const n = 4 + ((rng() * 3) | 0);
   for (let k = 0; k < n; k++) {
@@ -554,6 +666,8 @@ export function placeBlossomTree(meshes, bucket, obstacles, x, y, z, s, rng) {
     dummy.updateMatrix();
     meshes.blob.setMatrixAt(bucket.bi++, dummy.matrix);
   }
+  addSatelliteBlobs(meshes, bucket, x, y, z, s, rng, pick(rng, PALETTES.blossom));
+  addLeafCards(meshes, bucket, x, y, z, s, rng, pick(rng, PALETTES.blossom));
   // Fallen petal scatter (stemless blossoms on the grass).
   const n = 3 + ((rng() * 3) | 0);
   for (let k = 0; k < n; k++) {
@@ -605,6 +719,8 @@ export function placeGoldenTree(meshes, bucket, obstacles, x, y, z, s, rng) {
     dummy.updateMatrix();
     meshes.blob.setMatrixAt(bucket.bi++, dummy.matrix);
   }
+  addSatelliteBlobs(meshes, bucket, x, y, z, s, rng, PALETTES.golden[0]);
+  addLeafCards(meshes, bucket, x, y, z, s, rng, pick(rng, PALETTES.golden));
 }
 
 // Kapok emergent giant: tallest silhouette, buttress roots, umbrella crown.
@@ -642,6 +758,9 @@ export function placeKapok(meshes, bucket, obstacles, x, y, z, s, rng) {
     dummy.updateMatrix();
     meshes.blob.setMatrixAt(bucket.bi++, dummy.matrix);
   }
+  // Desktop extra satellite + leaf cards for fuller umbrella
+  addSatelliteBlobs(meshes, bucket, x, y, z, s, rng, PALETTES.kapokLeaf);
+  addLeafCards(meshes, bucket, x, y, z, s, rng, PALETTES.kapokLeaf);
 }
 
 // Banana clump: green pseudo-stem + broad droopy leaves + banana bunch.
@@ -682,12 +801,14 @@ export function placePalm(meshes, bucket, obstacles, x, y, z, s, rng) {
   const topY = y + 2.45 * s;
   const topX = x + 0.25;
   const topZ = z + 0.2;
-  // Two tiers: 3 outer skirt fronds (strong droop) + 3 inner spears (upright,
-  // azimuth-offset). Base-anchored geometry => base sits exactly at the crown.
+  // Two tiers: outer skirt (strong droop) + inner spears (upright, azimuth-offset).
+  // Desktop 8 = 4+4, low 6 = 3+3. Base-anchored geometry sits exactly at crown.
+  const perTier = PALM_FRONDS / 2 | 0;
+  const offset = Math.PI / perTier;
   for (let k = 0; k < PALM_FRONDS; k++) {
-    const outer = k < 3;
-    const j = k % 3;
-    const a = (j / 3) * Math.PI * 2 + (outer ? 0 : Math.PI / 3) + rand(rng, -0.15, 0.15);
+    const outer = k < perTier;
+    const j = k % perTier;
+    const a = (j / perTier) * Math.PI * 2 + (outer ? 0 : offset) + rand(rng, -0.15, 0.15);
     const yaw = Math.PI / 2 - a;
     const pitch = outer ? rand(rng, 0.45, 0.65) : rand(rng, 0.08, 0.26);
     meshes.palm.setColorAt(bucket.palmi, tintFast(PALETTES.palmLeaf, rand(rng, -0.03, 0.03)));
@@ -772,6 +893,17 @@ export function placeGrass(meshes, bucket, x, y, z, s, rng, tint = PALETTES.gras
   dummy.scale.setScalar(s);
   dummy.updateMatrix();
   meshes.grass.setMatrixAt(bucket.gi++, dummy.matrix);
+}
+
+// Reed: taller river-bank variant (1.1u) — reuses grass logic but with reed geometry.
+export function placeReed(meshes, bucket, x, y, z, s, rng, tint = PALETTES.grass) {
+  if (!meshes.reed || bucket.reedi === undefined) return;
+  meshes.reed.setColorAt(bucket.reedi, tintFast(tint, rand(rng, -0.04, 0.04)));
+  dummy.position.set(x, y, z);
+  dummy.rotation.set(0, rand(rng, 0, 6.28), 0);
+  dummy.scale.setScalar(s);
+  dummy.updateMatrix();
+  meshes.reed.setMatrixAt(bucket.reedi++, dummy.matrix);
 }
 
 export function placeRock(meshes, bucket, obstacles, x, y, z, s, rng, tint = 0x9aa0a3, collide = false) {

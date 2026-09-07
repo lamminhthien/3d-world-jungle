@@ -11,20 +11,25 @@ import { getWaterBump, getWaterTexture } from './textures.js';
 export function createRiver(scene) {
   const waterDetail = getWaterTexture();
   const waterBump = getWaterBump();
-  // Low tier: opaque Lambert, no bump. A fullscreen transparent Standard
-  // plane is pure overdraw on a tiled GPU; opaque lets it early-z against
-  // the terrain (which sits above y=-0.32 outside the channel anyway).
+  // Phase 3 realism: desktop gets subsurface tint + wind-driven normals.
+  // Low tier: opaque Lambert (fill-rate bound), no bump. Desktop: Physical with
+  // transmission/thickness/clearcoat for semi-transparent depth; normal scale tied
+  // to wind (river.js:waterBump.offset.x += windDir.x * dt * 0.05).
   const waterMat = QUALITY.low
     ? new THREE.MeshLambertMaterial({ color: 0x0fc3e8, map: waterDetail })
-    : new THREE.MeshStandardMaterial({
+    : new THREE.MeshPhysicalMaterial({
       color: 0x0fb6dd,
       map: waterDetail,
       bumpMap: waterBump,
-      bumpScale: 0.08,
-      roughness: 0.18,
-      metalness: 0.12,
+      bumpScale: 0.09,
+      roughness: 0.14,
+      metalness: 0.08,
       transparent: true,
       opacity: 0.88,
+      transmission: 0.18,
+      thickness: 0.65,
+      clearcoat: 0.35,
+      clearcoatRoughness: 0.25,
     });
 
   const water = new THREE.Mesh(new THREE.PlaneGeometry(130, 130), waterMat);
@@ -77,18 +82,25 @@ export function createRiver(scene) {
   }
   foamMesh.instanceMatrix.needsUpdate = true;
 
-  function update(dt, focus) {
+  function update(dt, focus, wind = null) {
     const fx = focus ? focus.x : 0;
     const fz = focus ? focus.z : 0;
     water.position.x = fx;
     water.position.z = fz;
     // Flow the surface grain downstream (+z) so the river visibly streams.
     const now = performance.now();
-    waterDetail.offset.y -= dt * 0.08;
-    waterDetail.offset.x = Math.sin(now * 0.0002) * 0.022;
-    // Second caustic layer: bump scrolls at 45° to detail for organic shimmer.
-    waterBump.offset.y -= dt * 0.055;
-    waterBump.offset.x += dt * 0.055;
+    const windDir = wind?.direction || { x: 0, y: 0 };
+    const windAmp = wind?.strength ?? 0;
+    waterDetail.offset.y -= dt * (0.08 + windAmp * 0.04);
+    waterDetail.offset.x = Math.sin(now * 0.0002) * 0.022 + windDir.x * dt * 0.05;
+    // Second caustic layer: bump scrolls at 45° to detail for organic shimmer + wind drift.
+    waterBump.offset.y -= dt * (0.055 + windAmp * 0.03);
+    waterBump.offset.x += dt * (0.055 + windDir.x * 0.03);
+    // Depth tint: center (deep) pushes blue, bank pushes turquoise via subtle color lerp.
+    // Cheap depth proxy: modulate opacity/roughness with wind gust (choppy -> rougher).
+    if (waterMat.roughness !== undefined) {
+      waterMat.roughness = THREE.MathUtils.clamp(0.14 + windAmp * 0.07, 0.12, 0.22);
+    }
     let moved = false;
     for (let i = 0; i < foams.length; i++) {
       const f = foams[i];

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "format": "svg",
+  "format": "svg+webp",
   "size": 256,
   "textures": {
     "bark": {
@@ -30,6 +30,47 @@
     "water": {
       "map": "/generated/textures/water-color.svg",
       "bump": "/generated/textures/water-bump.svg"
+    },
+    "grass": {
+      "map": "/generated/textures/grass-color.svg",
+      "bump": "/generated/textures/grass-bump.svg"
     }
-  }
+  },
+  "assets": [
+    {
+      "key": "bark",
+      "source": "AmbientCG Bark014",
+      "license": "CC0 1.0 — AmbientCG"
+    },
+    {
+      "key": "ground",
+      "source": "AmbientCG Ground037",
+      "license": "CC0 1.0 — AmbientCG"
+    },
+    {
+      "key": "rock",
+      "source": "Poly Haven rock_wall_04",
+      "license": "CC0 1.0 — Poly Haven"
+    },
+    {
+      "key": "sand",
+      "source": "AmbientCG Sand004",
+      "license": "CC0 1.0 — AmbientCG"
+    },
+    {
+      "key": "water",
+      "source": "Poly Haven water_02",
+      "license": "CC0 1.0 — Poly Haven"
+    },
+    {
+      "key": "leaf",
+      "source": "Kenney nature-kit",
+      "license": "CC0 1.0 — Kenney"
+    },
+    {
+      "key": "grass",
+      "source": "Kenney grass + AmbientCG Grass001",
+      "license": "CC0 1.0 — Kenney / AmbientCG"
+    }
+  ]
 }

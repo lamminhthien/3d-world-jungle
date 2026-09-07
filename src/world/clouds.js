@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CLOUD_COUNT } from '../config.js';
 import { QUALITY, isMobileDevice } from '../core/setup.js';
 import { rand } from '../utils.js';
+import { windState } from './wind.js';
 
 // Low-poly drifting clouds (docs/enhance_for_night_screen.md section 3).
 // - Merged icosahedron puffs, flat-shaded.
@@ -56,10 +57,14 @@ export function createClouds(scene) {
   function update(dt, focus, elapsed = 0) {
     const fx = focus ? focus.x : 0;
     const fz = focus ? focus.z : 0;
+    // Wind modulates cloud drift (stronger wind → faster drift along windDir)
+    const windBoost = 0.5 + windState.strength * 0.9;
+    const wx = windState.direction.x * windBoost * 0.35;
+    const wz = windState.direction.y * windBoost * 0.35;
     for (const c of clouds) {
-      // Slow drift on X (+ slight Z wander), gentle vertical bob.
-      c.position.x += c.userData.speed * dt;
-      c.position.z += c.userData.driftZ * dt;
+      // Slow drift on X (+ slight Z wander) + wind contribution
+      c.position.x += (c.userData.speed + wx) * dt;
+      c.position.z += (c.userData.driftZ + wz) * dt;
       c.position.y = c.userData.baseY + Math.sin(elapsed * 0.3 + c.userData.bobPhase) * 0.5;
       // Wrap around the focus (not world origin) for the infinite map.
       if (c.position.x - fx > 48) c.position.x -= 96;

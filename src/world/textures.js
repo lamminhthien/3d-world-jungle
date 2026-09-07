@@ -27,6 +27,18 @@ const staticTextureFiles = {
   sand: ['sand-color.svg', 'sand-bump.svg'],
   water: ['water-color.svg', 'water-bump.svg'],
 };
+// WebP variants (Phase 1 realism): prefer WebP if present, fall back to SVG.
+// Build pipeline (scripts/fetch-assets.mjs) emits WebP 512 desktop / 256 low;
+// this table maps the same keys to .webp filenames for runtime detection.
+const staticTextureWebpFiles = {
+  bark: ['bark-color.webp', 'bark-bump.webp'],
+  leaf: ['leaf-color.webp', 'leaf-bump.webp'],
+  rock: ['rock-color.webp', 'rock-bump.webp'],
+  cactus: ['cactus-color.webp', 'cactus-bump.webp'],
+  ground: ['ground-color.webp', 'ground-bump.webp'],
+  sand: ['sand-color.webp', 'sand-bump.webp'],
+  water: ['water-color.webp', 'water-bump.webp'],
+};
 const SIZE = 256;
 
 let staticTextureLoad = null;
@@ -74,6 +86,7 @@ function configureStaticTexture(texture, key, isBump) {
  * Load build-time generated material textures before the world is created.
  * The synchronous getters below intentionally retain their old API: if this
  * preload fails, they fall back to the original CanvasTexture generators.
+ * Phase 1: prefers WebP (`.webp`) when available, falls back to SVG on 404.
  */
 export async function loadStaticTextures({ renderer = null, includeBump = !QUALITY.low } = {}) {
   if (staticTextureLoad) return staticTextureLoad;
@@ -81,26 +94,32 @@ export async function loadStaticTextures({ renderer = null, includeBump = !QUALI
     if (typeof document === 'undefined') return { loaded: 0, fallback: true };
     const loader = new THREE.TextureLoader();
     let loaded = 0;
+    const tryLoad = async (webpFile, svgFile, key, isBump) => {
+      // Attempt WebP first, then SVG fallback (both via TextureLoader.loadAsync).
+      // WebP 80-90% quality saves ~70% vs SVG rasterization bandwidth; SVG
+      // remains the offline fallback when fetch-assets hasn't run.
+      try {
+        const tex = await loader.loadAsync(staticTextureUrl(webpFile));
+        cache[key] = cache[key] || {};
+        if (isBump) cache[key].bumpMap = configureStaticTexture(tex, key, true);
+        else cache[key].map = configureStaticTexture(tex, key, false);
+        loaded += 1;
+        try { renderer?.initTexture?.(tex); } catch { /* first render can upload */ }
+        return;
+      } catch { /* webp missing — try svg */ }
+      const tex = await loader.loadAsync(staticTextureUrl(svgFile));
+      cache[key] = cache[key] || {};
+      if (isBump) cache[key].bumpMap = configureStaticTexture(tex, key, true);
+      else cache[key].map = configureStaticTexture(tex, key, false);
+      loaded += 1;
+      try { renderer?.initTexture?.(tex); } catch { /* first render can upload */ }
+    };
     const jobs = [];
-    for (const [key, [mapFile, bumpFile]] of Object.entries(staticTextureFiles)) {
-      jobs.push(
-        loader.loadAsync(staticTextureUrl(mapFile)).then((texture) => {
-          cache[key] = cache[key] || {};
-          cache[key].map = configureStaticTexture(texture, key, false);
-          loaded += 1;
-          try { renderer?.initTexture?.(texture); } catch { /* first render can upload */ }
-        }),
-      );
-      if (includeBump) {
-        jobs.push(
-          loader.loadAsync(staticTextureUrl(bumpFile)).then((texture) => {
-            cache[key] = cache[key] || {};
-            cache[key].bumpMap = configureStaticTexture(texture, key, true);
-            loaded += 1;
-            try { renderer?.initTexture?.(texture); } catch { /* first render can upload */ }
-          }),
-        );
-      }
+    for (const key of Object.keys(staticTextureFiles)) {
+      const [mapFile, bumpFile] = staticTextureFiles[key];
+      const [webpMap, webpBump] = staticTextureWebpFiles[key] || [null, null];
+      jobs.push(tryLoad(webpMap || mapFile, mapFile, key, false));
+      if (includeBump) jobs.push(tryLoad(webpBump || bumpFile, bumpFile, key, true));
     }
     const results = await Promise.allSettled(jobs);
     const failed = results.filter((result) => result.status === 'rejected').length;

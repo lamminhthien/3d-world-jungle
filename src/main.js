@@ -16,6 +16,8 @@ import { createAnimals } from './entities/animals.js';
 import { setupControls } from './input/controls.js';
 import { setupPwaUi } from './core/pwa.js';
 import { randomSeedString } from './world/noise.js';
+import { windState } from './world/wind.js';
+import { createComposer, updateBloomForEnvironment, disposeComposer, setBloomEnabled, isBloomEnabled } from './core/postprocessing.js';
 import { AutoPlayAgent } from './core/autoPlay.js';
 import { createAdventure } from './gameplay/adventure.js';
 import { createVillage } from './gameplay/village.js';
@@ -85,6 +87,11 @@ async function boot() {
   const fireflies = createFireflies(scene);
   const camps = createCampsites(scene, initialSeed);
   const animals = createAnimals(scene);
+
+  // Phase 6: Bloom composer (desktop only, tier-gated). Falls back to direct render on low tier.
+  let composer = createComposer(renderer, scene, camera);
+  // Expose for debugging / toggle
+  if (typeof window !== 'undefined') window.__composer = composer;
 
   const { player, parts } = createPlayer(scene);
   player.position.set(spawn.x, groundHeight(spawn.x, spawn.z), spawn.z);
@@ -487,7 +494,7 @@ async function boot() {
 
     // Stream chunks around the player + keep water/foam nearby.
     world.update(player.position.x, player.position.z);
-    river.update(dt, player.position);
+    river.update(dt, player.position, windState);
     sky.update(dt, player.position, clock.elapsedTime);
 
     // Day-night + weather drive sun/fog/sky (sun follows target for shadows).
@@ -516,6 +523,27 @@ async function boot() {
   let downVotes = 0;
   let upVotes = 0;
 
+  // Bloom auto-off when FPS <50 for 2 votes (fill-rate killer fallback)
+  let bloomLowVotes = 0;
+  // Wire bloom toggle in menu if present (Phase 6)
+  const bloomBtn = document.getElementById('bloomToggle');
+  if (bloomBtn) {
+    bloomBtn.textContent = isBloomEnabled() ? 'Bloom: On' : 'Bloom: Off';
+    bloomBtn.onclick = () => {
+      const nowOn = !isBloomEnabled();
+      setBloomEnabled(nowOn);
+      bloomBtn.textContent = nowOn ? 'Bloom: On' : 'Bloom: Off';
+      if (nowOn && !composer && !QUALITY.low) {
+        composer = createComposer(renderer, scene, camera);
+        if (typeof window !== 'undefined') window.__composer = composer;
+      } else if (!nowOn && composer) {
+        disposeComposer(composer);
+        composer = null;
+        if (typeof window !== 'undefined') window.__composer = null;
+      }
+    };
+  }
+
   function animate(now) {
     requestAnimationFrame(animate);
     const frameDuration = 1000 / targetFps;
@@ -524,7 +552,10 @@ async function boot() {
 
     const dt = Math.min(clock.getDelta(), 0.05);
     update(dt);
-    renderer.render(scene, camera);
+    // Bloom exposure follows env wetness / day factor
+    if (composer) updateBloomForEnvironment(composer, env);
+    if (composer && !QUALITY.low) composer.render();
+    else renderer.render(scene, camera);
 
     fpsAcc += 1 / Math.max(dt, 1e-4);
     fpsN++;
@@ -553,16 +584,31 @@ async function boot() {
           if (++downVotes >= 2) {
             downVotes = 0;
             renderer.setPixelRatio(Math.max(QUALITY.minPixelRatio, pr - 0.25));
+            if (composer) composer.setPixelRatio?.(renderer.getPixelRatio());
           }
         } else if (avg > targetFps * 0.95 && pr < prCap) {
           downVotes = 0;
           if (++upVotes >= 2) {
             upVotes = 0;
             renderer.setPixelRatio(Math.min(prCap, pr + 0.25));
+            if (composer) composer.setPixelRatio?.(renderer.getPixelRatio());
           }
         } else {
           downVotes = 0;
           upVotes = 0;
+        }
+      }
+      // Bloom fill-rate guard: auto-off when <50 FPS for 2 votes (desktop only)
+      if (composer && !QUALITY.low) {
+        if (avg < 50) {
+          if (++bloomLowVotes >= 2) {
+            bloomLowVotes = 0;
+            // Keep composer but lower strength instead of fully disabling (less jank)
+            const bp = composer.userData.bloomPass;
+            if (bp) bp.strength = Math.max(0.15, bp.strength - 0.08);
+          }
+        } else if (avg > 58) {
+          bloomLowVotes = 0;
         }
       }
       fpsAcc = 0;
