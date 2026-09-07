@@ -15,13 +15,14 @@ import { createPlayer } from './entities/player.js';
 import { createAnimals } from './entities/animals.js';
 import { setupControls } from './input/controls.js';
 import { setupPwaUi } from './core/pwa.js';
-import { randomSeedString } from './world/noise.js';
+import { randomSeedString, rngFromString } from './world/noise.js';
 import { windState } from './world/wind.js';
 import { createComposer, updateBloomForEnvironment, updateAdvancedEffects, disposeComposer, setBloomEnabled, isBloomEnabled, isRaysEnabled, isFlareEnabled, isGIEnabled, setRaysEnabled, setFlareEnabled, setGIEnabled } from './core/postprocessing.js';
 import { createBounceLight, createDynamicLightRig, updateBounceLight } from './core/globalIllumination.js';
 import { AutoPlayAgent } from './core/autoPlay.js';
 import { createAdventure } from './gameplay/adventure.js';
 import { createVillage } from './gameplay/village.js';
+import { createLandmarks } from './world/landmarks.js';
 
 // ============ Loop State ============
 let targetFps = DEFAULT_MAX_FPS;
@@ -106,42 +107,56 @@ async function boot() {
   player.position.set(spawn.x, groundHeight(spawn.x, spawn.z), spawn.z);
   const adventure = createAdventure(scene, spawn);
   const village = createVillage(scene, spawn);
+  const landmarks = createLandmarks(scene, spawn);
+  if (typeof window !== 'undefined') window.__landmarks = landmarks;
   camTarget.set(spawn.x, 0.5, spawn.z);
   const { keys, joy, touch } = setupControls(canvas, core);
 
-  // ============ World type presets ============
-  // Maps preset seed strings to generation constants and optional time-of-day overrides.
+  // ============ World type presets — Genshin open-world nations ============
+  // Each nation is just GEN + VEGETATION params, still seeded infinite.
+  // Icon/hue matches the nation so the grid reads like Teyvat.
   const WORLD_CONFIGS = {
-    JUNGLE_PRIME: {
-      gen: {}, // default
+    JUNGLE_PRIME: { gen: {}, veg: {}, timeOverride: null, label: 'Jungle' },
+    DESERT_WINDS: { gen: { desertTemp: 0.3, desertMoist: 0.6, riverAmp: 5, riverFreq: 0.02 }, veg: { grassDensity: 0.6, flowerDensity: 0.5 }, timeOverride: null },
+    MOUNTAIN_PEAKS: { gen: { maxHeight: 8, levels: 8, rockLine: 1.0, snowLine: 3.0 }, veg: {}, timeOverride: null },
+    BEACH_COVE: { gen: { bankOuter: 12, riverHalf: 4, riverAmp: 6 }, veg: { grassDensity: 1.1, willowDensity: 0.7 }, timeOverride: null },
+    NIGHT_FOREST: { gen: {}, timeOverride: 0.5, label: 'Night' },
+    VILLAGE_HUB: { gen: {}, veg: {}, timeOverride: null, focusVillage: true, label: 'Village' },
+    // --- Genshin nations ---
+    MONDSTADT_ANEMO: { // Mondstadt — windy meadow, dandelion flower fields (Monstadt)
+      gen: { maxHeight: 4.5, levels: 5, rockLine: 1.8, snowLine: 3.2, desertTemp: 0.75, desertMoist: 0.35 },
+      veg: { treeDensity: 0.55, treeScale: 0.95, grassDensity: 1.7, flowerDensity: 1.45, bambooDensity: 0.2, willowDensity: 0.5 },
+      timeOverride: null, fog: { near: 85, far: 165 },
+    },
+    LIYUE_GEO: { // Liyue — terraced geo cliffs + bamboo
+      gen: { maxHeight: 9, levels: 9, rockLine: 0.9, snowLine: 3.6, riverAmp: 7, riverFreq: 0.03 },
+      veg: { treeDensity: 0.72, bambooDensity: 0.95, grassDensity: 0.9, flowerDensity: 0.8 },
+      timeOverride: null, fog: { near: 75, far: 155 },
+    },
+    INAZUMA_ELECTRO: { // Inazuma — sakura isles, beach + lightning night vibe
+      gen: { bankOuter: 9, riverHalf: 3.5, riverAmp: 8, riverFreq: 0.05, desertMoist: 0.5, snowLine: 2.8 },
+      veg: { treeDensity: 0.68, grassDensity: 1.0, flowerDensity: 1.25, bambooDensity: 0.6 },
+      timeOverride: null, fog: { near: 70, far: 140 }, // misty isles
+    },
+    SUMERU_DENDRO: { // Sumeru rainforest — dense jungle
+      gen: { maxHeight: 5.5, levels: 7, rockLine: 1.6, snowLine: 3.0, moistureFreq: 0.038, desertTemp: 0.7 },
+      veg: { treeDensity: 1.05, treeScale: 1.05, grassDensity: 1.3, flowerDensity: 1.1, bambooDensity: 0.85, willowDensity: 0.6 },
       timeOverride: null,
     },
-    DESERT_WINDS: {
-      gen: { desertTemp: 0.3, desertMoist: 0.6, riverAmp: 5, riverFreq: 0.02 },
-      timeOverride: null,
+    FONTAINE_HYDRO: { // Fontaine — lakes, willows, reeds
+      gen: { bankOuter: 14, riverHalf: 5, riverAmp: 6, riverFreq: 0.035, maxHeight: 4.2 },
+      veg: { treeDensity: 0.62, willowDensity: 1.15, grassDensity: 1.55, flowerDensity: 1.0, bambooDensity: 0.4 },
+      timeOverride: null, fog: { near: 78, far: 150 },
     },
-    MOUNTAIN_PEAKS: {
-      gen: { maxHeight: 8, levels: 8, rockLine: 1.0, snowLine: 3.0 },
-      timeOverride: null,
+    NATLAN_PYRO: { // Natlan — volcanic ember fields, autumn maples
+      gen: { maxHeight: 7, levels: 7, rockLine: 1.1, snowLine: 3.4, desertTemp: 0.5, desertMoist: 0.5, heightFreq: 0.04 },
+      veg: { treeDensity: 0.6, grassDensity: 0.8, flowerDensity: 0.7 },
+      timeOverride: null, fog: { near: 60, far: 130 }, // hazy volcano
     },
-    BEACH_COVE: {
-      gen: { bankOuter: 12, riverHalf: 4, riverAmp: 6 },
-      timeOverride: null,
-    },
-    NIGHT_FOREST: {
-      gen: {},
-      timeOverride: 0.5, // start at midnight
-    },
-    VILLAGE_HUB: {
-      gen: {},
-      timeOverride: null,
-      focusVillage: true,
-    },
-    __random__: {
-      gen: {},
-      timeOverride: null,
-    },
+    __random__: { gen: {}, veg: {}, timeOverride: null, label: 'Random' },
   };
+
+  const DEFAULT_VEG = { ...VEGETATION };
 
   // ============ Seed UI ============
   const seedInput = document.getElementById('seed');
@@ -157,10 +172,53 @@ async function boot() {
   }
 
   function applySeed(newSeed, timeOverride = null) {
-    const config = WORLD_CONFIGS[newSeed] || { gen: {}, timeOverride: null };
+    const requested = newSeed;
+    let config = WORLD_CONFIGS[requested] || { gen: {}, veg: {}, timeOverride: null };
+    let effectiveSeed = requested;
+    // For "Random" — make every roll a truly new nation: random GEN + veg so no two random worlds look alike
+    if (requested === '__random__') {
+      const tmpSeed = randomSeedString();
+      const _rng = rngFromString(tmpSeed);
+      const _rand = (a,b)=> a+ _rng()*(b-a);
+      const _randInt = (a,b)=> ( _rand(a,b) )|0;
+      config = {
+        gen: {
+          maxHeight: _rand(4, 9),
+          levels: _randInt(5,10),
+          rockLine: _rand(0.9, 1.8),
+          snowLine: _rand(2.5, 3.8),
+          riverAmp: _rand(5, 11),
+          riverHalf: _rand(2.8, 5.2),
+          bankOuter: _rand(6, 14),
+          desertTemp: _rand(0.3, 0.75),
+          desertMoist: _rand(0.32, 0.6),
+        },
+        veg: {
+          treeDensity: _rand(0.45, 1.1),
+          treeScale: _rand(0.8, 1.15),
+          grassDensity: _rand(0.7, 1.7),
+          flowerDensity: _rand(0.6, 1.45),
+          bambooDensity: _rand(0, 1),
+          willowDensity: _rand(0.2, 1),
+        },
+        timeOverride: null,
+        fog: _rand(0,1) < 0.3 ? { near: _rand(60,85)|0, far: _rand(130,165)|0 } : null,
+      };
+      effectiveSeed = tmpSeed;
+      WORLD_CONFIGS[tmpSeed] = config;
+    }
+    // Genshin nations: apply both terrain and vegetation densities before rebuild
+    Object.assign(VEGETATION, DEFAULT_VEG, config.veg || {});
     updateProceduralGen(config.gen);
+    if (config.fog) {
+      WORLD.fogNear = config.fog.near; WORLD.fogFar = config.fog.far;
+      if (scene?.fog) { scene.fog.near = config.fog.near; scene.fog.far = config.fog.far; }
+    } else {
+      WORLD.fogNear = 80; WORLD.fogFar = 160;
+      if (scene?.fog) { scene.fog.near = 80; scene.fog.far = 160; }
+    }
 
-    const actualSeed = newSeed === '__random__' ? randomSeedString() : newSeed;
+    const actualSeed = effectiveSeed;
     spawn = world.regenerate(actualSeed);
     removeBridges(scene, bridgeGroups);
     bridgeGroups = createBridges(scene);
@@ -168,6 +226,7 @@ async function boot() {
     player.position.set(spawn.x, groundHeight(spawn.x, spawn.z), spawn.z);
     adventure.regenerate(spawn);
     village.regenerate(spawn);
+    try { landmarks?.regenerate(spawn); } catch { /* no landmarks yet */ }
     const destination = config.focusVillage ? village.getHubPosition() : spawn;
     if (config.focusVillage) {
       const villageY = village.getSurfaceHeight(destination.x, destination.z);
@@ -181,7 +240,7 @@ async function boot() {
     // Apply time override if the preset specifies one (e.g. Night = midnight).
     const finalTime = timeOverride !== null ? timeOverride : config.timeOverride;
     if (finalTime !== null && env?.setTime) env.setTime(finalTime);
-    setAllWorldBtnActive(newSeed);
+    setAllWorldBtnActive(requested);
   }
 
   // Wire up title-screen world type grid
@@ -513,6 +572,7 @@ async function boot() {
     animals.update(dt, player.position);
     adventure.update(dt, player.position);
     village.update(dt, player.position, env.nightFactor);
+    try { landmarks.update(dt, player.position); } catch {}
 
     // Night systems (docs/enhance_for_night_screen.md section 5):
     // timeOfDay -> fireflies on, moon takes over, clouds darken, campfires glow.

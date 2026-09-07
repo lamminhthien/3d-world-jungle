@@ -201,20 +201,19 @@ export function updateAdvancedEffects(composer, { camera, env, sunWorldPos, moon
     } else {
       activeColor.setHex(0xdce8ff);
     }
-    // Intensity: day sun shafts visible at sunrise/sunset + when sun low; night moon shafts always subtle
+    // Toned down: rays were causing hard diagonal ground stripes in 06:49 screenshot.
+    // Now subtle — only low sun / night, and ground-faded in shader.
     let volIntensity = 0;
     let flareIntensity = 0;
     if (activeVis) {
       if (activeIsSun) {
-        // Stronger near horizon (sun low) — sunrise/sunset
-        const lowSun = THREE.MathUtils.clamp(1 - (activePos.y - 0.05) * 2.2, 0, 1);
+        const lowSun = THREE.MathUtils.clamp(1 - (activePos.y - 0.08) * 2.8, 0, 1);
         const horizonBoost = env ? THREE.MathUtils.clamp(1 - Math.abs(((env.timeOfDay - 6) / 12) * Math.PI - Math.PI/2)*0.7 ,0,1) : 0.5;
-        volIntensity = 0.72 * lowSun * (0.45 + horizonBoost*0.55) * (activeVis);
-        // Lens flare for sun: strong when sun high enough but not overhead too harsh
-        flareIntensity = 0.85 * activeVis * THREE.MathUtils.clamp(activePos.y*1.2, 0, 1) * (isDay?1:0.35);
+        volIntensity = 0.22 * lowSun * (0.35 + horizonBoost*0.45) * activeVis;
+        flareIntensity = 0.38 * activeVis * THREE.MathUtils.clamp(activePos.y*1.0, 0, 1) * (isDay?1:0.28);
       } else {
-        volIntensity = 0.58 * nf * activeVis * 0.95;
-        flareIntensity = 0.72 * nf * activeVis;
+        volIntensity = 0.18 * nf * activeVis;
+        flareIntensity = 0.30 * nf * activeVis;
       }
       // Weather dims shafts (rain/overcast scatters but also occludes)
       const weather = env?.weather || 'clear';

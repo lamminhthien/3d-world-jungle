@@ -8,7 +8,11 @@
     "dev": "vite",
     "build:textures": "node scripts/generate-textures.mjs",
     "build:assets": "node scripts/fetch-assets.mjs",
-    "build": "npm run build:textures && npm run build:assets && vite build",
+    "build:models": "node scripts/fetch-nature-models.mjs",
+    "build:models:fetch": "node scripts/fetch-nature-models.mjs --fetch",
+    "build:models:all": "node scripts/fetch-nature-models.mjs --fetch --all",
+    "build": "npm run build:textures && npm run build:assets && npm run build:models && vite build",
+    "build:full": "npm run build:textures && node scripts/fetch-assets.mjs --fetch && node scripts/fetch-nature-models.mjs --fetch && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

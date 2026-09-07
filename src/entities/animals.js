@@ -5,7 +5,8 @@
 import * as THREE from 'three';
 import { QUALITY } from '../core/setup.js';
 import { groundHeight } from '../utils.js';
-import { riverXAt } from '../world/procedural.js';
+import { riverXAt, moistureAt } from '../world/procedural.js';
+import { ANIMALS } from '../config.js';
 
 // ---- Helper ----
 const _m = new THREE.Matrix4();
@@ -24,9 +25,9 @@ function compose(px, py, pz, ry, sx, sy, sz) {
 }
 
 // ============================================================
-// BIRDS
+// BIRDS — Genshin sky gliders over Mondstadt plains
 // ============================================================
-const BIRD_COUNT = QUALITY.low ? 12 : 22;
+const BIRD_COUNT = QUALITY.low ? ANIMALS.birdCount - 10 : ANIMALS.birdCount;
 
 function buildBirdWingGeo() {
   // Single flat diamond "wing" centred at origin, swept up/down in update.
@@ -359,18 +360,170 @@ export function createFish(scene) {
 }
 
 // ============================================================
-// COMBINED FACTORY
+// BUTTERFLIES — Inazuma/Monstadt flower fields (Genshin gliders)
+// ============================================================
+const BUTTERFLY_COUNT = QUALITY.low ? 8 : ANIMALS.butterflyCount;
+
+function buildButterflyGeo() {
+  const geo = new THREE.BufferGeometry();
+  // Two pairs of wings — colorful flat diamonds
+  const v = new Float32Array([
+    0, 0.02, 0,  -0.22, 0.04, 0.08,  -0.32, 0, -0.06,
+    0, 0.02, 0,   0.22, 0.04, 0.08,   0.32, 0, -0.06,
+    0, 0.02, 0,  -0.14, -0.03, 0.06, -0.18, -0.06, -0.05,
+    0, 0.02, 0,   0.14, -0.03, 0.06,  0.18, -0.06, -0.05,
+  ]);
+  const idx = [0,1,2, 3,4,5, 6,7,8, 9,10,11];
+  geo.setAttribute('position', new THREE.BufferAttribute(v, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+export function createButterflies(scene) {
+  const geo = buildButterflyGeo();
+  const mat = new THREE.MeshLambertMaterial({ color: 0xff7ee8, side: THREE.DoubleSide, transparent: true, opacity: 0.95 });
+  const mesh = new THREE.InstancedMesh(geo, mat, BUTTERFLY_COUNT);
+  mesh.frustumCulled = false; scene.add(mesh);
+  const colors = [0xff7ee8, 0x7de8ff, 0xffd93b, 0x7dff7a, 0xff9a7a];
+  const col = new THREE.Color();
+  const b = [];
+  for (let i=0;i<BUTTERFLY_COUNT;i++) {
+    mesh.setColorAt(i, col.setHex(colors[i % colors.length]));
+    b.push({
+      x:(Math.random()-0.5)*30, z:(Math.random()-0.5)*30,
+      ry:Math.random()*6.28, flap:Math.random()*6.28, speed:0.7+Math.random()*1.2,
+      bob:Math.random()*6.28, wander:Math.random()*6.28, scale:0.45+Math.random()*0.25
+    });
+  }
+  mesh.instanceColor.needsUpdate = true;
+  let t=0;
+  function update(dt, playerPos) {
+    t+=dt;
+    for(let i=0;i<b.length;i++){
+      const bf=b[i];
+      bf.wander+=dt*0.6;
+      bf.x += Math.cos(bf.wander)*bf.speed*dt*0.4;
+      bf.z += Math.sin(bf.wander*0.7)*bf.speed*dt*0.4;
+      // stay near player + flower meadows (moist lowland)
+      const dx=bf.x-playerPos.x, dz=bf.z-playerPos.z;
+      if(dx*dx+dz*dz>35*35){ bf.x+= (playerPos.x-bf.x)*dt*0.08; bf.z+=(playerPos.z-bf.z)*dt*0.08; }
+      const gy=groundHeight(bf.x,bf.z)+0.45+Math.sin(t*1.2+bf.bob)*0.25;
+      const flap=Math.sin(t*9+bf.flap)*0.55;
+      _p.set(bf.x, gy, bf.z);
+      _e.set(flap, bf.ry + Math.sin(t*0.8+bf.flap)*0.6, 0);
+      _q.setFromEuler(_e); _s.setScalar(bf.scale);
+      _m.compose(_p,_q,_s); mesh.setMatrixAt(i,_m);
+    }
+    mesh.instanceMatrix.needsUpdate=true;
+  }
+  return { mesh, update };
+}
+
+// ============================================================
+// CRABS — Fontaine beach tide pools
+// ============================================================
+const CRAB_COUNT = QUALITY.low ? 6 : ANIMALS.crabCount;
+
+function buildCrabGeo(){
+  const g=new THREE.BoxGeometry(0.32,0.14,0.24);
+  const eyeL=new THREE.SphereGeometry(0.06,5,5); eyeL.translate(-0.1,0.12,0.1);
+  const eyeR=new THREE.SphereGeometry(0.06,5,5); eyeR.translate(0.1,0.12,0.1);
+  // merge quick
+  const geos=[g,eyeL,eyeR];
+  let vT=0,iT=0; for(const gg of geos){ vT+=gg.attributes.position.count; iT+=gg.index.count; }
+  const pos=new Float32Array(vT*3), norm=new Float32Array(vT*3), idx=[];
+  let vo=0; for(const gg of geos){ pos.set(gg.attributes.position.array, vo*3); if(gg.index) for(let k=0;k<gg.index.count;k++) idx.push(gg.index.array[k]+vo); vo+=gg.attributes.position.count; }
+  const mg=new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.BufferAttribute(pos,3)); mg.setIndex(idx); mg.computeVertexNormals(); return mg;
+}
+
+export function createCrabs(scene){
+  const geo=buildCrabGeo();
+  const mat=new THREE.MeshLambertMaterial({ color:0xff6b35, flatShading:true });
+  const mesh=new THREE.InstancedMesh(geo, mat, CRAB_COUNT);
+  mesh.frustumCulled=false; scene.add(mesh);
+  const crabs=[];
+  for(let i=0;i<CRAB_COUNT;i++){
+    const z=(Math.random()-0.5)*50;
+    const rx=riverXAt(z);
+    // place on beach band (bankOuter +-1.5)
+    const side=Math.random()<0.5?-1:1;
+    crabs.push({ z, x: rx + side*(4.5+Math.random()*1.8), ry:Math.random()*6.28, phase:Math.random()*6.28, speed:0.5+Math.random()*0.7, scale:0.7+Math.random()*0.3, dir: side });
+  }
+  let t=0;
+  function update(dt, playerPos){
+    t+=dt;
+    for(let i=0;i<crabs.length;i++){
+      const c=crabs[i];
+      c.z += c.dir * c.speed * dt * 0.6;
+      // side-walk waddle
+      c.x = riverXAt(c.z) + c.dir*4.8 + Math.sin(t*2+c.phase)*0.4;
+      const gy=groundHeight(c.x,c.z)+0.07;
+      const waddle=Math.sin(t*6+c.phase)*0.25;
+      _p.set(c.x, gy, c.z); _e.set(0, c.ry + waddle, 0); _q.setFromEuler(_e); _s.setScalar(c.scale);
+      _m.compose(_p,_q,_s); mesh.setMatrixAt(i,_m);
+      if(Math.abs(c.z-playerPos.z)>50){ c.z=playerPos.z+(Math.random()-0.5)*20; }
+    }
+    mesh.instanceMatrix.needsUpdate=true;
+  }
+  return { mesh, update };
+}
+
+// ============================================================
+// BOARS — Sumeru forest (chunky deer variant)
+// ============================================================
+const BOAR_COUNT = QUALITY.low ? 2 : ANIMALS.boarCount;
+
+export function createBoars(scene){
+  const geo=buildDeerGeo();
+  // scale slightly chunkier via instance scale, darker tint
+  const mat=new THREE.MeshLambertMaterial({ color:0x4a2f1a, flatShading:true });
+  const mesh=new THREE.InstancedMesh(geo, mat, BOAR_COUNT);
+  mesh.frustumCulled=false; mesh.castShadow=QUALITY.shadowsEnabled; scene.add(mesh);
+  const boars=[];
+  for(let i=0;i<BOAR_COUNT;i++){
+    boars.push({ x:(Math.random()-0.5)*35, z:(Math.random()-0.5)*35, ry:Math.random()*6.28, speed:0.35+Math.random()*0.5, phase:Math.random()*6.28, wander:Math.random()*6.28, scale:0.95+Math.random()*0.25, idle:1+Math.random()*2, state:'walk' });
+  }
+  let t=0;
+  function update(dt, playerPos){
+    t+=dt;
+    for(let i=0;i<boars.length;i++){
+      const b=boars[i];
+      b.wander+=dt*0.4;
+      if(b.state==='walk'){
+        const nx=b.x+Math.cos(b.wander)*b.speed*dt, nz=b.z+Math.sin(b.wander)*b.speed*dt;
+        if(Math.abs(nx - riverXAt(nz))>4){ b.x=nx; b.z=nz; }
+        b.ry=Math.atan2(Math.sin(b.wander), Math.cos(b.wander));
+        if(Math.hypot(b.x-playerPos.x,b.z-playerPos.z)>60){ const a=Math.random()*6.28, r=18+Math.random()*12; b.x=playerPos.x+Math.cos(a)*r; b.z=playerPos.z+Math.sin(a)*r; }
+      }
+      const gy=groundHeight(b.x,b.z)+0.38*b.scale+Math.sin(t*3+b.phase)*0.03;
+      _p.set(b.x,gy,b.z); _e.set(0,b.ry,0); _q.setFromEuler(_e); _s.setScalar(b.scale*1.15);
+      _m.compose(_p,_q,_s); mesh.setMatrixAt(i,_m);
+    }
+    mesh.instanceMatrix.needsUpdate=true;
+  }
+  return { mesh, update };
+}
+
+// ============================================================
+// COMBINED FACTORY — Genshin open world wildlife
 // ============================================================
 export function createAnimals(scene) {
   const birds = createBirds(scene);
   const deer = createDeer(scene);
   const fish = createFish(scene);
+  const butterflies = createButterflies(scene);
+  const crabs = createCrabs(scene);
+  const boars = createBoars(scene);
 
   return {
     update(dt, playerPos) {
       birds.update(dt, playerPos);
       deer.update(dt, playerPos);
       fish.update(dt, playerPos);
+      butterflies.update(dt, playerPos);
+      crabs.update(dt, playerPos);
+      boars.update(dt, playerPos);
     },
   };
 }

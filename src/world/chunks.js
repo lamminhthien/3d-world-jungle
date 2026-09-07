@@ -15,6 +15,8 @@ import {
   createVegetationKit,
   PALETTES,
   PALM_FRONDS,
+  placeAutumnTree,
+  placeBamboo,
   placeBanana,
   placeBlossomTree,
   placeBroadleaf,
@@ -26,11 +28,14 @@ import {
   placeGoldenTree,
   placeGrass,
   placeKapok,
+  placeMaple,
   placePalm,
   placePine,
   placeRainbowTree,
   placeReed,
   placeRock,
+  placeSakura,
+  placeWillow,
 } from './presets.js';
 import {
   BIOMES,
@@ -54,21 +59,20 @@ export const CHUNK_SEG = QUALITY.low ? 16 : 24;
 export const CHUNK_RADIUS = 2; // (2*R+1)^2 = 25 chunks ~ 80x80 units visible
 
 const POOL = {
-  // Cartoon-realistic trees cost more instances per tree now (branches reuse
-  // the trunk pool, 3-puff canopies, buttress roots): size trunks/crowns for
-  // ~30 tries/chunk × 25 chunks with headroom.
-  trees: QUALITY.low ? 1800 : 3200,
-  crowns: QUALITY.low ? 2600 : 5600, // dense: +2 satellites per tree (Phase 2)
-  palms: QUALITY.low ? 3200 : 6400, // 6 low / 8 desktop fronds
-  bushes: 900,
-  cacti: 450,
-  rocks: 1000,
-  grass: QUALITY.low ? 900 : 2400, // P4 fields: 12 tris each, 1 draw call (was 600/1500)
-  reed: QUALITY.low ? 0 : 900, // tall river-bank reed (1.1u) — desktop only
-  leafCard: QUALITY.low ? 0 : 3000, // Phase 2 foliage cards (2 tris, alphaTest)
-  fruit: QUALITY.low ? 900 : 1600, // mango/orange/apple/banana/coconut orbs
-  flowerStem: QUALITY.low ? 900 : 1600,
-  flowerHead: QUALITY.low ? 900 : 1600,
+  // Genshin meadow: grass up to 1.8x denser, willow/bamboo add trunks, sakura adds petals.
+  // Size for ~30 tries/chunk × 25 chunks with headroom.
+  trees: QUALITY.low ? 2200 : 3800, // + bamboo 3 trunks, willow 1
+  crowns: QUALITY.low ? 3200 : 6800, // + sakura/willow/maple puffs + satellites
+  palms: QUALITY.low ? 3200 : 6400,
+  bushes: 1000,
+  cacti: 500,
+  rocks: 1200,
+  grass: QUALITY.low ? 1200 : 3600, // Genshin Fontaine meadow — lush fields (was 900/2400)
+  reed: QUALITY.low ? 0 : 1200, // river willow + reed banks
+  leafCard: QUALITY.low ? 0 : 3600,
+  fruit: QUALITY.low ? 900 : 1600,
+  flowerStem: QUALITY.low ? 1200 : 2200, // Inazuma flower fields
+  flowerHead: QUALITY.low ? 1200 : 2200,
 };
 
 const rand = (rng, a, b) => a + rng() * (b - a);
@@ -257,25 +261,37 @@ export function createWorldManager(scene, seedStr) {
         if (roll < 0.44 * VEGETATION.treeDensity && bucket.ti + 4 <= POOL.trees) {
           const s = rand(rng, 0.8, 1.5) * VEGETATION.treeScale;
           const kind = rng();
-          // Canopy tree lottery: classic pine/broadleaf + fruit, blossom,
-          // kapok giants, banana clumps, coconut palms + rare rainbow/golden.
-          if (kind < 0.2 && bucket.pi + 3 <= POOL.crowns) {
+          // Genshin-weighted lottery: Mondstadt/Liyue/Inazuma/Sumeru/Fontaine nations mixed.
+          // Pine Broadleaf Sakura Maple Autumn Kapok Willow Bamboo + rare rainbow etc.
+          if (kind < 0.14 && bucket.pi + 3 <= POOL.crowns) {
             placePine(meshes, bucket, obstacles, x, y, z, s, rng);
-          } else if (kind < 0.36 && bucket.bi + 3 <= POOL.crowns) {
+          } else if (kind < 0.26 && bucket.bi + 3 <= POOL.crowns) {
             placeBroadleaf(meshes, bucket, obstacles, x, y, z, s, rng);
-          } else if (kind < 0.5 && bucket.bi + 3 <= POOL.crowns && bucket.fri + 7 <= POOL.fruit) {
+          } else if (kind < 0.34 && bucket.bi + 3 <= POOL.crowns && bucket.fri + 7 <= POOL.fruit) {
             placeFruitTree(meshes, bucket, obstacles, x, y, z, s, rng);
-          } else if (kind < 0.6 && bucket.bi + 3 <= POOL.crowns && bucket.fhi + 6 <= POOL.flowerHead) {
+          } else if (kind < 0.41 && bucket.bi + 4 <= POOL.crowns && bucket.fhi + 6 <= POOL.flowerHead) {
+            // Inazuma sakura — paler, airy
+            placeSakura(meshes, bucket, obstacles, x, y, z, s, rng);
+          } else if (kind < 0.47 && bucket.bi + 3 <= POOL.crowns && bucket.fhi + 6 <= POOL.flowerHead) {
             placeBlossomTree(meshes, bucket, obstacles, x, y, z, s, rng);
-          } else if (kind < 0.64 && bucket.bi + 4 <= POOL.crowns) {
-            // Rare rainbow showpiece.
-            placeRainbowTree(meshes, bucket, obstacles, x, y, z, rand(rng, 0.9, 1.4) * VEGETATION.treeScale, rng);
-          } else if (kind < 0.69 && bucket.bi + 3 <= POOL.crowns) {
-            // Rare golden accent.
+          } else if (kind < 0.52 && bucket.bi + 3 <= POOL.crowns) {
+            // Mondstadt maple — fiery red
+            placeMaple(meshes, bucket, obstacles, x, y, z, s, rng);
+          } else if (kind < 0.57 && bucket.bi + 3 <= POOL.crowns) {
+            placeAutumnTree(meshes, bucket, obstacles, x, y, z, s, rng);
+          } else if (kind < 0.61 && bucket.bi + 3 <= POOL.crowns) {
             placeGoldenTree(meshes, bucket, obstacles, x, y, z, s, rng);
-          } else if (kind < 0.74 && bucket.bi + 5 <= POOL.crowns) {
+          } else if (kind < 0.65 && bucket.bi + 4 <= POOL.crowns) {
+            placeRainbowTree(meshes, bucket, obstacles, x, y, z, rand(rng, 0.9, 1.4) * VEGETATION.treeScale, rng);
+          } else if (kind < 0.71 && bucket.bi + 5 <= POOL.crowns) {
             placeKapok(meshes, bucket, obstacles, x, y, z, rand(rng, 1.0, 1.5) * VEGETATION.treeScale, rng);
-          } else if (kind < 0.84 && bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
+          } else if (kind < 0.77 && bucket.bi + 5 <= POOL.crowns) {
+            // Fontaine willow — drooping teal
+            placeWillow(meshes, bucket, obstacles, x, y, z, s, rng);
+          } else if (kind < 0.83 && bucket.ti + 3 <= POOL.trees && bucket.bi + 3 <= POOL.crowns) {
+            // Liyue bamboo grove — 3 culms
+            placeBamboo(meshes, bucket, obstacles, x, y, z, s, rng);
+          } else if (kind < 0.90 && bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
             placeBanana(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.2) * VEGETATION.treeScale, rng);
           } else if (bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
             placePalm(meshes, bucket, obstacles, x, y, z, s, rng);
@@ -287,19 +303,23 @@ export function createWorldManager(scene, seedStr) {
           } else {
             placeBush(meshes, bucket, x, y, z, rand(rng, 0.6, 1.4), rng);
           }
-        } else if (roll < 0.7 && bucket.fhi + 9 <= POOL.flowerHead && bucket.fsti + 9 <= POOL.flowerStem) {
-          placeFlowerPatch(meshes, bucket, x, y, z, rand(rng, 0.7, 1.2), rng);
+        } else if (roll < (0.58 + 0.12 * VEGETATION.flowerDensity) && bucket.fhi + 9 <= POOL.flowerHead && bucket.fsti + 9 <= POOL.flowerStem) {
+          // Inazuma flower fields — density scales with VEGETATION.flowerDensity
+          placeFlowerPatch(meshes, bucket, x, y, z, rand(rng, 0.7, 1.2) * (0.9 + VEGETATION.flowerDensity * 0.15), rng);
         } else if (roll < 0.75 && bucket.ri < POOL.rocks) {
           placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.4, 0.9), rng);
         } else if (roll < 0.97) {
-          // Meadow mask: moist lowland = denser grass (phase 4) — scatter 2-4 tufts per hit for field density
+          // Genshin Fontaine meadow — lush fields when grassDensity >1
           const moist = moistureAt(x, z);
-          const threshold = moist > 0.65 ? 0.98 : moist < 0.35 ? 0.9 : 0.97;
+          const baseThresh = moist > 0.65 ? 0.98 : moist < 0.35 ? 0.9 : 0.97;
+          // Expand meadow chance with grassDensity
+          const threshold = baseThresh - (VEGETATION.grassDensity - 1) * 0.02;
           if (roll >= threshold) {
             // sparse on dry ridges — skip
           } else {
-            const isReed = rng() < 0.22 && bucket.reedi < POOL.reed && POOL.reed > 0 && s.d < 14;
-            const scatter = moist > 0.65 ? 5 : moist > 0.5 ? 3 : 2; // moist meadow dense 5, normal 3
+            const isReed = rng() < (0.22 + (VEGETATION.willowDensity - 0.5) * 0.1) && bucket.reedi < POOL.reed && POOL.reed > 0 && s.d < 14;
+            const baseScatter = moist > 0.65 ? 5 : moist > 0.5 ? 3 : 2;
+            const scatter = Math.max(1, Math.round(baseScatter * VEGETATION.grassDensity));
             for (let g = 0; g < scatter; g++) {
               if (isReed) {
                 if (bucket.reedi >= POOL.reed) break;
@@ -328,29 +348,39 @@ export function createWorldManager(scene, seedStr) {
         }
       } else if (biome === BIOMES.MOUNTAIN || biome === BIOMES.SNOW) {
         const snowy = biome === BIOMES.SNOW;
-        // Mountain/snow terrain is the rock backdrop. Keep it dressed with
-        // rocks only; trees must have a real soil surface beneath them.
-        if (roll < 0.6 && bucket.ri < POOL.rocks) {
+        // Genshin Liyue / Dragonspine: terraced cliffs with pines, maple on mid slopes, bamboo in valleys.
+        if (roll < 0.22 * VEGETATION.treeDensity && bucket.pi + 3 <= POOL.crowns) {
+          placePine(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.2) * VEGETATION.treeScale, rng);
+        } else if (roll < 0.34 && bucket.bi + 3 <= POOL.crowns && !snowy) {
+          // Liyue autumn maples on mountain mid-slope
+          placeMaple(meshes, bucket, obstacles, x, y, z, rand(rng, 0.8, 1.1) * VEGETATION.treeScale, rng);
+        } else if (roll < 0.42 && bucket.ti + 2 <= POOL.trees && bucket.bi + 3 <= POOL.crowns && !snowy) {
+          placeBamboo(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.0) * VEGETATION.treeScale, rng);
+        } else if (roll < 0.62 && bucket.ri < POOL.rocks) {
           placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.6, 1.6), rng,
-            snowy ? 0xb9c2c9 : 0x7d848b);
+            snowy ? 0xb9c2c9 : snowy ? 0xb9c2c9 : 0x7d848b);
         }
       } else {
-        // BEACH: tropical palms, seashells (cream rocks), dune grass.
-        if (roll < 0.15 * VEGETATION.treeDensity && bucket.ti + 2 <= POOL.trees && bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
-          // Beach palms: shorter, wider spread
+        // BEACH: Genshin Inazuma/Fontaine coast — palms, sakura willows, seashells, dune meadow.
+        const palmBoost = (VEGETATION.willowDensity > 0.8 ? 1.2 : 1) * 1.35;
+        if (roll < 0.14 * VEGETATION.treeDensity * palmBoost && bucket.ti + 2 <= POOL.trees && bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
           placePalm(meshes, bucket, obstacles, x, y, z, rand(rng, 0.65, 1.1) * VEGETATION.treeScale, rng);
-        } else if (roll < 0.2 * VEGETATION.treeDensity && bucket.ti + 2 <= POOL.trees && bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
+        } else if (roll < 0.19 * VEGETATION.treeDensity && bucket.ti + 2 <= POOL.trees && bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
           placeBanana(meshes, bucket, obstacles, x, y, z, rand(rng, 0.6, 0.95) * VEGETATION.treeScale, rng);
-        } else if (roll < 0.28 && bucket.ri < POOL.rocks) {
-          // Seashells: tiny cream-tinted rocks
-          placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.18, 0.45), rng, 0xf5f0e8);
-        } else if (roll < 0.38 && bucket.ri < POOL.rocks) {
-          // Sandy rocks
+        } else if (roll < 0.24 && bucket.bi + 3 <= POOL.crowns) {
+          // Inazuma sakura line by the shore — rare pink accent
+          placeSakura(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.0) * VEGETATION.treeScale, rng);
+        } else if (roll < 0.27 && bucket.bi + 3 <= POOL.crowns && VEGETATION.willowDensity > 0.6) {
+          placeWillow(meshes, bucket, obstacles, x, y, z, rand(rng, 0.8, 1.1) * VEGETATION.treeScale, rng);
+        } else if (roll < 0.32 && bucket.ri < POOL.rocks) {
+          placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.18, 0.45), rng, 0xf5f0e8); // seashells
+        } else if (roll < 0.40 && bucket.ri < POOL.rocks) {
           placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.3, 0.55), rng, 0xd9c9a3);
-        } else if (roll < 0.56) {
-          // Dune field: scatter 2-3 clumps per hit (was 1, looked polka-dot)
-          const isReed = rng() < 0.28 && bucket.reedi < POOL.reed && POOL.reed > 0;
-          const n = 2 + (rng() < 0.5 ? 1 : 0);
+        } else if (roll < 0.58) {
+          // Fontaine dune meadow — lush + tall reeds near water (tide pools)
+          const isReed = rng() < 0.32 && bucket.reedi < POOL.reed && POOL.reed > 0;
+          const base = 2 + (rng() < 0.5 ? 1 : 0);
+          const n = Math.round(base * VEGETATION.grassDensity);
           for (let g = 0; g < n; g++) {
             if (isReed) {
               if (bucket.reedi >= POOL.reed) break;
@@ -364,15 +394,15 @@ export function createWorldManager(scene, seedStr) {
               placeGrass(meshes, bucket, rx, sampleGround(rx, rz).y, rz, rand(rng, 0.5, 1.15), rng, PALETTES.dryGrass);
             }
           }
-        } else if (roll < 0.62 && bucket.bu < POOL.bushes) {
-          // Coastal shrubs (sometimes blooming)
+        } else if (roll < 0.64 && bucket.bu < POOL.bushes) {
           if (rng() < 0.4 && bucket.fhi + 6 <= POOL.flowerHead) {
             placeFloweringBush(meshes, bucket, x, y, z, rand(rng, 0.4, 0.7), rng);
           } else {
             placeBush(meshes, bucket, x, y, z, rand(rng, 0.4, 0.7), rng, 0x8aac5a);
           }
-        } else if (roll < 0.68 && bucket.fhi + 6 <= POOL.flowerHead && bucket.fsti + 6 <= POOL.flowerStem) {
-          placeFlowerPatch(meshes, bucket, x, y, z, rand(rng, 0.5, 0.9), rng);
+        } else if (roll < 0.72 && bucket.fhi + 6 <= POOL.flowerHead && bucket.fsti + 6 <= POOL.flowerStem) {
+          // beach flower meadow denser with flowerDensity
+          placeFlowerPatch(meshes, bucket, x, y, z, rand(rng, 0.5, 1.1), rng);
         }
       }
     }

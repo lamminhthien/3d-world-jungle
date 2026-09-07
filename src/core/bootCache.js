@@ -37,6 +37,9 @@ import {
   loadStaticTextures,
 } from '../world/textures.js';
 import { QUALITY } from './setup.js';
+import { loadModelCatalog } from '../world/modelCatalog.js';
+import { preloadMergedGeometries } from '../world/assetStore.js';
+import { setExternalGeometries } from '../world/presets.js';
 
 // Yield the UI one beat so the loading bar paints before the next heavy step.
 const yieldUI = () =>
@@ -156,12 +159,46 @@ export async function runPreGameCache({ renderer = null, onProgress = () => {} }
   await warmBundleFiles((f) => report(0.25 + f * 0.2, '📥 Downloading game bundle…'));
   await yieldUI();
 
-  // 0.45-0.85: texture + GPU upload.
-  const textures = await warmTextures(renderer, (f) => report(0.45 + f * 0.4, '🎨 Loading baked ground, rock, tree & river textures…'));
+  // 0.45-0.80: texture + GPU upload.
+  const textures = await warmTextures(renderer, (f) => report(0.45 + f * 0.35, '🎨 Loading baked ground, rock, tree & river textures…'));
+
+  // 0.80-0.85: CC0 nature models (Kenney/Quaternius) — full library replacement.
+  // Loaded here so chunks can instance pro GLBs from first frame; fallback is procedural.
+  let models = { loaded: 0, failed: 0, fallback: true };
+  try {
+    const catalog = await loadModelCatalog();
+    const base = import.meta.env.BASE_URL;
+    const want = [
+      `${base}generated/models/kenney/tree_oak.glb`,
+      `${base}generated/models/kenney/tree_pineTallA.glb`,
+      `${base}generated/models/kenney/plant_bushLarge.glb`,
+      `${base}generated/models/kenney/rock_largeA.glb`,
+      `${base}generated/models/kenney/cactus_tall.glb`,
+    ];
+    // Only attempt URLs that the manifest says are present (offline-safe)
+    // Manifest keys are "kenney/xxx.glb" but URL is "/generated/models/kenney/xxx.glb" — check both forms
+    const urls = want.filter((u) => {
+      const file = u.replace(base, '').replace(/^\/+/, '');
+      const short = file.replace(/^generated\/models\//, '');
+      return catalog.files?.[file]?.present || catalog.files?.[short]?.present || catalog.verified > 0;
+    });
+    if (urls.length) {
+      report(0.80, `🌳 Loading ${urls.length} pro tree/rock models…`);
+      await yieldUI();
+      const res = await preloadMergedGeometries(urls);
+      setExternalGeometries(res.map);
+      models = { loaded: res.loaded, failed: res.failed, fallback: res.failed > 0 };
+      console.info(`[jungle] external models: ${res.loaded} loaded, ${res.failed} fallback`, res.map.size ? [...res.map.keys()].map((k) => k.split('/').pop()) : []);
+    } else {
+      console.info('[jungle] no external models present — procedural fallback (run: node scripts/fetch-nature-models.mjs --fetch)');
+    }
+  } catch (e) {
+    console.warn('[jungle] external model preload failed — procedural fallback', e?.message || e);
+  }
 
   report(0.85, '🌍 Building the world…');
   await yieldUI();
-  const summary = { version: APP_VERSION, sw, persisted, textures };
+  const summary = { version: APP_VERSION, sw, persisted, textures, models };
   try {
     window.__jungleCache = summary;
     if (textures?.fallback || textures?.failed) {
@@ -169,6 +206,8 @@ export async function runPreGameCache({ renderer = null, onProgress = () => {} }
     } else {
       console.info('[jungle] Static textures loaded.', textures);
     }
+    if (models?.loaded) console.info('[jungle] External models active.', models);
+    else console.info('[jungle] Procedural models active (external fallback).');
   } catch {
     /* non-browser? ignore */
   }

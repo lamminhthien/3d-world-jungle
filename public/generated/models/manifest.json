@@ -1,0 +1,190 @@
+{
+  "version": 1,
+  "source": "kenney+quaternius CC0",
+  "curated": [
+    "tree_oak.glb",
+    "tree_detailed.glb",
+    "tree_default.glb",
+    "tree_pineTallA.glb",
+    "tree_pineTallA_detailed.glb",
+    "tree_pineRoundA.glb",
+    "tree_cone.glb",
+    "tree_palmTall.glb",
+    "tree_palmDetailedTall.glb",
+    "tree_palm.glb",
+    "plant_bush.glb",
+    "plant_bushLarge.glb",
+    "plant_bushDetailed.glb",
+    "rock_largeA.glb",
+    "rock_smallA.glb",
+    "stone_largeA.glb",
+    "cactus_tall.glb",
+    "cactus_short.glb",
+    "flower_redA.glb",
+    "flower_yellowA.glb",
+    "grass_large.glb",
+    "grass.glb",
+    "rock_tallA.glb",
+    "stone_smallA.glb"
+  ],
+  "models": {
+    "pine": [
+      "/generated/models/kenney/tree_pineTallA.glb",
+      "/generated/models/kenney/tree_pineRoundA.glb",
+      "/generated/models/kenney/tree_cone.glb"
+    ],
+    "broadleaf": [
+      "/generated/models/kenney/tree_oak.glb",
+      "/generated/models/kenney/tree_detailed.glb",
+      "/generated/models/kenney/tree_default.glb"
+    ],
+    "palm": [
+      "/generated/models/kenney/tree_palmTall.glb",
+      "/generated/models/kenney/tree_palmDetailedTall.glb"
+    ],
+    "bush": [
+      "/generated/models/kenney/plant_bush.glb",
+      "/generated/models/kenney/plant_bushLarge.glb"
+    ],
+    "rock": [
+      "/generated/models/kenney/rock_largeA.glb",
+      "/generated/models/kenney/rock_smallA.glb",
+      "/generated/models/kenney/stone_largeA.glb"
+    ],
+    "cactus": [
+      "/generated/models/kenney/cactus_tall.glb",
+      "/generated/models/kenney/cactus_short.glb"
+    ],
+    "flower": [
+      "/generated/models/kenney/flower_redA.glb",
+      "/generated/models/kenney/flower_yellowA.glb"
+    ],
+    "grass": [
+      "/generated/models/kenney/grass.glb",
+      "/generated/models/kenney/grass_large.glb"
+    ]
+  },
+  "verified": 24,
+  "files": {
+    "kenney/tree_oak.glb": {
+      "size": 14644,
+      "sha256": "d7fd87736749",
+      "present": true
+    },
+    "kenney/tree_detailed.glb": {
+      "size": 31412,
+      "sha256": "c041daf2f0fb",
+      "present": true
+    },
+    "kenney/tree_default.glb": {
+      "size": 9428,
+      "sha256": "562d29638c90",
+      "present": true
+    },
+    "kenney/tree_pineTallA.glb": {
+      "size": 7200,
+      "sha256": "e0a56eb196d8",
+      "present": true
+    },
+    "kenney/tree_pineTallA_detailed.glb": {
+      "size": 10708,
+      "sha256": "9ba6337460e7",
+      "present": true
+    },
+    "kenney/tree_pineRoundA.glb": {
+      "size": 14488,
+      "sha256": "7dc9711f3158",
+      "present": true
+    },
+    "kenney/tree_cone.glb": {
+      "size": 10924,
+      "sha256": "90be4d214ee2",
+      "present": true
+    },
+    "kenney/tree_palmTall.glb": {
+      "size": 15592,
+      "sha256": "cbd2c2ea7d03",
+      "present": true
+    },
+    "kenney/tree_palmDetailedTall.glb": {
+      "size": 28204,
+      "sha256": "2cbea0f9621c",
+      "present": true
+    },
+    "kenney/tree_palm.glb": {
+      "size": 13616,
+      "sha256": "27bbb23d26ed",
+      "present": true
+    },
+    "kenney/plant_bush.glb": {
+      "size": 4396,
+      "sha256": "ae7b1beb39e2",
+      "present": true
+    },
+    "kenney/plant_bushLarge.glb": {
+      "size": 6436,
+      "sha256": "10e1d9fbf29d",
+      "present": true
+    },
+    "kenney/plant_bushDetailed.glb": {
+      "size": 10172,
+      "sha256": "2e0487020d68",
+      "present": true
+    },
+    "kenney/rock_largeA.glb": {
+      "size": 7552,
+      "sha256": "6dd15390fd96",
+      "present": true
+    },
+    "kenney/rock_smallA.glb": {
+      "size": 3044,
+      "sha256": "df9fff9d711e",
+      "present": true
+    },
+    "kenney/stone_largeA.glb": {
+      "size": 7124,
+      "sha256": "fe486a13775e",
+      "present": true
+    },
+    "kenney/cactus_tall.glb": {
+      "size": 9668,
+      "sha256": "d43a1aca5952",
+      "present": true
+    },
+    "kenney/cactus_short.glb": {
+      "size": 8844,
+      "sha256": "81ac9fc4c66e",
+      "present": true
+    },
+    "kenney/flower_redA.glb": {
+      "size": 7104,
+      "sha256": "171930b7789d",
+      "present": true
+    },
+    "kenney/flower_yellowA.glb": {
+      "size": 7120,
+      "sha256": "8a3b08cd2ca4",
+      "present": true
+    },
+    "kenney/grass_large.glb": {
+      "size": 18504,
+      "sha256": "af49a595624a",
+      "present": true
+    },
+    "kenney/grass.glb": {
+      "size": 11496,
+      "sha256": "260e41d3e5f2",
+      "present": true
+    },
+    "kenney/rock_tallA.glb": {
+      "size": 12072,
+      "sha256": "88250f236a3b",
+      "present": true
+    },
+    "kenney/stone_smallA.glb": {
+      "size": 2620,
+      "sha256": "b48e731e6c4b",
+      "present": true
+    }
+  }
+}

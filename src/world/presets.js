@@ -16,6 +16,7 @@ import { dummy } from '../utils.js';
 import { getBarkTexture, getBarkBump, getCactusTexture, getCactusBump, getRockTexture, getRockBump } from './textures.js';
 
 // ---- Palettes ----
+// Genshin palette: each nation gets a signature foliage hue (so worlds read instantly)
 export const PALETTES = {
   pine: [0x2e7d4f, 0x256b43, 0x37935d],
   snowPine: [0xdfeee8, 0xcfe3d8, 0x9fc3b4],
@@ -44,6 +45,15 @@ export const PALETTES = {
   rainbow: [0xff4f7e, 0xff8c42, 0xffd93b, 0x52e28a, 0x41c7e2, 0xb388ff, 0xff6fb5],
   // Golden accent tree: amber canopy pops against the greens.
   golden: [0xffc93b, 0xffb52e, 0xffe066],
+  // Genshin nations — Inazuma sakura (paler, more white than blossom), Mondstadt maple,
+  // Liyue willow droop, Sumeru bamboo jade. Each has its own tint table so worlds read.
+  sakura: [0xffb7d5, 0xffd6eb, 0xfff1f7, 0xff8eb8, 0xe8b5ff],
+  sakuraDark: 0x6b2d4a,
+  maple: [0xd9302a, 0xff6a2a, 0xffa63a, 0xc0392b, 0xff4a15],
+  willow: 0x7bc8a4, // drooping teal willow (Fontaine)
+  bambooLeaf: 0x6bcf7a,
+  bambooCulm: 0xc9d6a0,
+  autumn: [0xff7e3a, 0xffb347, 0xffe27a, 0xd35400],
   // Flower heads: one vivid color per instance (12 brights).
   flower: [0xff2e88, 0xff3b30, 0xff9500, 0xffcc00, 0xffffff, 0xb388ff,
     0x7b2ff7, 0xff6fa5, 0x00c2ff, 0xff5e3a, 0x7dff5e, 0xff4fd8],
@@ -69,6 +79,12 @@ export const VEGETATION_PRESETS = [
   { id: 'kapok-giant',   kind: 'kapok',     sMin: 1.0, sMax: 1.6,  collisionR: 0.7,  biomes: ['jungle'] },
   { id: 'banana-clump',  kind: 'banana',    sMin: 0.7, sMax: 1.2,  collisionR: 0.5,  biomes: ['jungle', 'beach'] },
   { id: 'palm',          kind: 'palm',      sMin: 0.8, sMax: 1.5,  collisionR: 0.55, biomes: ['jungle', 'beach'] },
+  // Genshin nations
+  { id: 'sakura',        kind: 'sakura',    sMin: 0.9, sMax: 1.4,  collisionR: 0.55, biomes: ['jungle', 'beach'] },
+  { id: 'bamboo',        kind: 'bamboo',    sMin: 0.8, sMax: 1.3,  collisionR: 0.4,  biomes: ['jungle', 'mountain'] },
+  { id: 'willow',        kind: 'willow',    sMin: 0.9, sMax: 1.5,  collisionR: 0.6,  biomes: ['jungle', 'beach'] },
+  { id: 'maple',         kind: 'maple',     sMin: 0.8, sMax: 1.4,  collisionR: 0.55, biomes: ['jungle', 'mountain'] },
+  { id: 'autumn-tree',   kind: 'autumn',    sMin: 0.8, sMax: 1.4,  collisionR: 0.55, biomes: ['jungle', 'mountain'] },
   { id: 'bush',          kind: 'bush',      sMin: 0.6, sMax: 1.4,  collisionR: 0,    biomes: ['jungle'] },
   { id: 'flowering-bush',kind: 'flowerBush',sMin: 0.5, sMax: 1.0,  collisionR: 0,    biomes: ['jungle', 'beach'] },
   { id: 'flower-patch',  kind: 'flowers',   sMin: 0.6, sMax: 1.1,  collisionR: 0,    biomes: ['jungle', 'beach'] },
@@ -76,6 +92,7 @@ export const VEGETATION_PRESETS = [
   { id: 'cactus',        kind: 'cactus',    sMin: 0.7, sMax: 1.4,  collisionR: 0.5,  biomes: ['desert'] },
   { id: 'rock',          kind: 'rock',      sMin: 0.4, sMax: 1.6,  collisionR: 0.8,  biomes: ['jungle', 'desert', 'mountain', 'snow'] },
   { id: 'grass-tuft',    kind: 'grass',     sMin: 0.5, sMax: 1.1,  collisionR: 0,    biomes: ['jungle', 'beach'] },
+  { id: 'meadow-grass',  kind: 'meadow',    sMin: 0.5, sMax: 1.0,  collisionR: 0,    biomes: ['jungle', 'beach'] },
 ];
 
 export const presetById = (id) => VEGETATION_PRESETS.find((p) => p.id === id);
@@ -412,23 +429,86 @@ function createGrassTuftGeometry() {
 }
 
 let _kit = null;
+let _externalKit = null; // merged external geometries (kenney) when available
+let _externalReady = false;
+
+export function setExternalGeometries(map) {
+  // map: Map<url, BufferGeometry> from assetStore.preloadMergedGeometries
+  // Kept separate from _kit so procedural fallback is never lost.
+  if (!map || map.size === 0) return;
+  _externalKit = map;
+  _externalReady = true;
+  _kit = null; // force rebuild with external overrides
+}
+
+export function hasExternalModels() { return _externalReady && _externalKit && _externalKit.size > 0; }
+
+function resolveExternal(kind) {
+  if (!hasExternalModels()) return null;
+  // Try canonical first, then any variant of that kind
+  const { MODEL_CATALOG } = { MODEL_CATALOG: null };
+  // Lazy dynamic import to avoid circular dep at parse time
+  return null;
+}
+
 export function createVegetationKit() {
   // Singleton: tessellated geometries are static binary buffers — baking them
   // once (~a few ms at boot) instead of per preview/per regenerate. Before,
   // buildPresetGroup() called createVegetationKit() fresh every time, re-running
   // jitter + grass-merge + computeVertexNormals needlessly.
   if (_kit) return _kit;
+
+  // --- Try external overrides (full library replacement) ---
+  // External geometries are pre-merged (1 geo per GLB). We map:
+  //   blob -> broadleaf (kenney/tree_oak), pine -> tree_pineTallA,
+  //   bush -> plant_bushLarge, rock -> rock_largeA, cactus -> cactus_tall,
+  //   palmLeaf is kept procedural (plane is lighter than full palm mesh),
+  //   grass/leafCard keep procedural for field density perf.
+  let ext = null;
+  if (hasExternalModels()) {
+    ext = {};
+    const pick = (urls) => {
+      for (const u of urls) if (_externalKit.has(u)) return _externalKit.get(u);
+      return null;
+    };
+    // URLs are exactly as fetched: `${BASE_URL}generated/models/kenney/...`
+    const base = import.meta.env.BASE_URL;
+    ext.blob = pick([`${base}generated/models/kenney/tree_oak.glb`, `${base}generated/models/kenney/tree_detailed.glb`, `${base}generated/models/kenney/tree_default.glb`]);
+    ext.pine = pick([`${base}generated/models/kenney/tree_pineTallA.glb`, `${base}generated/models/kenney/tree_pineRoundA.glb`, `${base}generated/models/kenney/tree_cone.glb`]);
+    ext.bush = pick([`${base}generated/models/kenney/plant_bushLarge.glb`, `${base}generated/models/kenney/plant_bush.glb`]);
+    ext.rock = pick([`${base}generated/models/kenney/rock_largeA.glb`, `${base}generated/models/kenney/stone_largeA.glb`, `${base}generated/models/kenney/rock_smallA.glb`]);
+    ext.cactus = pick([`${base}generated/models/kenney/cactus_tall.glb`, `${base}generated/models/kenney/cactus_short.glb`]);
+    // Normalize external scales: Kenney trees are ~2.2u tall vs our 2.6u pine / 1.25 canopy radius.
+    // Apply gentle scale so procedural density/scales still read correctly.
+    const _scaleMat = new THREE.Matrix4();
+    for (const k of Object.keys(ext)) if (ext[k]) {
+      if (!ext[k].attributes.color) bakeTopLight(ext[k], 0.7, 1.08);
+      let s = 1;
+      if (k === 'blob' || k === 'pine' || k === 'cactus') s = 1.45;
+      else if (k === 'bush') s = 1.2;
+      else if (k === 'rock') s = 1.15;
+      if (s !== 1) {
+        _scaleMat.makeScale(s, s, s);
+        ext[k].applyMatrix4(_scaleMat);
+        ext[k].computeVertexNormals();
+      }
+    }
+    // Clean nulls
+    for (const k of Object.keys(ext)) if (!ext[k]) delete ext[k];
+    if (Object.keys(ext).length === 0) ext = null;
+  }
+
   const geometries = {
     trunk: createTrunkGeometry(),
-    pine: createPineGeometry(),
-    blob: createCanopyGeometry(),
+    pine: (ext?.pine) || createPineGeometry(),
+    blob: (ext?.blob) || createCanopyGeometry(),
     palmLeaf: createPalmFrondGeometry(),
     leafCard: createLeafCardGeometry(),
     reed: createReedGeometry(),
-    bush: bakeTopLight(jitterRadial(new THREE.IcosahedronGeometry(0.7, 0), 0.12, 'bush'), 0.7, 1.08),
+    bush: (ext?.bush) || bakeTopLight(jitterRadial(new THREE.IcosahedronGeometry(0.7, 0), 0.12, 'bush'), 0.7, 1.08),
     // P0: 8 sides (was 7), flat caps kept.
-    cactus: new THREE.CylinderGeometry(0.32, 0.4, 2.4, 8),
-    rock: jitterRadial(new THREE.DodecahedronGeometry(1, 0), 0.12, 'rock'),
+    cactus: (ext?.cactus) || new THREE.CylinderGeometry(0.32, 0.4, 2.4, 8),
+    rock: (ext?.rock) || jitterRadial(new THREE.DodecahedronGeometry(1, 0), 0.12, 'rock'),
     grass: createGrassTuftGeometry(),
     flowerStem: createFlowerStemGeometry(),
     flowerHead: createFlowerHeadGeometry(),
@@ -721,6 +801,120 @@ export function placeGoldenTree(meshes, bucket, obstacles, x, y, z, s, rng) {
   }
   addSatelliteBlobs(meshes, bucket, x, y, z, s, rng, PALETTES.golden[0]);
   addLeafCards(meshes, bucket, x, y, z, s, rng, pick(rng, PALETTES.golden));
+}
+
+// Genshin: Inazuma sakura — paler than blossom, airy 3-puff + petal storm underneath.
+export function placeSakura(meshes, bucket, obstacles, x, y, z, s, rng) {
+  setTrunk(meshes, bucket, obstacles, x, y + 0.85 * s, z, s, rng, PALETTES.sakuraDark);
+  addBranch(meshes, bucket, x, y + 1.55 * s, z, s * 0.85, rng, PALETTES.sakuraDark);
+  for (let k = 0; k < 3; k++) {
+    meshes.blob.setColorAt(bucket.bi, tintFast(pick(rng, PALETTES.sakura), rand(rng, -0.02, 0.02)));
+    dummy.position.set(x + rand(rng, -0.6, 0.6) * s, y + (2.15 + k * 0.58) * s, z + rand(rng, -0.6, 0.6) * s);
+    dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), 0);
+    dummy.scale.set(s * rand(rng, 0.95, 1.25), s * rand(rng, 0.82, 0.96), s * rand(rng, 0.95, 1.25));
+    dummy.updateMatrix();
+    meshes.blob.setMatrixAt(bucket.bi++, dummy.matrix);
+  }
+  addSatelliteBlobs(meshes, bucket, x, y, z, s, rng, PALETTES.sakura[0]);
+  addLeafCards(meshes, bucket, x, y, z, s, rng, pick(rng, PALETTES.sakura));
+  const n = 5 + ((rng() * 4) | 0);
+  for (let k = 0; k < n; k++) {
+    const a = rng() * Math.PI * 2;
+    const r = rand(rng, 1.1, 2.6) * s;
+    addFlower(meshes, bucket, x + Math.cos(a) * r, y + 0.03, z + Math.sin(a) * r, rand(rng, 0.55, 0.95), rng, pick(rng, PALETTES.sakura), 0);
+  }
+}
+
+// Genshin: Liyue bamboo grove — 3 culms cluster + jade leaf puff on top.
+export function placeBamboo(meshes, bucket, obstacles, x, y, z, s, rng) {
+  // 3 culms tight cluster (reuse trunk pool with bamboo tint, thin)
+  for (let k = 0; k < 3; k++) {
+    const ox = rand(rng, -0.25, 0.25) * s;
+    const oz = rand(rng, -0.25, 0.25) * s;
+    meshes.trunk.setColorAt(bucket.ti, tintFast(PALETTES.bambooCulm, rand(rng, -0.03, 0.03)));
+    dummy.position.set(x + ox, y + 1.35 * s, z + oz);
+    dummy.rotation.set(rand(rng, -0.06, 0.06), rand(rng, 0, 6.28), rand(rng, -0.06, 0.06));
+    dummy.scale.set(0.28 * s, 2.6 * s, 0.28 * s);
+    dummy.updateMatrix();
+    meshes.trunk.setMatrixAt(bucket.ti++, dummy.matrix);
+    if (k === 0) obstacles.push({ x, z, r: 0.45 * s });
+    // tiny leaf puff on top of each culm
+    meshes.blob.setColorAt(bucket.bi, tintFast(PALETTES.bambooLeaf, rand(rng, -0.04, 0.04)));
+    dummy.position.set(x + ox, y + 2.8 * s, z + oz);
+    dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), 0);
+    dummy.scale.set(s * rand(rng, 0.55, 0.75), s * 0.5, s * rand(rng, 0.55, 0.75));
+    dummy.updateMatrix();
+    meshes.blob.setMatrixAt(bucket.bi++, dummy.matrix);
+  }
+}
+
+// Genshin: Fontaine willow — drooping teal canopy that hangs like curtains.
+export function placeWillow(meshes, bucket, obstacles, x, y, z, s, rng) {
+  const ti = setTrunk(meshes, bucket, obstacles, x, y + 0.9 * s, z, s, rng, PALETTES.trunkDark);
+  dummy.position.set(x, y + 1.2 * s, z);
+  dummy.rotation.set(rand(rng, -0.04, 0.04), rand(rng, 0, 6.28), rand(rng, -0.04, 0.04));
+  dummy.scale.set(0.95 * s, 1.7 * s, 0.95 * s);
+  dummy.updateMatrix();
+  meshes.trunk.setMatrixAt(ti, dummy.matrix);
+  // central dome
+  meshes.blob.setColorAt(bucket.bi, tintFast(PALETTES.willow, rand(rng, -0.03, 0.03)));
+  dummy.position.set(x, y + 3.0 * s, z);
+  dummy.rotation.set(rand(rng, 0, 1), rand(rng, 0, 1), 0);
+  dummy.scale.set(1.25 * s, 0.85 * s, 1.25 * s);
+  dummy.updateMatrix();
+  meshes.blob.setMatrixAt(bucket.bi++, dummy.matrix);
+  // 4 drooping curtains
+  for (let k = 0; k < 4; k++) {
+    const a = (k / 4) * Math.PI * 2 + rand(rng, -0.2, 0.2);
+    meshes.blob.setColorAt(bucket.bi, tintFast(PALETTES.willow, rand(rng, -0.04, 0.04)));
+    dummy.position.set(x + Math.cos(a) * 0.9 * s, y + rand(rng, 2.1, 2.5) * s, z + Math.sin(a) * 0.9 * s);
+    dummy.rotation.set(rand(rng, 0.2, 0.5), rand(rng, 0, 3), 0);
+    dummy.scale.set(s * 0.85, s * 1.35, s * 0.85);
+    dummy.updateMatrix();
+    meshes.blob.setMatrixAt(bucket.bi++, dummy.matrix);
+  }
+  addLeafCards(meshes, bucket, x, y, z, s, rng, PALETTES.willow);
+}
+
+// Genshin: Mondstadt maple — fiery red autumn canopy.
+export function placeMaple(meshes, bucket, obstacles, x, y, z, s, rng) {
+  setTrunk(meshes, bucket, obstacles, x, y + 0.8 * s, z, s, rng, PALETTES.trunkDark);
+  addBranch(meshes, bucket, x, y + 1.45 * s, z, s * 0.9, rng);
+  const puffs = [
+    { dy: 2.05, sc: 1.15, tint: PALETTES.maple[0] },
+    { dy: 2.6, sc: 0.95, tint: PALETTES.maple[1] },
+    { dy: 3.05, sc: 0.78, tint: PALETTES.maple[2] },
+  ];
+  for (const p of puffs) {
+    meshes.blob.setColorAt(bucket.bi, tintFast(p.tint, rand(rng, -0.02, 0.02)));
+    dummy.position.set(x + rand(rng, -0.35, 0.35) * s, y + p.dy * s, z + rand(rng, -0.35, 0.35) * s);
+    dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), 0);
+    dummy.scale.set(s * p.sc, s * p.sc * 0.88, s * p.sc);
+    dummy.updateMatrix();
+    meshes.blob.setMatrixAt(bucket.bi++, dummy.matrix);
+  }
+  addSatelliteBlobs(meshes, bucket, x, y, z, s, rng, PALETTES.maple[3]);
+  // fallen maple leaves
+  const n = 2 + ((rng() * 2) | 0);
+  for (let k = 0; k < n; k++) {
+    const a = rng() * Math.PI * 2;
+    const r = rand(rng, 1.0, 1.8) * s;
+    addFlower(meshes, bucket, x + Math.cos(a) * r, y + 0.04, z + Math.sin(a) * r, rand(rng, 0.5, 0.85), rng, pick(rng, PALETTES.maple), 0);
+  }
+}
+
+export function placeAutumnTree(meshes, bucket, obstacles, x, y, z, s, rng) {
+  setTrunk(meshes, bucket, obstacles, x, y + 0.8 * s, z, s, rng, PALETTES.trunkDark);
+  addBranch(meshes, bucket, x, y + 1.45 * s, z, s, rng);
+  for (let k = 0; k < 3; k++) {
+    meshes.blob.setColorAt(bucket.bi, tintFast(pick(rng, PALETTES.autumn), rand(rng, -0.02, 0.02)));
+    dummy.position.set(x + rand(rng, -0.5, 0.5) * s, y + (2.05 + k * 0.55) * s, z + rand(rng, -0.5, 0.5) * s);
+    dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), 0);
+    dummy.scale.set(s * rand(rng, 0.9, 1.15), s * rand(rng, 0.8, 0.95), s * rand(rng, 0.9, 1.15));
+    dummy.updateMatrix();
+    meshes.blob.setMatrixAt(bucket.bi++, dummy.matrix);
+  }
+  addLeafCards(meshes, bucket, x, y, z, s, rng, pick(rng, PALETTES.autumn));
 }
 
 // Kapok emergent giant: tallest silhouette, buttress roots, umbrella crown.

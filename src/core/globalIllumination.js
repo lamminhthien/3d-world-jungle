@@ -19,18 +19,22 @@ export function createBounceLight(scene) {
   return bounce;
 }
 
-// Screen-space AO pass creation — returns null on low tier or if unavailable
+// Screen-space AO pass creation — disabled by default for isometric ortho
+// SSAO produces diagonal banding with this camera (world up ~35°, ortho).
+// GI now relies on bounce light + lantern GI; AO is kept off unless user
+// forces ?ao=1 for testing. This avoids the streaky ground in the screenshot.
 export function createAOPass(scene, camera, width, height) {
-  if (QUALITY.low) return null;
-  const w = width || innerWidth;
-  const h = height || innerHeight;
   try {
+    const force = new URLSearchParams(location.search).get('ao');
+    if (force !== '1') return null; // default off to keep ground clean
+    if (QUALITY.low) return null;
+    const w = width || innerWidth;
+    const h = height || innerHeight;
     const pass = new SSAOPass(scene, camera, w, h);
-    pass.kernelRadius = 0.9;
-    pass.minDistance = 0.001;
-    pass.maxDistance = 0.06;
+    pass.kernelRadius = 0.35;
+    pass.minDistance = 0.002;
+    pass.maxDistance = 0.03;
     pass.output = SSAOPass.OUTPUT.Default;
-    // Tune for isometric scale (world units ~0.5 per block)
     pass.enabled = true;
     return pass;
   } catch (e) {
