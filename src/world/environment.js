@@ -557,6 +557,12 @@ export function createEnvironment(scene, opts = {}) {
   const api = {
     state,
     ambience,
+    // Exposed for volumetric / lens flare screen projection
+    get sunMesh() { return sunMesh; },
+    get moonMesh() { return moonMesh; },
+    get sunDirVec() { return sunDir.clone(); },
+    get moonDirVec() { return moonDir.clone(); },
+    get sunColorVec() { return sample.sunColor.clone(); },
     get timeOfDay() { return state.timeOfDay; },
     get weather() { return state.weather; },
     get nightFactor() { return state.nightFactor || 0; },

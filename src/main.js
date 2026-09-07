@@ -17,7 +17,8 @@ import { setupControls } from './input/controls.js';
 import { setupPwaUi } from './core/pwa.js';
 import { randomSeedString } from './world/noise.js';
 import { windState } from './world/wind.js';
-import { createComposer, updateBloomForEnvironment, disposeComposer, setBloomEnabled, isBloomEnabled } from './core/postprocessing.js';
+import { createComposer, updateBloomForEnvironment, updateAdvancedEffects, disposeComposer, setBloomEnabled, isBloomEnabled, isRaysEnabled, isFlareEnabled, isGIEnabled, setRaysEnabled, setFlareEnabled, setGIEnabled } from './core/postprocessing.js';
+import { createBounceLight, createDynamicLightRig, updateBounceLight } from './core/globalIllumination.js';
 import { AutoPlayAgent } from './core/autoPlay.js';
 import { createAdventure } from './gameplay/adventure.js';
 import { createVillage } from './gameplay/village.js';
@@ -92,6 +93,14 @@ async function boot() {
   let composer = createComposer(renderer, scene, camera);
   // Expose for debugging / toggle
   if (typeof window !== 'undefined') window.__composer = composer;
+
+  // Phase 7: Dynamic GI lights — always active (cheap) even without composer
+  const bounceLight = createBounceLight(scene);
+  const dynamicRig = createDynamicLightRig(scene);
+  if (typeof window !== 'undefined') {
+    window.__bounceLight = bounceLight;
+    window.__dynamicRig = dynamicRig;
+  }
 
   const { player, parts } = createPlayer(scene);
   player.position.set(spawn.x, groundHeight(spawn.x, spawn.z), spawn.z);
@@ -511,6 +520,23 @@ async function boot() {
     fireflies.update(dt, clock.elapsedTime, player.position, env.timeOfDay);
     camps.update(dt, clock.elapsedTime, player.position, nf);
 
+    // Phase 7: Dynamic GI — bounce fill + player lantern + firefly lights
+    try {
+      const sunDir = env.sunDirVec;
+      const moonDir = env.moonDirVec;
+      const sunCol = env.sunColorVec;
+      updateBounceLight(bounceLight, { sunDir, moonDir, sunColor: sunCol, nightFactor: nf, isDay: !env.isNight });
+      // fireflies positions for light rig (Float32Array from geometry)
+      const ffArr = fireflies.points?.geometry?.attributes?.position?.array || null;
+      dynamicRig.update({
+        playerPos: player.position,
+        nightFactor: nf,
+        time: clock.elapsedTime,
+        firefliesPosArray: ffArr,
+        delta: dt,
+      });
+    } catch (e) { /* GI lights: non-fatal */ }
+
     // Smooth camera follow (sun position itself is set by the environment).
     _desired.set(player.position.x, 0.5, player.position.z);
     camTarget.lerp(_desired, Math.min(1, dt * 4));
@@ -543,6 +569,37 @@ async function boot() {
       }
     };
   }
+  // Phase 7 FX toggles (rays / flare / GI)
+  const raysBtn = document.getElementById('godRaysToggle');
+  const flareBtn = document.getElementById('lensFlareToggle');
+  const giBtn = document.getElementById('giToggle');
+  if (raysBtn) {
+    raysBtn.textContent = isRaysEnabled() ? 'Rays: On' : 'Rays: Off';
+    raysBtn.onclick = () => {
+      const nowOn = !isRaysEnabled();
+      setRaysEnabled(nowOn);
+      raysBtn.textContent = nowOn ? 'Rays: On' : 'Rays: Off';
+    };
+  }
+  if (flareBtn) {
+    flareBtn.textContent = isFlareEnabled() ? 'Flare: On' : 'Flare: Off';
+    flareBtn.onclick = () => {
+      const nowOn = !isFlareEnabled();
+      setFlareEnabled(nowOn);
+      flareBtn.textContent = nowOn ? 'Flare: On' : 'Flare: Off';
+    };
+  }
+  if (giBtn) {
+    giBtn.textContent = isGIEnabled() ? 'GI: On' : 'GI: Off';
+    giBtn.onclick = () => {
+      const nowOn = !isGIEnabled();
+      setGIEnabled(nowOn);
+      giBtn.textContent = nowOn ? 'GI: On' : 'GI: Off';
+      if (bounceLight) bounceLight.visible = nowOn;
+    };
+  }
+  // Init bounce visibility from stored GI toggle
+  if (bounceLight && !isGIEnabled()) bounceLight.visible = false;
 
   function animate(now) {
     requestAnimationFrame(animate);
@@ -552,10 +609,21 @@ async function boot() {
 
     const dt = Math.min(clock.getDelta(), 0.05);
     update(dt);
-    // Bloom exposure follows env wetness / day factor
-    if (composer) updateBloomForEnvironment(composer, env);
-    if (composer && !QUALITY.low) composer.render();
-    else renderer.render(scene, camera);
+    // Bloom exposure follows env wetness / day factor + volumetric + lens flare
+    if (composer) {
+      updateBloomForEnvironment(composer, env);
+      try {
+        updateAdvancedEffects(composer, {
+          camera,
+          env,
+          sunWorldPos: env.sunMesh?.position || null,
+          moonWorldPos: env.moonMesh?.position || null,
+        });
+      } catch (e) { /* effects: non-fatal */ }
+      composer.render();
+    } else {
+      renderer.render(scene, camera);
+    }
 
     fpsAcc += 1 / Math.max(dt, 1e-4);
     fpsN++;
@@ -609,6 +677,25 @@ async function boot() {
           }
         } else if (avg > 58) {
           bloomLowVotes = 0;
+        }
+        // FX guard: if still <42 FPS after bloom reduction, shed heavy passes
+        if (avg < 42) {
+          const ao = composer.userData.aoPass;
+          const vol = composer.userData.volumetric;
+          if (ao && ao.enabled) ao.enabled = false;
+          else if (vol && vol.pass.enabled) vol.pass.enabled = false;
+          else {
+            const lf = composer.userData.lensFlare;
+            if (lf && lf.pass.enabled) lf.pass.enabled = false;
+          }
+        } else if (avg > 55) {
+          // headroom: restore FX if toggles say they should be on
+          const ao = composer.userData.aoPass;
+          const vol = composer.userData.volumetric;
+          const lf = composer.userData.lensFlare;
+          if (ao && !ao.enabled && isGIEnabled()) ao.enabled = true;
+          else if (vol && !vol.pass.enabled && isRaysEnabled()) vol.pass.enabled = true;
+          else if (lf && !lf.pass.enabled && isFlareEnabled()) lf.pass.enabled = true;
         }
       }
       fpsAcc = 0;
