@@ -42,10 +42,12 @@ import {
   GEN,
   SURFACES,
   biomeGroundColor,
+  densityForBiome,
   findSpawn,
   getSeed,
   initProcedural,
   moistureAt,
+  riverHalfAt,
   riverXAt,
   sampleFootprint,
   sampleGround,
@@ -345,6 +347,83 @@ export function createWorldManager(scene, seedStr) {
             }
           }
         }
+      } else if (biome === BIOMES.SAVANNA) {
+        // Thảo nguyên - open prairie: few trees, endless grass & flowers (nhiều hoa cỏ, ít cây)
+        const d = densityForBiome(biome);
+        if (roll < 0.18 * VEGETATION.treeDensity * d.trees * 3.5 && bucket.bi + 3 <= POOL.crowns) {
+          // Sparse acacia-like: golden / broadleaf lone trees
+          if (rng() < 0.5) placeGoldenTree(meshes, bucket, obstacles, x, y, z, rand(rng, 0.8, 1.2) * VEGETATION.treeScale, rng);
+          else placeBroadleaf(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.1) * VEGETATION.treeScale, rng);
+        } else if (roll < 0.28 && bucket.bu < POOL.bushes) {
+          placeBush(meshes, bucket, x, y, z, rand(rng, 0.4, 0.8), rng, rng() < 0.5 ? PALETTES.bush : PALETTES.dryBush);
+        } else if (roll < 0.75 && bucket.gi < POOL.grass) {
+          // Dense grass meadow - savanna core
+          const n = 3 + (rng() * 3 | 0);
+          for (let g = 0; g < n; g++) {
+            if (bucket.gi >= POOL.grass) break;
+            const rx = x + rand(rng, -1.0, 1.0);
+            const rz = z + rand(rng, -1.0, 1.0);
+            placeGrass(meshes, bucket, rx, sampleGround(rx, rz).y, rz, rand(rng, 0.6, 1.3), rng, rng() < 0.3 ? PALETTES.grassGold : PALETTES.grass);
+          }
+        } else if (roll < 0.88 && bucket.fhi + 6 <= POOL.flowerHead && bucket.fsti + 6 <= POOL.flowerStem) {
+          placeFlowerPatch(meshes, bucket, x, y, z, rand(rng, 0.6, 1.1), rng);
+        } else if (roll < 0.93 && bucket.ri < POOL.rocks) {
+          placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.3, 0.7), rng, 0xc9b78a);
+        }
+      } else if (biome === BIOMES.HILLS) {
+        // Đồi núi - rolling hills: moderate trees, mixed pine/maple, rocks
+        const d = densityForBiome(biome);
+        if (roll < 0.24 * VEGETATION.treeDensity * d.trees * 2.2 && bucket.pi + 3 <= POOL.crowns) {
+          if (rng() < 0.5) placePine(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.1) * VEGETATION.treeScale, rng);
+          else placeMaple(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.0) * VEGETATION.treeScale, rng);
+        } else if (roll < 0.32 && bucket.bi + 3 <= POOL.crowns && bucket.ti + 2 <= POOL.trees) {
+          placeBamboo(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.0) * VEGETATION.treeScale, rng);
+        } else if (roll < 0.48 && bucket.bu < POOL.bushes) {
+          placeBush(meshes, bucket, x, y, z, rand(rng, 0.5, 1.0), rng);
+        } else if (roll < 0.70 && bucket.ri < POOL.rocks) {
+          placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.5, 1.2), rng, 0x8a9a85);
+        } else if (roll < 0.86 && bucket.gi < POOL.grass) {
+          const n = 2 + (rng() * 2 | 0);
+          for (let g = 0; g < n; g++) {
+            if (bucket.gi >= POOL.grass) break;
+            const rx = x + rand(rng, -0.8, 0.8);
+            const rz = z + rand(rng, -0.8, 0.8);
+            placeGrass(meshes, bucket, rx, sampleGround(rx, rz).y, rz, rand(rng, 0.5, 1.1), rng, PALETTES.grass);
+          }
+        }
+      } else if (biome === BIOMES.FOOTHILLS) {
+        // Chân núi - rocky foothills / transition: sparse trees, many rocks & dry bush
+        const d = densityForBiome(biome);
+        if (roll < 0.14 * VEGETATION.treeDensity * d.trees * 2.5 && bucket.pi + 3 <= POOL.crowns) {
+          placePine(meshes, bucket, obstacles, x, y, z, rand(rng, 0.6, 1.0) * VEGETATION.treeScale, rng, PALETTES.pine);
+        } else if (roll < 0.28 && bucket.bu < POOL.bushes) {
+          placeBush(meshes, bucket, x, y, z, rand(rng, 0.4, 0.9), rng, PALETTES.dryBush);
+        } else if (roll < 0.62 && bucket.ri < POOL.rocks) {
+          placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.5, 1.4), rng, 0x9aa08a);
+        } else if (roll < 0.78 && bucket.gi < POOL.grass) {
+          const rx = x + rand(rng, -0.7, 0.7);
+          const rz = z + rand(rng, -0.7, 0.7);
+          placeGrass(meshes, bucket, rx, sampleGround(rx, rz).y, rz, rand(rng, 0.5, 1.0), rng, PALETTES.dryGrass);
+        }
+      } else if (biome === BIOMES.PLATEAU) {
+        // Cao nguyên - flat high plain: low trees, wide grass, few rocks, some bamboo
+        const d = densityForBiome(biome);
+        if (roll < 0.16 * VEGETATION.treeDensity * d.trees * 2.8 && bucket.bi + 3 <= POOL.crowns) {
+          if (rng() < 0.6) placePine(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.0) * VEGETATION.treeScale, rng);
+          else placeBamboo(meshes, bucket, obstacles, x, y, z, rand(rng, 0.6, 0.9) * VEGETATION.treeScale, rng);
+        } else if (roll < 0.42 && bucket.gi < POOL.grass) {
+          const n = 3 + (rng() * 3 | 0);
+          for (let g = 0; g < n; g++) {
+            if (bucket.gi >= POOL.grass) break;
+            const rx = x + rand(rng, -1.1, 1.1);
+            const rz = z + rand(rng, -1.1, 1.1);
+            placeGrass(meshes, bucket, rx, sampleGround(rx, rz).y, rz, rand(rng, 0.55, 1.2), rng, PALETTES.grass);
+          }
+        } else if (roll < 0.52 && bucket.fhi + 6 <= POOL.flowerHead) {
+          placeFlowerPatch(meshes, bucket, x, y, z, rand(rng, 0.5, 1.0), rng);
+        } else if (roll < 0.68 && bucket.ri < POOL.rocks) {
+          placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.4, 1.0), rng, 0xb8a87a);
+        }
       } else if (biome === BIOMES.DESERT) {
         if (roll < 0.3 && bucket.ci < POOL.cacti) {
           placeCactus(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.4), rng);
@@ -352,6 +431,17 @@ export function createWorldManager(scene, seedStr) {
           placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.5, 1.1), rng, 0xc2a06b);
         } else if (roll < 0.55 && bucket.bu < POOL.bushes) {
           placeBush(meshes, bucket, x, y, z, rand(rng, 0.5, 0.9), rng, PALETTES.dryBush);
+        }
+      } else if (biome === BIOMES.VOLCANO) {
+        // Núi lửa - volcanic: dark basalt, sparse dead trees, many rocks, ash
+        if (roll < 0.08 * VEGETATION.treeDensity && bucket.bi + 3 <= POOL.crowns) {
+          // Charred autumn / dead pine
+          if (rng() < 0.6) placeAutumnTree(meshes, bucket, obstacles, x, y, z, rand(rng, 0.6, 0.95) * VEGETATION.treeScale, rng);
+          else placePine(meshes, bucket, obstacles, x, y, z, rand(rng, 0.6, 0.9) * VEGETATION.treeScale, rng, [0x4a3f3a,0x5a4a45,0x6b5a54]);
+        } else if (roll < 0.62 && bucket.ri < POOL.rocks) {
+          placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.6, 1.7), rng, rng() < 0.3 ? 0x8a3a2a : 0x5a4a45);
+        } else if (roll < 0.68 && bucket.bu < POOL.bushes) {
+          placeBush(meshes, bucket, x, y, z, rand(rng, 0.4, 0.7), rng, 0x6b5a54);
         }
       } else if (biome === BIOMES.MOUNTAIN || biome === BIOMES.SNOW) {
         const snowy = biome === BIOMES.SNOW;

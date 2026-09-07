@@ -1,66 +1,17 @@
-// Bloom composer — Phase 6 docs/realism-upgrade-plan.md §6.2 P2
+// FX composer — Phase 6 docs/realism-upgrade-plan.md §6.2 P2 (bloom removed)
 // Desktop only. Low tier never creates composer (keeps direct renderer.render).
-// Stack: RenderPass → [AO] → Volumetric → UnrealBloomPass → LensFlare → OutputPass
-// Sources: sun/moon halos (MeshBasic), campfire PointLights, emissive fruits/flowers
-// Toggle persisted to localStorage; auto-off when FPS <50 for 2 votes.
+// Stack: RenderPass → [AO] → Volumetric → LensFlare → OutputPass
 // Phase 7: god rays / moon shafts (volumetrics.js), lens flare (lensFlare.js), soft GI AO
 
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { QUALITY } from './setup.js';
 import { getGraphics } from './graphics.js';
 import { createVolumetricPass } from './volumetrics.js';
 import { createLensFlarePass } from './lensFlare.js';
 import { createAOPass } from './globalIllumination.js';
-
-const STORAGE_KEY = 'jungle_bloom';
-// MacBook M4 / high DPR was blowing out at 0.90/0.48 — whole terrain bloomed at midday (see screenshot 10:28, 31 FPS).
-// Tiered values keep glow on emissives (fruit, fire, sun halo) without washing the ground.
-function bloomParamsForTier() {
-  const t = QUALITY.tier;
-  if (t === 'ultra') return { strength: 0.38, radius: 0.38, threshold: 0.88 };
-  if (t === 'high') return { strength: 0.32, radius: 0.35, threshold: 0.85 };
-  if (t === 'medium') return { strength: 0.45, radius: 0.42, threshold: 0.75 };
-  return { strength: 0.90, radius: 0.55, threshold: 0.48 };
-}
-const _bp = bloomParamsForTier();
-const BLOOM_STRENGTH = _bp.strength;
-const BLOOM_RADIUS = _bp.radius;
-const BLOOM_THRESHOLD = _bp.threshold;
-
-// Query param `?bloom=1` forces bloom on for testing; `?bloom=0` forces off.
-function bloomOverride() {
-  try {
-    const v = new URLSearchParams(location.search).get('bloom');
-    if (v === '1') return true;
-    if (v === '0') return false;
-  } catch { /* no location */ }
-  return null;
-}
-
-export function isBloomEnabled() {
-  const ov = bloomOverride();
-  if (ov !== null) return ov && !QUALITY.low;
-  try {
-    const g = getGraphics();
-    if (g?.bloom === false) return false;
-    if (g?.bloom === true) return !QUALITY.low;
-  } catch {}
-  if (QUALITY.low) return false;
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === '0') return false;
-    if (stored === '1') return true;
-  } catch { /* storage unavailable */ }
-  return true; // default on for desktop
-}
-
-export function setBloomEnabled(on) {
-  try { localStorage.setItem(STORAGE_KEY, on ? '1' : '0'); } catch { /* ignore */ }
-}
 
 const FX_KEY = 'jungle_fx';
 function getFxToggles() {
@@ -112,7 +63,6 @@ export function setGIEnabled(on) {
 
 export function createComposer(renderer, scene, camera) {
   if (QUALITY.low) return null;
-  if (!isBloomEnabled()) return null;
   try {
     const composer = new EffectComposer(renderer);
     composer.userData = composer.userData || {};
@@ -128,7 +78,7 @@ export function createComposer(renderer, scene, camera) {
       }
     } catch (e) { console.warn('[GI] AO add failed', e); }
 
-    // Volumetric god rays / moon shafts (before bloom so rays bloom softly)
+    // Volumetric god rays / moon shafts
     let volumetric = null;
     try {
       volumetric = createVolumetricPass();
@@ -136,13 +86,7 @@ export function createComposer(renderer, scene, camera) {
       composer.addPass(volumetric.pass);
     } catch (e) { console.warn('[volumetric] pass failed', e); }
 
-    const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(innerWidth, innerHeight),
-      BLOOM_STRENGTH, BLOOM_RADIUS, BLOOM_THRESHOLD
-    );
-    composer.addPass(bloomPass);
-
-    // Lens flare after bloom (flare elements themselves bloom via additive)
+    // Lens flare (additive)
     let lensFlare = null;
     try {
       lensFlare = createLensFlarePass();
@@ -151,7 +95,6 @@ export function createComposer(renderer, scene, camera) {
     } catch (e) { console.warn('[lensFlare] pass failed', e); }
 
     composer.addPass(new OutputPass());
-    composer.userData.bloomPass = bloomPass;
     composer.userData.volumetric = volumetric;
     composer.userData.lensFlare = lensFlare;
     composer.userData.aoPass = aoPass;
@@ -165,23 +108,9 @@ export function createComposer(renderer, scene, camera) {
     composer.userData._onResize = onResize;
     return composer;
   } catch (err) {
-    console.warn('[bloom] composer creation failed — falling back to direct render.', err);
+    console.warn('[composer] creation failed — falling back to direct render.', err);
     return null;
   }
-}
-
-export function updateBloomForEnvironment(composer, env) {
-  if (!composer?.userData?.bloomPass || !env) return;
-  const nf = env.nightFactor || 0;
-  // Night boost stays subtle on high/ultra (otherwise M4 midday is already hot).
-  const tier = QUALITY.tier;
-  const nightBoost = tier === 'high' || tier === 'ultra' ? nf * 0.14 : nf * 0.32;
-  const s = BLOOM_STRENGTH + nightBoost;
-  const maxS = tier === 'high' || tier === 'ultra' ? 0.55 : 1.15;
-  const minS = BLOOM_STRENGTH * 0.9;
-  composer.userData.bloomPass.strength = THREE.MathUtils.clamp(s, minS, maxS);
-  composer.userData.bloomPass.radius = BLOOM_RADIUS;
-  composer.userData.bloomPass.threshold = BLOOM_THRESHOLD;
 }
 
 // Volumetric + lens flare driven by env + camera

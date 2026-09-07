@@ -18,7 +18,7 @@ import { setupControls } from './input/controls.js';
 import { setupPwaUi } from './core/pwa.js';
 import { randomSeedString, rngFromString } from './world/noise.js';
 import { windState } from './world/wind.js';
-import { createComposer, updateBloomForEnvironment, updateAdvancedEffects, disposeComposer, setBloomEnabled, isBloomEnabled, isRaysEnabled, isFlareEnabled, isGIEnabled, setRaysEnabled, setFlareEnabled, setGIEnabled } from './core/postprocessing.js';
+import { createComposer, updateAdvancedEffects, disposeComposer, isRaysEnabled, isFlareEnabled, isGIEnabled, setRaysEnabled, setFlareEnabled, setGIEnabled } from './core/postprocessing.js';
 import { createBounceLight, createDynamicLightRig, updateBounceLight } from './core/globalIllumination.js';
 import { AutoPlayAgent } from './core/autoPlay.js';
 import { createAdventure } from './gameplay/adventure.js';
@@ -91,7 +91,7 @@ async function boot() {
   const camps = createCampsites(scene, initialSeed);
   const animals = createAnimals(scene);
 
-  // Phase 6: Bloom composer (desktop only, tier-gated). Falls back to direct render on low tier.
+  // FX composer (desktop only, tier-gated). Falls back to direct render on low tier.
   let composer = createComposer(renderer, scene, camera);
   // Expose for debugging / toggle
   if (typeof window !== 'undefined') window.__composer = composer;
@@ -315,8 +315,6 @@ async function boot() {
     if (gfxWindToggle) gfxWindToggle.textContent = eff.windSway === false ? '🍃 Wind: Off' : '🍃 Wind: On';
     if (gfxWaterToggle) gfxWaterToggle.textContent = eff.waterHigh === false ? '💧 Water HQ: Off' : '💧 Water HQ: On';
     // FX toggles (query directly — buttons are defined later in file)
-    const _bloom = document.getElementById('bloomToggle');
-    if (_bloom) _bloom.textContent = eff.bloom === false ? 'Bloom: Off' : 'Bloom: On';
     const _rays = document.getElementById('godRaysToggle');
     if (_rays) _rays.textContent = eff.rays === false ? 'Rays: Off' : 'Rays: On';
     const _flare = document.getElementById('lensFlareToggle');
@@ -354,15 +352,6 @@ async function boot() {
     // FPS cap follows preset unless user manually overrode via fpsSelect
     targetFps = eff.fpsCap || targetFps;
     if (fpsSelect) fpsSelect.value = String(targetFps);
-    // Composer: recreate/dispose when bloom toggled
-    const wantBloom = eff.bloom !== false && !QUALITY.low;
-    if (wantBloom && !composer) {
-      try { composer = createComposer(renderer, scene, camera); if (typeof window !== 'undefined') window.__composer = composer; } catch {}
-    } else if (!wantBloom && composer) {
-      disposeComposer(composer);
-      composer = null;
-      if (typeof window !== 'undefined') window.__composer = null;
-    }
     // FX passes enable via graphics store (postprocessing reads it each frame)
     try {
       if (composer?.userData?.volumetric) composer.userData.volumetric.pass.enabled = eff.rays !== false;
@@ -450,8 +439,7 @@ async function boot() {
       // cur is boolean or undefined; toggle to opposite bool
       const next = cur === false ? true : false;
       setOverride(key, next ? null : false);
-      // For bloom/rays/flare/gi, also keep legacy localStorage in sync
-      if (key === 'bloom') setBloomEnabled(next);
+      // For rays/flare/gi, also keep legacy localStorage in sync
       if (key === 'rays') setRaysEnabled(next);
       if (key === 'flare') setFlareEnabled(next);
       if (key === 'gi') setGIEnabled(next);
@@ -813,37 +801,17 @@ async function boot() {
   let downVotes = 0;
   let upVotes = 0;
 
-  // Bloom auto-off when FPS <50 for 2 votes (fill-rate killer fallback)
-  let bloomLowVotes = 0;
   // FX toggles — now driven by graphics preset + overrides (kept in sync with syncGraphicsUI).
   // These handlers update both the legacy localStorage keys and the graphics overrides.
-  const bloomBtn = document.getElementById('bloomToggle');
   const raysBtn = document.getElementById('godRaysToggle');
   const flareBtn = document.getElementById('lensFlareToggle');
   const giBtn = document.getElementById('giToggle');
   function syncFxButtons() {
-    if (bloomBtn) bloomBtn.textContent = isBloomEnabled() ? 'Bloom: On' : 'Bloom: Off';
     if (raysBtn) raysBtn.textContent = isRaysEnabled() ? 'Rays: On' : 'Rays: Off';
     if (flareBtn) flareBtn.textContent = isFlareEnabled() ? 'Flare: On' : 'Flare: Off';
     if (giBtn) giBtn.textContent = isGIEnabled() ? 'GI: On' : 'GI: Off';
   }
   syncFxButtons();
-  if (bloomBtn) {
-    bloomBtn.onclick = () => {
-      const nowOn = !isBloomEnabled();
-      setBloomEnabled(nowOn);
-      setOverride('bloom', nowOn ? null : false);
-      syncFxButtons(); syncGraphicsUI();
-      if (nowOn && !composer && !QUALITY.low) {
-        composer = createComposer(renderer, scene, camera);
-        if (typeof window !== 'undefined') window.__composer = composer;
-      } else if (!nowOn && composer) {
-        disposeComposer(composer);
-        composer = null;
-        if (typeof window !== 'undefined') window.__composer = null;
-      }
-    };
-  }
   if (raysBtn) {
     raysBtn.onclick = () => {
       const nowOn = !isRaysEnabled();
@@ -880,9 +848,8 @@ async function boot() {
 
     const dt = Math.min(clock.getDelta(), 0.05);
     update(dt);
-    // Bloom exposure follows env wetness / day factor + volumetric + lens flare
+    // Volumetric + lens flare
     if (composer) {
-      updateBloomForEnvironment(composer, env);
       try {
         updateAdvancedEffects(composer, {
           camera,
@@ -937,19 +904,8 @@ async function boot() {
           upVotes = 0;
         }
       }
-      // Bloom fill-rate guard: auto-off when <50 FPS for 2 votes (desktop only)
+      // FX guard: if <42 FPS, shed heavy passes
       if (composer && !QUALITY.low) {
-        if (avg < 50) {
-          if (++bloomLowVotes >= 2) {
-            bloomLowVotes = 0;
-            // Keep composer but lower strength instead of fully disabling (less jank)
-            const bp = composer.userData.bloomPass;
-            if (bp) bp.strength = Math.max(0.15, bp.strength - 0.08);
-          }
-        } else if (avg > 58) {
-          bloomLowVotes = 0;
-        }
-        // FX guard: if still <42 FPS after bloom reduction, shed heavy passes
         if (avg < 42) {
           const ao = composer.userData.aoPass;
           const vol = composer.userData.volumetric;

@@ -14,7 +14,7 @@ export const GRAPHICS_PRESETS = {
     resolution: 0.7, shadows: 'off', viewDistance: 1,
     vegetation: 0.5, animals: 0.35, particles: 0.4,
     clouds: true, cloudCount: 4, rain: true, fireflies: false,
-    bloom: false, rays: false, flare: false, gi: false,
+    rays: false, flare: false, gi: false,
     windSway: false, waterHigh: false, fpsCap: 30,
   },
   medium: {
@@ -22,7 +22,7 @@ export const GRAPHICS_PRESETS = {
     resolution: 0.85, shadows: 'low', viewDistance: 2,
     vegetation: 0.75, animals: 0.65, particles: 0.7,
     clouds: true, cloudCount: 6, rain: true, fireflies: true,
-    bloom: false, rays: false, flare: false, gi: true,
+    rays: false, flare: false, gi: true,
     windSway: true, waterHigh: false, fpsCap: 45,
   },
   high: {
@@ -30,7 +30,7 @@ export const GRAPHICS_PRESETS = {
     resolution: 1.0, shadows: 'high', viewDistance: 2,
     vegetation: 1.0, animals: 1.0, particles: 1.0,
     clouds: true, cloudCount: 9, rain: true, fireflies: true,
-    bloom: true, rays: true, flare: true, gi: true,
+    rays: true, flare: true, gi: true,
     windSway: true, waterHigh: true, fpsCap: 60,
   },
   ultra: {
@@ -38,7 +38,7 @@ export const GRAPHICS_PRESETS = {
     resolution: 1.0, shadows: 'ultra', viewDistance: 3,
     vegetation: 1.15, animals: 1.0, particles: 1.0,
     clouds: true, cloudCount: 9, rain: true, fireflies: true,
-    bloom: true, rays: true, flare: true, gi: true,
+    rays: true, flare: true, gi: true,
     windSway: true, waterHigh: true, fpsCap: 60,
   },
 };
