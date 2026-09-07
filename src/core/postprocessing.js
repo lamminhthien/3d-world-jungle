@@ -242,7 +242,7 @@ export function updateAdvancedEffects(composer, { camera, env, sunWorldPos, moon
       const weather = env?.weather || 'clear';
       if (weather === 'overcast') { volIntensity *= 0.55; flareIntensity *= 0.6; }
       if (weather === 'rain') { volIntensity *= 0.35; flareIntensity *= 0.45; }
-      if (weather === 'fog') { volIntensity *= 0.9; flareIntensity *= 0.5; } // fog enhances shafts
+      if (weather === 'mist') { volIntensity *= 0.85; flareIntensity *= 0.6; } // mist softens shafts beautifully
     }
 
     if (vol) {

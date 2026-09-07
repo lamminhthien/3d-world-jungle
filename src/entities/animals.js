@@ -603,7 +603,7 @@ export function createDragonflies(scene) {
     const tod = env?.timeOfDay ?? 12;
     const weather = env?.weather ?? 'clear';
     const isDay = tod >= 6 && tod < 18.5;
-    const badWeather = weather === 'storm' || weather === 'fog';
+    const badWeather = weather === 'storm';
     const want = isDay && !badWeather;
     const targetOpacity = want ? 0.95 : 0;
     mat.opacity += (targetOpacity - mat.opacity) * Math.min(1, dt * 1.2);
@@ -725,9 +725,9 @@ export function createAnimals(scene) {
     const isDusk = tod >= 17.5 && tod < 20;
     if (kind === 'butterfly') {
       if (!isDay) return 0;
-      if (w === 'storm' || w === 'rain' || w === 'fog') return 0;
-      if (w === 'drizzle') return 0.25;
-      if (isDawn || isDusk) return 0.6;
+      if (w === 'storm' || w === 'rain') return 0;
+      if (w === 'drizzle') return 0.35;
+      if (isDawn || isDusk) return 0.7;
       return 1;
     }
     if (kind === 'bird') {

@@ -4,7 +4,7 @@
 // - Sun orbit: theta = ((t - 6) / 12) * PI  => 6h horizon, 12h zenith,
 //   18h horizon, 0h nadir. Moon uses theta + PI on the same orbit.
 // - Lighting / sky / fog colors are keyframed stops lerped with THREE.Color.lerp.
-// - Weather: random state machine (clear / overcast / rain / fog) with smooth blend.
+// - Weather: random state machine (clear / partlyCloudy / overcast / mist / drizzle / rain / storm) with smooth blend — fog removed for clarity.
 // - VFX: gradient skydome shader, stars, sun/moon billboards, rain particles.
 // - Audio: tiny procedural WebAudio ambience (wind / rain / birds / crickets).
 import * as THREE from 'three';
@@ -17,9 +17,9 @@ import { windState, updateWind } from './wind.js';
 // Prefer sampled jungle soundtrack if files present, else fall back to generative cozy
 const MUSIC_TRACKS = SAMPLED_TRACKS.length ? SAMPLED_TRACKS : COZY_TRACKS;
 
-export const WEATHERS = ['clear', 'partlyCloudy', 'overcast', 'mist', 'drizzle', 'rain', 'storm', 'fog'];
-const WEATHER_LABEL = { clear: 'Clear', partlyCloudy: 'Partly Cloudy', overcast: 'Overcast', mist: 'Misty', drizzle: 'Drizzle', rain: 'Rain', storm: 'Storm', fog: 'Fog' };
-const WEATHER_ICON = { clear: '☀️', partlyCloudy: '⛅', overcast: '☁️', mist: '🌫️', drizzle: '🌦️', rain: '🌧️', storm: '⛈️', fog: '🌁' };
+export const WEATHERS = ['clear', 'partlyCloudy', 'overcast', 'mist', 'drizzle', 'rain', 'storm'];
+const WEATHER_LABEL = { clear: 'Clear', partlyCloudy: 'Partly Cloudy', overcast: 'Soft Clouds', mist: 'Misty Dawn', drizzle: 'Light Drizzle', rain: 'Rain', storm: 'Storm' };
+const WEATHER_ICON = { clear: '☀️', partlyCloudy: '⛅', overcast: '🌤️', mist: '🌄', drizzle: '🌦️', rain: '🌧️', storm: '⛈️' };
 
 // ---- Day keyframes (lerped) ----
 // t: hour, sun: color/intensity (day star), sky top/bottom, fog, exposure, stars
@@ -41,20 +41,16 @@ const STOPS = [
   { t: 24,   sun: 0x8fb4ff, sunInt: 0.0,  hemiInt: 0.38, ambInt: 0.22, top: 0x0a1428, bot: 0x1b3350, fog: 0x16283a, exp: 0.9, stars: 1.0 },
 ];
 
-// Weather modifiers applied on top of the time-of-day sample.
-// fogNear/fogFar multipliers are tuned for the isometric ortho camera
-// (camera sits ~60 units from the focus): even the densest 'fog' weather
-// keeps the focus at ~30% fog, never full whiteout.
-// Expanded to 8 weathers for a more vibrant lifecycle.
+// Weather modifiers — tuned to stay vibrant, never ugly grey whiteout.
+// Fog removed per request; remaining weathers keep good visibility and warm tints.
 const WX = {
   clear:        { sun: 1.0,  hemi: 1.02, fogNear: 1.0,  fogFar: 1.0,  fogTint: 0xffffff, cloud: 0.55, rain: 0,    fogMul: 1.0, wet: 0,    windBoost: 0 },
-  partlyCloudy: { sun: 0.88, hemi: 0.95, fogNear: 0.92, fogFar: 0.92, fogTint: 0xe8eef2, cloud: 0.9,  rain: 0,    fogMul: 1.0, wet: 0.05, windBoost: 0.1 },
-  overcast:     { sun: 0.55, hemi: 0.8,  fogNear: 0.85, fogFar: 0.85, fogTint: 0xc9d2d6, cloud: 0.85, rain: 0,    fogMul: 1.0, wet: 0.15, windBoost: 0.15 },
-  mist:         { sun: 0.68, hemi: 0.85, fogNear: 0.55, fogFar: 0.6,  fogTint: 0xdde7ea, cloud: 0.5,  rain: 0,    fogMul: 1.0, wet: 0.25, windBoost: 0 },
-  drizzle:      { sun: 0.5,  hemi: 0.7,  fogNear: 0.8,  fogFar: 0.78, fogTint: 0xb8cbd6, cloud: 0.85, rain: 0.35, fogMul: 1.0, wet: 0.5,  windBoost: 0.1 },
-  rain:         { sun: 0.32, hemi: 0.6,  fogNear: 0.75, fogFar: 0.7,  fogTint: 0x8fa3ad, cloud: 0.85, rain: 1,    fogMul: 1.0, wet: 1,    windBoost: 0.25 },
-  storm:        { sun: 0.18, hemi: 0.45, fogNear: 0.65, fogFar: 0.62, fogTint: 0x6e8290, cloud: 0.95, rain: 1.2,  fogMul: 1.0, wet: 1,    windBoost: 0.55 },
-  fog:          { sun: 0.7,  hemi: 0.85, fogNear: 0.6,  fogFar: 0.55, fogTint: 0xdde7ea, cloud: 0.4,  rain: 0,    fogMul: 1.0, wet: 0.3,  windBoost: -0.1 },
+  partlyCloudy: { sun: 0.92, hemi: 0.98, fogNear: 0.95, fogFar: 0.95, fogTint: 0xeef6ff, cloud: 0.78, rain: 0,    fogMul: 1.0, wet: 0.04, windBoost: 0.08 },
+  overcast:     { sun: 0.72, hemi: 0.88, fogNear: 0.88, fogFar: 0.88, fogTint: 0xdfe9f0, cloud: 0.82, rain: 0,    fogMul: 1.0, wet: 0.12, windBoost: 0.12 },
+  mist:         { sun: 0.82, hemi: 0.92, fogNear: 0.78, fogFar: 0.8,  fogTint: 0xe6f0f7, cloud: 0.55, rain: 0,    fogMul: 1.0, wet: 0.18, windBoost: 0.02 },
+  drizzle:      { sun: 0.68, hemi: 0.82, fogNear: 0.86, fogFar: 0.86, fogTint: 0xd9e9f5, cloud: 0.75, rain: 0.35, fogMul: 1.0, wet: 0.45, windBoost: 0.08 },
+  rain:         { sun: 0.58, hemi: 0.74, fogNear: 0.82, fogFar: 0.8,  fogTint: 0xcfe2f0, cloud: 0.8,  rain: 0.9,  fogMul: 1.0, wet: 0.85, windBoost: 0.18 },
+  storm:        { sun: 0.38, hemi: 0.62, fogNear: 0.75, fogFar: 0.74, fogTint: 0xb9cfe3, cloud: 0.88, rain: 1.15, fogMul: 1.0, wet: 0.95, windBoost: 0.4 },
 };
 
 const _ca = new THREE.Color();
@@ -91,15 +87,14 @@ function mixWx(prev, next, blend, out) {
 
 function rollNextWeather(rng = Math.random) {
   const r = rng();
-  // More vibrant distribution: 8 weathers with distinct odds
-  if (r < 0.28) return 'clear';
-  if (r < 0.42) return 'partlyCloudy';
-  if (r < 0.56) return 'overcast';
-  if (r < 0.66) return 'mist';
-  if (r < 0.76) return 'drizzle';
-  if (r < 0.86) return 'rain';
-  if (r < 0.92) return 'storm';
-  return 'fog';
+  // Vibrant-only distribution (fog removed). No ugly grey whiteout.
+  if (r < 0.30) return 'clear';
+  if (r < 0.46) return 'partlyCloudy';
+  if (r < 0.60) return 'overcast';
+  if (r < 0.71) return 'mist';
+  if (r < 0.82) return 'drizzle';
+  if (r < 0.92) return 'rain';
+  return 'storm';
 }
 
 // ---- Minimal procedural ambience (no assets, starts on user gesture) ----
@@ -612,7 +607,7 @@ export function createEnvironment(scene, opts = {}) {
   let lightningTimer = 3 + Math.random() * 5;
   let lightningFlash = 0;
 
-  // Dew / mist particles at dawn (5-7, mist/fog): ground-hugging sparkles
+  // Dew / mist particles at dawn (5-7, mist): ground-hugging sparkles — beautiful, not foggy
   const DEW_N = QUALITY.low ? 0 : 80;
   const dewPos = DEW_N ? new Float32Array(DEW_N * 3) : null;
   let dew = null; let dewMat = null; let dewGeo = null;
@@ -783,6 +778,8 @@ export function createEnvironment(scene, opts = {}) {
     get isNight() { return !!state.isNight; },
     setTime(h) { state.timeOfDay = ((h % 24) + 24) % 24; },
     setWeather(w) {
+      // Back-compat: old saves with 'fog' map to soft 'mist' (vibrant, not ugly)
+      if (w === 'fog') w = 'mist';
       if (!WEATHERS.includes(w) || w === state.weather) return;
       state.prevWeather = state.blend < 1 ? state.prevWeather : state.weather;
       // If mid-transition, keep blending from current mix: restart blend.
@@ -889,7 +886,7 @@ export function createEnvironment(scene, opts = {}) {
       skyUniforms.sunGlow.value = isDay ? 0.6 * wx.sun + 0.15 : 0.25;
       skydome.position.copy(focusV);
       stars.position.copy(focusV);
-      starMat.opacity = sample.stars * (1 - wx.rain * 0.9) * (state.weather === 'fog' ? 0.15 : 1);
+      starMat.opacity = sample.stars * (1 - wx.rain * 0.75);
 
       sunMesh.position.set(focusV.x + sunDir.x * 130, sunDir.y * 130, focusV.z + sunDir.z * 130);
       sunMesh.visible = sunDir.y > -0.08;
@@ -904,7 +901,7 @@ export function createEnvironment(scene, opts = {}) {
       moonMesh.visible = moonDir.y > -0.05;
       // Overcast / rain veils the moon; drifting clouds cross it for an
       // occluded-moon illusion (doc section 3: hazy veiled moon).
-      const veil = (1 - wx.rain * 0.7) * (state.weather === 'overcast' ? 0.55 : 1) * (state.weather === 'fog' ? 0.3 : 1);
+      const veil = (1 - wx.rain * 0.55) * (state.weather === 'overcast' ? 0.62 : 1);
       // A restrained pulse keeps the moon from reading as a flat billboard,
       // while the actual directional light remains stable enough for shadows.
       const moonPulse = 0.94 + 0.06 * Math.sin(performance.now() * 0.0014);
@@ -984,7 +981,7 @@ export function createEnvironment(scene, opts = {}) {
       const isNightDeep = t >= 21 || t < 4.5;
       const isAfterRain = state.prevWeather === 'rain' || state.prevWeather === 'storm';
 
-      // Rainbow: shows for ~30s after rain stops, when sun is out and not foggy
+      // Rainbow: shows for ~30s after rain stops, when sun is out
       if (rainbow && rainbowMat) {
         const wantRainbow = isAfterRain && state.blend > 0.85 && (state.weather === 'clear' || state.weather === 'partlyCloudy' || state.weather === 'mist') && isDay && isMorning && wx.sun > 0.6;
         // Also allow drizzle -> clear within golden hour for dramatic sunset rainbow
@@ -1037,7 +1034,7 @@ export function createEnvironment(scene, opts = {}) {
 
       // Dew sparkle at dawn in mist/fog, low ground
       if (dew && dewMat && dewGeo) {
-        const wantDew = isDawn && (state.weather === 'mist' || state.weather === 'fog' || state.weather === 'drizzle');
+        const wantDew = isDawn && (state.weather === 'mist' || state.weather === 'drizzle');
         const targetD = wantDew ? 0.75 : 0;
         dewMat.opacity += (targetD - dewMat.opacity) * Math.min(1, dt * 0.5);
         dew.visible = dewMat.opacity > 0.02;

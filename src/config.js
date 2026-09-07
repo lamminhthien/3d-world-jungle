@@ -62,10 +62,10 @@ export const LIFECYCLE = {
 };
 
 export const WEATHER_CONFIG = {
-  weathers: ['clear', 'partlyCloudy', 'overcast', 'mist', 'drizzle', 'rain', 'storm', 'fog'],
+  weathers: ['clear', 'partlyCloudy', 'overcast', 'mist', 'drizzle', 'rain', 'storm'],
   intervalSec: 75,
-  // Probability weights for the rollNextWeather rng (sum to 1)
-  weights: { clear: 0.28, partlyCloudy: 0.14, overcast: 0.14, mist: 0.10, drizzle: 0.10, rain: 0.10, storm: 0.06, fog: 0.08 },
+  // Vibrant-only: fog removed, ugly grey whiteout gone
+  weights: { clear: 0.30, partlyCloudy: 0.16, overcast: 0.14, mist: 0.11, drizzle: 0.11, rain: 0.10, storm: 0.08 },
 };
 
 export const SCENE = {
