@@ -7,7 +7,7 @@ import { QUALITY } from '../core/setup.js';
 
 export const windState = {
   direction: new THREE.Vector2(1, 0.25).normalize(), // slowly rotates 15°/min
-  strength: 0.2, // 0.1 calm → 0.7 gale (rain)
+  strength: 0.45, // visible from spawn (was 0.2 imperceptible under ortho)
   gust: 0,
   time: 0,
 };
@@ -26,12 +26,12 @@ export function updateWind(dt, weather = 'clear') {
   _windAngle += dt * (0.00436); // 15°/60s = 0.00436 rad/s
   windState.direction.set(Math.cos(_windAngle), Math.sin(_windAngle));
 
-  // Base strength by weather
-  const base = weather === 'rain' ? 0.55 : weather === 'overcast' ? 0.3 : weather === 'fog' ? 0.18 : 0.2;
-  // Gust: low-freq noise (performance.now()*0.0003 + sin)
-  const gust = 0.12 * Math.sin(windState.time * 0.3) + 0.08 * Math.sin(windState.time * 0.7 + 1.3);
-  windState.gust = THREE.MathUtils.clamp(gust, -0.15, 0.15);
-  const target = THREE.MathUtils.clamp(base + windState.gust, 0.08, 0.75);
+  // Base strength by weather — tuned for visible sway (previous 0.2 was imperceptible under ortho)
+  const base = weather === 'rain' ? 0.85 : weather === 'overcast' ? 0.5 : weather === 'fog' ? 0.35 : 0.45;
+  // Gust: low-freq noise, larger amplitude for obvious gusts
+  const gust = 0.22 * Math.sin(windState.time * 0.32) + 0.16 * Math.sin(windState.time * 0.68 + 1.3) + 0.08 * Math.sin(windState.time * 1.7 + 0.7);
+  windState.gust = THREE.MathUtils.clamp(gust, -0.3, 0.4);
+  const target = THREE.MathUtils.clamp(base + windState.gust, 0.12, 1.0);
   // Smooth lerp so gust doesn't snap
   windState.strength += (target - windState.strength) * Math.min(1, dt * 0.6);
 
@@ -67,20 +67,26 @@ export function attachWindSway(material, { strengthScale = 1, heightScale = 0.14
        uniform float windHeightScale;`
     );
 
-    // Height factor: y above base drives amplitude; xz phase gives per-instance variety
-    // without needing a custom attribute (world-position hash via local position).
+    // Height factor: y above base drives amplitude; per-instance phase via instanceMatrix world xz
+    // so instances don't sway in lockstep (visible under ortho). Falls back to local xz when not instanced.
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
       `#include <begin_vertex>
        {
          float h = max(0.0, position.y);
-         float phase = position.x * 0.52 + position.z * 0.37;
-         float sway = sin(windTime * 0.6 + phase) * windStrength * windScale * (0.08 + h * windHeightScale);
-         // Add secondary gust wiggle for canopy tips
-         sway += sin(windTime * 1.4 + phase * 1.7) * windStrength * windScale * 0.03 * clamp(h * 0.5, 0.0, 1.0);
+         float worldX = 0.0;
+         float worldZ = 0.0;
+         #ifdef USE_INSTANCING
+           worldX = instanceMatrix[3][0];
+           worldZ = instanceMatrix[3][2];
+         #endif
+         float phase = worldX * 0.13 + worldZ * 0.11 + position.x * 0.52 + position.z * 0.37;
+         float sway = sin(windTime * 1.1 + phase) * windStrength * windScale * (0.12 + h * windHeightScale * 1.6);
+         // Secondary high-freq flutter for leaf tips / grass blades
+         sway += sin(windTime * 2.4 + phase * 1.7) * windStrength * windScale * 0.08 * clamp(h * 0.6, 0.0, 1.0);
          transformed.x += windDir.x * sway;
          transformed.z += windDir.y * sway;
-         transformed.y -= abs(sway) * 0.09;
+         transformed.y -= abs(sway) * 0.14;
        }`
     );
 
@@ -96,13 +102,20 @@ export function attachWindSway(material, { strengthScale = 1, heightScale = 0.14
 // Apply sway to the standard kit materials (call once after createVegetationKit).
 export function attachWindToKit(kit) {
   if (QUALITY.low) return;
-  // Trunks sway 10% of canopy amplitude
-  attachWindSway(kit.materials.trunk, { strengthScale: 0.1, heightScale: 0.06 });
-  attachWindSway(kit.materials.pine, { strengthScale: 0.55, heightScale: 0.12 });
-  attachWindSway(kit.materials.blob, { strengthScale: 0.65, heightScale: 0.14 });
-  attachWindSway(kit.materials.palmLeaf, { strengthScale: 0.75, heightScale: 0.18 });
-  attachWindSway(kit.materials.leafCard, { strengthScale: 0.85, heightScale: 0.2 });
-  attachWindSway(kit.materials.bush, { strengthScale: 0.5, heightScale: 0.12 });
-  attachWindSway(kit.materials.grass, { strengthScale: 0.7, heightScale: 0.22 });
-  attachWindSway(kit.materials.reed, { strengthScale: 0.8, heightScale: 0.25 });
+  // Visible under ortho distance 60 — trunk subtle, foliage/grass exaggerated
+  attachWindSway(kit.materials.trunk, { strengthScale: 0.35, heightScale: 0.10 });
+  attachWindSway(kit.materials.pine, { strengthScale: 0.95, heightScale: 0.18 });
+  attachWindSway(kit.materials.blob, { strengthScale: 1.15, heightScale: 0.20 });
+  attachWindSway(kit.materials.palmLeaf, { strengthScale: 1.35, heightScale: 0.26 });
+  attachWindSway(kit.materials.leafCard, { strengthScale: 1.45, heightScale: 0.30 });
+  attachWindSway(kit.materials.bush, { strengthScale: 0.85, heightScale: 0.18 });
+  attachWindSway(kit.materials.grass, { strengthScale: 1.25, heightScale: 0.32 });
+  attachWindSway(kit.materials.reed, { strengthScale: 1.55, heightScale: 0.38 });
+  attachWindSway(kit.materials.flowerHead, { strengthScale: 1.0, heightScale: 0.22 });
+  attachWindSway(kit.materials.flowerStem, { strengthScale: 0.9, heightScale: 0.24 });
+  // Expose for console testing: window.__windState.strength = 1.0 to force visible gust
+  if (typeof window !== 'undefined') {
+    window.__windState = windState;
+    window.__windGust = () => { windState.strength = 1.2; setTimeout(() => { windState.strength = 0.45; }, 2200); };
+  }
 }
