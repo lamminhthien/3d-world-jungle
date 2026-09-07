@@ -1,238 +1,238 @@
 {
   "tracks": [
     {
-      "id": "tropical-sunrise",
-      "name": "Tropical Sunrise",
-      "description": "Upbeat, sunny morning vibe with bright, popping melodies and high energy.",
-      "bpm": 124,
+      "id": "monkey-mischief",
+      "name": "🐒 Monkey Mischief",
+      "description": "Cheeky xylophone bounce — playful marimba with light tuba hops.",
+      "bpm": 126,
       "delay": {
-        "time": 0.32,
-        "feedback": 0.25,
-        "dampen": 3000,
-        "wet": 0.20
+        "time": 0.26,
+        "feedback": 0.14,
+        "dampen": 4000,
+        "wet": 0.14
       },
       "timbre": {
         "leadWave": "triangle",
         "shimmerWave": "sine",
         "shimmerRatio": 2.0,
-        "shimmerGain": 0.30,
-        "leadFilterCutoff": 3500
+        "shimmerGain": 0.16,
+        "leadFilterCutoff": 4200
       },
       "dayChords": [
-        [48, 55, 60, 64],
-        [41, 48, 53, 57],
-        [43, 50, 55, 59],
-        [48, 55, 60, 64]
+        [48, 60, 64, 67],
+        [53, 57, 60, 65],
+        [55, 59, 62, 67],
+        [48, 60, 64, 67]
       ],
       "nightChords": [
-        [48, 55, 60, 64],
-        [45, 52, 57, 60],
-        [41, 48, 53, 57],
-        [43, 50, 55, 59]
+        [48, 60, 63, 67],
+        [46, 58, 62, 65],
+        [53, 56, 60, 65],
+        [48, 60, 64, 67]
       ],
-      "pentaDay": [60, 62, 64, 67, 69, 72, 74],
-      "pentaMoody": [58, 60, 62, 65, 67, 70, 72],
+      "pentaDay": [60, 62, 64, 67, 69, 72, 74, 76],
+      "pentaMoody": [60, 62, 63, 67, 68, 72, 74],
       "density": {
-        "day": 0.70,
-        "night": 0.50,
-        "rain": 0.40
+        "day": 0.62,
+        "night": 0.42,
+        "rain": 0.38
       },
-      "chordCycles": 4
+      "chordCycles": 3
     },
     {
-      "id": "summer-canopy",
-      "name": "Summer Canopy",
-      "description": "Bright, warm forest atmosphere with bouncy rhythms and a cheerful summer glow.",
-      "bpm": 118,
+      "id": "banana-boogie",
+      "name": "🍌 Banana Boogie",
+      "description": "Bouncy marimba stroll — mellow woodblock groove, easy swing.",
+      "bpm": 124,
       "delay": {
-        "time": 0.38,
-        "feedback": 0.28,
-        "dampen": 2800,
-        "wet": 0.25
+        "time": 0.28,
+        "feedback": 0.13,
+        "dampen": 3800,
+        "wet": 0.12
       },
       "timbre": {
         "leadWave": "triangle",
-        "shimmerWave": "triangle",
+        "shimmerWave": "sine",
         "shimmerRatio": 1.5,
-        "shimmerGain": 0.25,
-        "leadFilterCutoff": 3200
-      },
-      "dayChords": [
-        [48, 55, 60, 64],
-        [43, 50, 55, 59],
-        [45, 52, 57, 60],
-        [41, 48, 53, 57]
-      ],
-      "nightChords": [
-        [48, 55, 60, 64],
-        [41, 48, 53, 57],
-        [43, 50, 55, 59],
-        [45, 52, 57, 60]
-      ],
-      "pentaDay": [60, 62, 64, 67, 69, 72, 74],
-      "pentaMoody": [57, 60, 62, 65, 67, 70, 72],
-      "density": {
-        "day": 0.65,
-        "night": 0.45,
-        "rain": 0.35
-      },
-      "chordCycles": 4
-    },
-    {
-      "id": "playful-ruins",
-      "name": "Playful Ruins",
-      "description": "High-energy, bouncy discovery theme with popping chimes and a funny, curious pace.",
-      "bpm": 136,
-      "delay": {
-        "time": 0.28,
-        "feedback": 0.20,
-        "dampen": 3500,
-        "wet": 0.20
-      },
-      "timbre": {
-        "leadWave": "sine",
-        "shimmerWave": "triangle",
-        "shimmerRatio": 2.0,
-        "shimmerGain": 0.35,
+        "shimmerGain": 0.14,
         "leadFilterCutoff": 4000
       },
       "dayChords": [
-        [48, 55, 60, 64],
-        [43, 50, 55, 59],
-        [41, 48, 53, 57],
-        [48, 55, 60, 64]
+        [50, 62, 65, 69],
+        [48, 60, 64, 67],
+        [53, 57, 60, 64],
+        [55, 58, 62, 65]
       ],
       "nightChords": [
-        [48, 55, 60, 64],
-        [41, 48, 53, 57],
-        [43, 50, 55, 59],
-        [45, 52, 57, 60]
+        [50, 62, 65, 68],
+        [48, 60, 63, 67],
+        [51, 55, 58, 63],
+        [53, 57, 60, 65]
       ],
-      "pentaDay": [60, 62, 64, 67, 69, 72, 74],
-      "pentaMoody": [55, 58, 60, 63, 65, 68, 70],
+      "pentaDay": [62, 64, 65, 69, 71, 74, 76, 77],
+      "pentaMoody": [60, 62, 63, 65, 67, 70, 72],
       "density": {
-        "day": 0.80,
-        "night": 0.60,
-        "rain": 0.50
+        "day": 0.60,
+        "night": 0.38,
+        "rain": 0.35
       },
-      "chordCycles": 5
+      "chordCycles": 3
     },
     {
-      "id": "sparkling-river",
-      "name": "Sparkling River",
-      "description": "Fast, shimmering stream atmosphere with bright high bells and a refreshing summer flow.",
-      "bpm": 126,
+      "id": "cheeky-toucan",
+      "name": "🦜 Cheeky Toucan",
+      "description": "Chirpy glockenspiel — light bird-like pecks, not frantic.",
+      "bpm": 132,
       "delay": {
-        "time": 0.34,
-        "feedback": 0.30,
-        "dampen": 3200,
-        "wet": 0.30
+        "time": 0.22,
+        "feedback": 0.12,
+        "dampen": 4200,
+        "wet": 0.10
       },
       "timbre": {
         "leadWave": "sine",
         "shimmerWave": "sine",
         "shimmerRatio": 3.0,
-        "shimmerGain": 0.30,
-        "leadFilterCutoff": 3800
+        "shimmerGain": 0.16,
+        "leadFilterCutoff": 4600
       },
       "dayChords": [
-        [48, 55, 60, 64],
-        [41, 48, 53, 57],
-        [43, 50, 55, 59],
-        [48, 55, 60, 64]
+        [48, 60, 64, 69],
+        [48, 60, 64, 67],
+        [41, 53, 57, 60],
+        [43, 55, 58, 62]
       ],
       "nightChords": [
-        [48, 55, 60, 64],
-        [45, 52, 57, 60],
-        [41, 48, 53, 57],
-        [43, 50, 55, 59]
+        [48, 60, 64, 68],
+        [46, 58, 62, 65],
+        [41, 53, 57, 60],
+        [43, 55, 58, 62]
       ],
-      "pentaDay": [60, 62, 64, 67, 69, 72, 74],
-      "pentaMoody": [58, 60, 62, 65, 67, 70, 72],
+      "pentaDay": [60, 64, 67, 69, 72, 74, 76, 79],
+      "pentaMoody": [58, 60, 63, 65, 68, 70, 72],
       "density": {
-        "day": 0.75,
-        "night": 0.55,
-        "rain": 0.45
+        "day": 0.65,
+        "night": 0.40,
+        "rain": 0.38
       },
-      "chordCycles": 4
+      "chordCycles": 3
     },
     {
-      "id": "tribal-celebration",
-      "name": "Tribal Celebration",
-      "description": "Energetic, festive woodland harmony with popping tones and a joyful jungle beat.",
-      "bpm": 130,
+      "id": "jungle-jamboree",
+      "name": "🥁 Jungle Jamboree",
+      "description": "Easy parade groove — warm conga walk, not carnival rush.",
+      "bpm": 128,
       "delay": {
-        "time": 0.30,
-        "feedback": 0.25,
-        "dampen": 3000,
-        "wet": 0.25
+        "time": 0.26,
+        "feedback": 0.13,
+        "dampen": 3600,
+        "wet": 0.13
       },
       "timbre": {
         "leadWave": "triangle",
-        "shimmerWave": "triangle",
+        "shimmerWave": "sine",
         "shimmerRatio": 2.0,
-        "shimmerGain": 0.25,
-        "leadFilterCutoff": 3500
+        "shimmerGain": 0.14,
+        "leadFilterCutoff": 4300
       },
       "dayChords": [
-        [48, 55, 60, 64],
-        [41, 48, 53, 57],
-        [43, 50, 55, 59],
-        [48, 55, 60, 64]
+        [48, 52, 55, 60],
+        [53, 57, 60, 64],
+        [50, 54, 57, 62],
+        [48, 52, 55, 60]
       ],
       "nightChords": [
-        [48, 55, 60, 64],
-        [45, 52, 57, 60],
-        [41, 48, 53, 57],
-        [43, 50, 55, 59]
+        [48, 51, 55, 60],
+        [53, 56, 60, 63],
+        [50, 53, 57, 62],
+        [48, 51, 55, 60]
       ],
-      "pentaDay": [60, 62, 64, 67, 69, 72, 74],
-      "pentaMoody": [58, 60, 62, 65, 67, 70, 72],
+      "pentaDay": [60, 62, 64, 65, 67, 69, 72, 74],
+      "pentaMoody": [60, 61, 63, 65, 67, 70, 72],
       "density": {
-        "day": 0.85,
-        "night": 0.65,
-        "rain": 0.55
+        "day": 0.62,
+        "night": 0.38,
+        "rain": 0.34
+      },
+      "chordCycles": 3
+    },
+    {
+      "id": "sneaky-snake",
+      "name": "🐍 Sneaky Snake",
+      "description": "Tip-toe pizzicato — sneaky soft bass, gentle silliness.",
+      "bpm": 118,
+      "delay": {
+        "time": 0.32,
+        "feedback": 0.15,
+        "dampen": 3400,
+        "wet": 0.15
+      },
+      "timbre": {
+        "leadWave": "triangle",
+        "shimmerWave": "sine",
+        "shimmerRatio": 2.5,
+        "shimmerGain": 0.12,
+        "leadFilterCutoff": 3800
+      },
+      "dayChords": [
+        [45, 57, 60, 64],
+        [48, 60, 64, 67],
+        [46, 58, 62, 65],
+        [43, 55, 59, 62]
+      ],
+      "nightChords": [
+        [45, 57, 60, 63],
+        [48, 58, 62, 65],
+        [46, 58, 61, 65],
+        [43, 55, 58, 62]
+      ],
+      "pentaDay": [57, 60, 62, 64, 67, 69, 72, 74],
+      "pentaMoody": [57, 58, 60, 63, 65, 68, 70],
+      "density": {
+        "day": 0.55,
+        "night": 0.34,
+        "rain": 0.30
       },
       "chordCycles": 4
     },
     {
-      "id": "starlit-beach",
-      "name": "Starlit Beach",
-      "description": "Upbeat, dreamy nocturnal stroll with bright sine pads and a breezy summer night feel.",
-      "bpm": 112,
+      "id": "canopy-circus",
+      "name": "🎪 Canopy Circus",
+      "description": "Light acrobatic waltz — playful xylophone, soft tuba hops.",
+      "bpm": 122,
       "delay": {
-        "time": 0.40,
-        "feedback": 0.32,
-        "dampen": 2500,
-        "wet": 0.35
+        "time": 0.24,
+        "feedback": 0.16,
+        "dampen": 3700,
+        "wet": 0.16
       },
       "timbre": {
-        "leadWave": "sine",
+        "leadWave": "triangle",
         "shimmerWave": "sine",
         "shimmerRatio": 2.0,
-        "shimmerGain": 0.25,
-        "leadFilterCutoff": 3000
+        "shimmerGain": 0.14,
+        "leadFilterCutoff": 4100
       },
       "dayChords": [
         [48, 55, 60, 64],
-        [41, 48, 53, 57],
-        [43, 50, 55, 59],
-        [48, 55, 60, 64]
+        [50, 53, 57, 62],
+        [53, 57, 60, 64],
+        [55, 59, 62, 67]
       ],
       "nightChords": [
-        [48, 55, 60, 64],
-        [45, 52, 57, 60],
-        [41, 48, 53, 57],
-        [43, 50, 55, 59]
+        [48, 55, 60, 63],
+        [50, 53, 56, 60],
+        [51, 55, 58, 63],
+        [53, 57, 60, 65]
       ],
-      "pentaDay": [60, 62, 64, 67, 69, 72, 74],
-      "pentaMoody": [58, 60, 62, 65, 67, 70, 72],
+      "pentaDay": [60, 62, 64, 66, 67, 69, 72, 74],
+      "pentaMoody": [59, 60, 62, 65, 67, 70, 71],
       "density": {
-        "day": 0.60,
-        "night": 0.40,
-        "rain": 0.30
+        "day": 0.58,
+        "night": 0.36,
+        "rain": 0.32
       },
-      "chordCycles": 4
+      "chordCycles": 3
     }
   ]
 }
