@@ -10,8 +10,12 @@
 import * as THREE from 'three';
 import { QUALITY } from '../core/setup.js';
 import { getGraphics } from '../core/graphics.js';
-import { createCozyMusic, MUSIC_TRACKS } from '../audio/cozy.js';
+import { createCozyMusic, MUSIC_TRACKS as COZY_TRACKS } from '../audio/cozy.js';
+import { createSampledMusic, SAMPLED_TRACKS } from '../audio/sampledMusic.js';
 import { windState, updateWind } from './wind.js';
+
+// Prefer sampled jungle soundtrack if files present, else fall back to generative cozy
+const MUSIC_TRACKS = SAMPLED_TRACKS.length ? SAMPLED_TRACKS : COZY_TRACKS;
 
 export const WEATHERS = ['clear', 'overcast', 'rain', 'fog'];
 const WEATHER_LABEL = { clear: 'Clear', overcast: 'Overcast', rain: 'Rain', fog: 'Fog' };
@@ -128,15 +132,32 @@ function createAmbience() {
     };
     windGain = mkLoop(400, 0.6, 0.03);
     rainGain = mkLoop(4000, 0.4, 0.0);
-    // Cozy generative music box (Stardew-like) on its own sub-bus so the
-    // melody sits under wind/rain/critters instead of fighting them.
+    // Jungle soundtrack: sampled mp3/ogg if available, else generative cozy fallback.
+    // Both sit on their own sub-bus so melody stays under wind/rain/critters.
     musicBus = ctx.createGain();
     musicBus.gain.value = 0.7;
     musicBus.connect(master);
-    cozy = createCozyMusic(ctx, musicBus);
-    cozy.setMuted(!musicOn);
-    cozy.onTrackChange(() => syncMusicBtn());
-    syncMusicBtn();
+    if (SAMPLED_TRACKS.length) {
+      try {
+        cozy = createSampledMusic(ctx, musicBus);
+        cozy.setMuted(!musicOn);
+        cozy.onTrackChange(() => syncMusicBtn());
+        syncMusicBtn();
+        // Auto-play after gesture — sampled needs explicit play
+        if (musicOn) cozy.tryPlay?.();
+      } catch (e) {
+        console.warn('[ambience] sampled music failed, falling back to cozy', e);
+        cozy = createCozyMusic(ctx, musicBus);
+        cozy.setMuted(!musicOn);
+        cozy.onTrackChange(() => syncMusicBtn());
+        syncMusicBtn();
+      }
+    } else {
+      cozy = createCozyMusic(ctx, musicBus);
+      cozy.setMuted(!musicOn);
+      cozy.onTrackChange(() => syncMusicBtn());
+      syncMusicBtn();
+    }
     return true;
   }
 
@@ -168,8 +189,9 @@ function createAmbience() {
       b.textContent = '🎵';
       b.classList.toggle('off', !musicOn);
       const trackInfo = track ? ` [${track.name}]` : '';
+      const artistInfo = track?.artist ? ` — ${track.artist}` : '';
       b.title = musicOn
-        ? `Music: On${trackInfo} (Click to mute)`
+        ? `Music: On${trackInfo}${artistInfo} (Click to mute)`
         : 'Music: Off (Click to unmute)';
     }
   }
@@ -217,8 +239,10 @@ function createAmbience() {
     get musicOn() { return musicOn; },
     enable() {
       enabled = true;
-      if (ensure() && master) master.gain.value = 0.8;
-      else enabled = false;
+      if (ensure() && master) {
+        master.gain.value = 0.8;
+        if (musicOn) cozy?.tryPlay?.();
+      } else enabled = false;
       syncMuteBtn();
       return enabled;
     },
@@ -231,7 +255,10 @@ function createAmbience() {
     },
     toggleMusic() {
       musicOn = !musicOn;
-      if (cozy) cozy.setMuted(!musicOn);
+      if (cozy) {
+        cozy.setMuted(!musicOn);
+        if (musicOn) cozy.tryPlay?.();
+      }
       syncMusicBtn();
       return musicOn;
     },

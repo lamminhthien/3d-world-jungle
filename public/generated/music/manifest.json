@@ -1,0 +1,32 @@
+{
+  "tracks": [
+    {
+      "id": "joyful-jungle",
+      "name": "🐒 Joyful Jungle",
+      "file": "/generated/music/joyful_jungle_bpm140.mp3",
+      "ogg": "/generated/music/joyful_jungle_bpm140.ogg",
+      "duration": 85.7,
+      "artist": "MintoDog",
+      "license": "CC0 1.0",
+      "url": "https://opengameart.org/content/joyful-jungle"
+    },
+    {
+      "id": "monkeys-spinning",
+      "name": "🎪 Monkeys Spinning Monkeys",
+      "file": "/generated/music/monkeys_spinning_monkeys.ogg",
+      "duration": 125.0,
+      "artist": "Kevin MacLeod (incompetech.com)",
+      "license": "CC BY 3.0",
+      "url": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400011"
+    },
+    {
+      "id": "bamboo-blitz",
+      "name": "🎋 Bamboo Blitz",
+      "file": "/generated/music/bamboo_blitz.ogg",
+      "duration": 76.8,
+      "artist": "Tsorthan Grove",
+      "license": "CC0 1.0",
+      "url": "https://opengameart.org/content/bamboo-blitz"
+    }
+  ]
+}
