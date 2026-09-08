@@ -18,6 +18,7 @@ import { setupControls } from './input/controls.js';
 import { setupPwaUi } from './core/pwa.js';
 import { randomSeedString, rngFromString } from './world/noise.js';
 import { windState } from './world/wind.js';
+import { createWindParticles } from './world/windParticles.js';
 import { createComposer, updateAdvancedEffects, disposeComposer, isRaysEnabled, isFlareEnabled, isGIEnabled, setRaysEnabled, setFlareEnabled, setGIEnabled } from './core/postprocessing.js';
 import { createBounceLight, createDynamicLightRig, updateBounceLight } from './core/globalIllumination.js';
 import { AutoPlayAgent } from './core/autoPlay.js';
@@ -91,6 +92,7 @@ async function boot() {
   const fireflies = createFireflies(scene);
   const camps = createCampsites(scene, initialSeed);
   const animals = createAnimals(scene);
+  const windParticles = createWindParticles(scene);
 
   // FX composer (desktop only, tier-gated). Falls back to direct render on low tier.
   let composer = createComposer(renderer, scene, camera);
@@ -363,6 +365,7 @@ async function boot() {
     try { sky.applyGraphics?.(eff); } catch {}
     try { fireflies.applyGraphics?.(eff); } catch {}
     try { river.applyGraphics?.(eff); } catch {}
+    try { windParticles.applyGraphics?.(eff); } catch {}
     try { animals.applyDensity?.(); } catch {}
     // FPS cap follows preset unless user manually overrode via fpsSelect
     targetFps = eff.fpsCap || targetFps;
@@ -785,6 +788,7 @@ async function boot() {
     // timeOfDay -> fireflies on, moon takes over, clouds darken, campfires glow.
     const nf = env.nightFactor;
     fireflies.update(dt, clock.elapsedTime, player.position, env.timeOfDay);
+    windParticles.update(dt, player.position);
     camps.update(dt, clock.elapsedTime, player.position, nf);
 
     // Phase 7: Dynamic GI — bounce fill + player lantern + firefly lights

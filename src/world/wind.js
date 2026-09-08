@@ -38,14 +38,17 @@ export function updateWind(dt, weather = 'clear') {
   windState.direction.set(Math.cos(_windAngle), Math.sin(_windAngle));
 
   // Base strength — fog removed, remaining weathers stay vibrant (mist is gentle, storm is wild)
-  const baseMap = { clear: 0.45, partlyCloudy: 0.5, overcast: 0.48, mist: 0.32, drizzle: 0.5, rain: 0.68, storm: 0.95 };
-  const base = baseMap[weather] ?? 0.45;
-  // Gust: low-freq noise, larger amplitude for obvious gusts
-  const gust = 0.22 * Math.sin(windState.time * 0.32) + 0.16 * Math.sin(windState.time * 0.68 + 1.3) + 0.08 * Math.sin(windState.time * 1.7 + 0.7);
-  windState.gust = THREE.MathUtils.clamp(gust, -0.3, 0.4);
-  const target = THREE.MathUtils.clamp(base + windState.gust, 0.12, 1.0);
-  // Smooth lerp so gust doesn't snap
-  windState.strength += (target - windState.strength) * Math.min(1, dt * 0.6);
+  const baseMap = { clear: 0.55, partlyCloudy: 0.62, overcast: 0.58, mist: 0.38, drizzle: 0.62, rain: 0.78, storm: 1.0 };
+  const base = baseMap[weather] ?? 0.55;
+  // Gust: low-freq noise, larger amplitude for obvious gusts + occasional sharp gust
+  const gust = 0.28 * Math.sin(windState.time * 0.32) + 0.20 * Math.sin(windState.time * 0.68 + 1.3) + 0.10 * Math.sin(windState.time * 1.7 + 0.7);
+  // Occasional sharp gust spike every ~8-12s
+  const spike = Math.pow(Math.max(0, Math.sin(windState.time * 0.11 + 2.1)), 12) * 0.42;
+  windState.gust = THREE.MathUtils.clamp(gust + spike, -0.3, 0.55);
+  const target = THREE.MathUtils.clamp(base + windState.gust, 0.15, 1.15);
+  // Smooth lerp so gust doesn't snap (faster attack for gusts, slower decay)
+  const lerpSpeed = windState.gust > 0.15 ? 1.2 : 0.6;
+  windState.strength += (target - windState.strength) * Math.min(1, dt * lerpSpeed);
 
   // Push to all registered shader uniforms
   for (const entry of _shaders) {
@@ -111,23 +114,62 @@ export function attachWindSway(material, { strengthScale = 1, heightScale = 0.14
   return material;
 }
 
+// Attach subtle ground undulation + texture drift to a ground material.
+// Ground has no "height" to sway — instead we ripple the vertices diagonally
+// along wind direction and scroll UVs for a wind-washed field look.
+export function attachGroundWind(material) {
+  if (QUALITY.low) return material;
+  if (material.userData.windGroundAttached) return material;
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.windTime = { value: windState.time };
+    shader.uniforms.windDir = { value: windState.direction.clone() };
+    shader.uniforms.windStrength = { value: windState.strength };
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <common>',
+      `#include <common>
+       uniform float windTime;
+       uniform vec2 windDir;
+       uniform float windStrength;`
+    );
+    // Gentle travelling ripple across the whole floor (0.02u amplitude)
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+       {
+         float wave = sin(position.x * 0.18 + position.z * 0.12 + windTime * 0.9) * windStrength * 0.035;
+         wave += sin(position.x * 0.07 - position.z * 0.09 + windTime * 1.4) * windStrength * 0.022;
+         transformed.y += wave;
+         // subtle lateral drift so texture feels alive
+         transformed.x += windDir.x * wave * 0.25;
+         transformed.z += windDir.y * wave * 0.25;
+       }`
+    );
+    _shaders.push({ shader, material });
+    material.userData.windGroundShader = shader;
+    material.userData.windGroundAttached = true;
+  };
+  material.needsUpdate = true;
+  return material;
+}
+
 // Apply sway to the standard kit materials (call once after createVegetationKit).
 export function attachWindToKit(kit) {
   if (QUALITY.low) return;
   // Visible under ortho distance 60 — trunk subtle, foliage/grass exaggerated
+  // Grass boosted so floor reads lush and alive even at rest
   attachWindSway(kit.materials.trunk, { strengthScale: 0.35, heightScale: 0.10 });
   attachWindSway(kit.materials.pine, { strengthScale: 0.95, heightScale: 0.18 });
   attachWindSway(kit.materials.blob, { strengthScale: 1.15, heightScale: 0.20 });
   attachWindSway(kit.materials.palmLeaf, { strengthScale: 1.35, heightScale: 0.26 });
   attachWindSway(kit.materials.leafCard, { strengthScale: 1.45, heightScale: 0.30 });
   attachWindSway(kit.materials.bush, { strengthScale: 0.85, heightScale: 0.18 });
-  attachWindSway(kit.materials.grass, { strengthScale: 1.25, heightScale: 0.32 });
-  attachWindSway(kit.materials.reed, { strengthScale: 1.55, heightScale: 0.38 });
-  attachWindSway(kit.materials.flowerHead, { strengthScale: 1.0, heightScale: 0.22 });
-  attachWindSway(kit.materials.flowerStem, { strengthScale: 0.9, heightScale: 0.24 });
+  attachWindSway(kit.materials.grass, { strengthScale: 1.85, heightScale: 0.42 });
+  attachWindSway(kit.materials.reed, { strengthScale: 1.95, heightScale: 0.45 });
+  attachWindSway(kit.materials.flowerHead, { strengthScale: 1.15, heightScale: 0.26 });
+  attachWindSway(kit.materials.flowerStem, { strengthScale: 1.05, heightScale: 0.28 });
   // Expose for console testing: window.__windState.strength = 1.0 to force visible gust
   if (typeof window !== 'undefined') {
     window.__windState = windState;
-    window.__windGust = () => { windState.strength = 1.2; setTimeout(() => { windState.strength = 0.45; }, 2200); };
+    window.__windGust = () => { windState.strength = 1.35; setTimeout(() => { windState.strength = 0.55; }, 2600); };
   }
 }

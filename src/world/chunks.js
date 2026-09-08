@@ -10,7 +10,7 @@ import { QUALITY } from '../core/setup.js';
 import { obstacles } from '../utils.js';
 import { rngFromString } from './noise.js';
 import { getGroundBump, getGroundTexture } from './textures.js';
-import { attachWindToKit } from './wind.js';
+import { attachGroundWind, attachWindToKit } from './wind.js';
 import {
   createVegetationKit,
   PALETTES,
@@ -66,19 +66,19 @@ export function setChunkRadius(r) {
 
 const POOL = {
   // Genshin meadow: grass up to 1.8x denser, willow/bamboo add trunks, sakura adds petals.
-  // Size for ~30 tries/chunk × 25 chunks with headroom.
+  // Size for ~30 tries/chunk × 25 chunks with headroom. Grass boosted so floor reads lush.
   trees: QUALITY.low ? 2200 : 3800, // + bamboo 3 trunks, willow 1
   crowns: QUALITY.low ? 3200 : 6800, // + sakura/willow/maple puffs + satellites
   palms: QUALITY.low ? 3200 : 6400,
   bushes: 1000,
   cacti: 500,
   rocks: 1200,
-  grass: QUALITY.low ? 1200 : 3600, // Genshin Fontaine meadow — lush fields (was 900/2400)
-  reed: QUALITY.low ? 0 : 1200, // river willow + reed banks
-  leafCard: QUALITY.low ? 0 : 3600,
+  grass: QUALITY.low ? 1800 : 5800, // boosted +60% — floor no longer bare
+  reed: QUALITY.low ? 0 : 1600, // river willow + reed banks + wind gusts
+  leafCard: QUALITY.low ? 0 : 4200,
   fruit: QUALITY.low ? 900 : 1600,
-  flowerStem: QUALITY.low ? 1200 : 2200, // Inazuma flower fields
-  flowerHead: QUALITY.low ? 1200 : 2200,
+  flowerStem: QUALITY.low ? 1200 : 2600, // + clover/weed ground litter
+  flowerHead: QUALITY.low ? 1200 : 2600,
 };
 
 const rand = (rng, a, b) => a + rng() * (b - a);
@@ -99,10 +99,12 @@ export function createWorldManager(scene, seedStr) {
       // Micro grain tiled per chunk (near-white => multiplies biome colors).
       map: getGroundTexture(),
       bumpMap: getGroundBump(),
-      bumpScale: 0.06,
+      bumpScale: 0.08,
       flatShading: true,
       roughness: 1,
     });
+  // Subtle wind ripple across the floor (visible at ground level, cheap 2 sin)
+  try { attachGroundWind(groundMat); } catch {}
   const groundChunks = new Map(); // key -> Mesh
 
   // ---- Global vegetation pools (one draw call each, textured via presets) ----
@@ -317,32 +319,48 @@ export function createWorldManager(scene, seedStr) {
           placeFlowerPatch(meshes, bucket, x, y, z, rand(rng, 0.7, 1.2) * (0.9 + VEGETATION.flowerDensity * 0.15), rng);
         } else if (roll < 0.75 && bucket.ri < POOL.rocks) {
           placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.4, 0.9), rng);
-        } else if (roll < 0.97) {
-          // Genshin Fontaine meadow — lush fields when grassDensity >1
+        } else if (roll < 0.985) {
+          // Genshin Fontaine meadow — lush fields when grassDensity >1 + wind gusts at reeds
           const moist = moistureAt(x, z);
-          const baseThresh = moist > 0.65 ? 0.98 : moist < 0.35 ? 0.9 : 0.97;
-          // Expand meadow chance with grassDensity
-          const threshold = baseThresh - (VEGETATION.grassDensity - 1) * 0.02;
+          // Lower skip chance so floor reads lush even on medium moisture
+          const baseThresh = moist > 0.65 ? 0.99 : moist < 0.35 ? 0.92 : 0.985;
+          const threshold = baseThresh - (VEGETATION.grassDensity - 1) * 0.03;
+          // Small chance to fill otherwise-empty floor with ground litter even when grass skipped
+          let filled = false;
           if (roll >= threshold) {
-            // sparse on dry ridges — skip
-          } else {
-            const isReed = rng() < (0.22 + (VEGETATION.willowDensity - 0.5) * 0.1) && bucket.reedi < POOL.reed && POOL.reed > 0 && s.d < 14;
-            const baseScatter = moist > 0.65 ? 5 : moist > 0.5 ? 3 : 2;
-            const scatter = Math.max(1, Math.round(baseScatter * VEGETATION.grassDensity));
+            if (rng() < 0.28 && bucket.gi < POOL.grass && POOL.grass > 0) {
+              const rx2 = x + rand(rng, -0.6, 0.6);
+              const rz2 = z + rand(rng, -0.6, 0.6);
+              placeGrass(meshes, bucket, rx2, sampleGround(rx2, rz2).y, rz2, rand(rng, 0.45, 0.85), rng, PALETTES.dryGrass);
+              filled = true;
+            }
+            if (!filled) {
+              // truly sparse on dry ridges — skip
+            } else {
+              // fall through after filling one
+            }
+          }
+          if (roll < threshold || filled) {
+            const isReed = rng() < (0.18 + (VEGETATION.willowDensity - 0.5) * 0.12) && bucket.reedi < POOL.reed && POOL.reed > 0 && s.d < 16;
+            const baseScatter = moist > 0.65 ? 6 : moist > 0.5 ? 4 : 3;
+            const scatter = Math.max(2, Math.round(baseScatter * Math.max(1, VEGETATION.grassDensity * 0.9)));
             for (let g = 0; g < scatter; g++) {
               if (isReed) {
                 if (bucket.reedi >= POOL.reed) break;
-                const rx = x + rand(rng, -0.9, 0.9);
-                const rz = z + rand(rng, -0.9, 0.9);
+                const rx = x + rand(rng, -1.0, 1.0);
+                const rz = z + rand(rng, -1.0, 1.0);
                 const ry = sampleGround(rx, rz).y;
-                placeReed(meshes, bucket, rx, ry, rz, rand(rng, 0.6, 1.15), rng, rng() < 0.3 ? PALETTES.grassGold : PALETTES.grass);
+                placeReed(meshes, bucket, rx, ry, rz, rand(rng, 0.6, 1.22), rng, rng() < 0.3 ? PALETTES.grassGold : PALETTES.grass);
               } else {
                 if (bucket.gi >= POOL.grass) break;
-                const rx = x + rand(rng, -0.9, 0.9);
-                const rz = z + rand(rng, -0.9, 0.9);
+                const rx = x + rand(rng, -1.0, 1.0);
+                const rz = z + rand(rng, -1.0, 1.0);
                 const ry = sampleGround(rx, rz).y;
-                const tint = rng() < 0.22 ? PALETTES.grassGold : rng() < 0.5 ? PALETTES.grass : PALETTES.dryGrass;
-                placeGrass(meshes, bucket, rx, ry, rz, rand(rng, 0.55, 1.25), rng, tint);
+                // Wider tint spread + occasional tall weed for silhouette variety
+                const tintRoll = rng();
+                const tint = tintRoll < 0.18 ? PALETTES.grassGold : tintRoll < 0.46 ? PALETTES.grass : tintRoll < 0.74 ? PALETTES.dryGrass : 0x6ec85a;
+                const sc = rand(rng, 0.55, 1.3) * (tintRoll > 0.88 ? 1.18 : 1);
+                placeGrass(meshes, bucket, rx, ry, rz, sc, rng, tint);
               }
             }
           }
