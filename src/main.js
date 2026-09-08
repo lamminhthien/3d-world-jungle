@@ -5,7 +5,7 @@ import { getGraphics, getGraphicsState, setPreset, setOverride, onGraphicsChange
 import { QUALITY, setupCore, applyGraphicsToRenderer, effectivePixelRatio } from './core/setup.js';
 import { runPreGameCache } from './core/bootCache.js';
 import { createWorldManager } from './world/chunks.js';
-import { updateProceduralGen } from './world/procedural.js';
+import { findSpawn, resetProceduralGen, updateProceduralGen } from './world/procedural.js';
 import { createRiver } from './world/river.js';
 import { createBridges, removeBridges } from './world/bridge.js';
 import { createClouds } from './world/clouds.js';
@@ -117,42 +117,42 @@ async function boot() {
   // Each nation is just GEN + VEGETATION params, still seeded infinite.
   // Icon/hue matches the nation so the grid reads like Teyvat.
   const WORLD_CONFIGS = {
-    JUNGLE_PRIME: { gen: { maxHeight: 4.4, levels: 5, rockLine: 1.45, snowLine: 2.05, desertTemp: 0.68, desertMoist: 0.38 }, veg: { treeDensity: 0.92, treeScale: 1.02, grassDensity: 1.45, flowerDensity: 1.25 }, timeOverride: null, label: 'Jungle', fog: { near: 45, far: 110 } },
-    DESERT_WINDS: { gen: { desertTemp: 0.3, desertMoist: 0.6, riverAmp: 5, riverFreq: 0.02 }, veg: { grassDensity: 0.6, flowerDensity: 0.5 }, timeOverride: null },
-    MOUNTAIN_PEAKS: { gen: { maxHeight: 8, levels: 8, rockLine: 1.0, snowLine: 3.0 }, veg: {}, timeOverride: null },
-    BEACH_COVE: { gen: { bankOuter: 12, riverHalf: 4, riverAmp: 6 }, veg: { grassDensity: 1.1, willowDensity: 0.7 }, timeOverride: null },
-    NIGHT_FOREST: { gen: { maxHeight: 4.4, levels: 5, rockLine: 1.45, snowLine: 2.05 }, veg: { treeDensity: 0.92, grassDensity: 1.45 }, timeOverride: 0.5, label: 'Night', fog: { near: 40, far: 95 } },
-    VILLAGE_HUB: { gen: { maxHeight: 4.4, levels: 5, rockLine: 1.45, snowLine: 2.05 }, veg: { treeDensity: 0.82, grassDensity: 1.3 }, timeOverride: null, focusVillage: true, label: 'Village', fog: { near: 45, far: 110 } },
+    JUNGLE_PRIME: { gen: { maxHeight: 4.2, levels: 5, stepSize: 0.52, heightFreq: 0.022, moistureFreq: 0.032, tempFreq: 0.024, riverFreq: 0.032, riverAmp: 14, riverHalf: 3.0, bankOuter: 6.0, rockLine: 1.75, snowLine: 3.4, desertTemp: 0.78, desertMoist: 0.32, savannaMoist: 0.42, savannaTemp: 0.52, volcanoThresh: 0.82, plateauThresh: 0.72 }, veg: { treeDensity: 1.0, treeScale: 1.06, grassDensity: 1.6, flowerDensity: 1.35 }, timeOverride: null, label: 'Jungle', fog: { near: 68, far: 155 } },
+    DESERT_WINDS: { gen: { maxHeight: 3.5, levels: 5, stepSize: 0.46, heightFreq: 0.052, moistureFreq: 0.024, tempFreq: 0.016, riverFreq: 0.016, riverAmp: 4, riverHalf: 1.7, bankOuter: 4.8, rockLine: 1.95, snowLine: 3.9, desertTemp: 0.28, desertMoist: 0.68, savannaMoist: 0.38, savannaTemp: 0.48, volcanoThresh: 0.88, plateauThresh: 0.82 }, veg: { treeDensity: 0.38, treeScale: 0.86, grassDensity: 0.38, flowerDensity: 0.28, bambooDensity: 0.0, willowDensity: 0.05 }, timeOverride: null, fog: { near: 75, far: 180 } },
+    MOUNTAIN_PEAKS: { gen: { maxHeight: 9.2, levels: 9, stepSize: 0.58, heightFreq: 0.038, moistureFreq: 0.028, tempFreq: 0.022, riverFreq: 0.020, riverAmp: 10, riverHalf: 2.2, bankOuter: 4.6, rockLine: 0.85, snowLine: 2.05, desertTemp: 0.65, desertMoist: 0.42, savannaMoist: 0.45, savannaTemp: 0.48, volcanoThresh: 0.70, plateauThresh: 0.62 }, veg: { treeDensity: 0.62, treeScale: 0.95, grassDensity: 0.7, flowerDensity: 0.6 }, timeOverride: null, fog: { near: 78, far: 185 } },
+    BEACH_COVE: { gen: { maxHeight: 3.4, levels: 4, stepSize: 0.44, heightFreq: 0.018, moistureFreq: 0.034, tempFreq: 0.026, riverFreq: 0.028, riverAmp: 6, riverHalf: 4.6, bankOuter: 13.5, rockLine: 1.85, snowLine: 3.6, desertTemp: 0.72, desertMoist: 0.38, savannaMoist: 0.46, savannaTemp: 0.46, volcanoThresh: 0.85, plateauThresh: 0.75 }, veg: { treeDensity: 0.58, treeScale: 0.96, grassDensity: 1.15, flowerDensity: 0.95, bambooDensity: 0.15, willowDensity: 0.9 }, timeOverride: null, fog: { near: 70, far: 165 } },
+    NIGHT_FOREST: { gen: { maxHeight: 4.4, levels: 5, stepSize: 0.52, heightFreq: 0.022, moistureFreq: 0.032, tempFreq: 0.024, riverFreq: 0.032, riverAmp: 14, riverHalf: 3.0, bankOuter: 6.0, rockLine: 1.75, snowLine: 3.4, desertTemp: 0.78, desertMoist: 0.32, savannaMoist: 0.42, savannaTemp: 0.52, volcanoThresh: 0.82, plateauThresh: 0.72 }, veg: { treeDensity: 0.92, treeScale: 1.04, grassDensity: 1.45, flowerDensity: 1.15 }, timeOverride: 0.5, label: 'Night', fog: { near: 55, far: 125 } },
+    VILLAGE_HUB: { gen: { maxHeight: 4.2, levels: 5, stepSize: 0.52, heightFreq: 0.024, moistureFreq: 0.030, tempFreq: 0.024, riverFreq: 0.032, riverAmp: 14, riverHalf: 3.0, bankOuter: 6.0, rockLine: 1.75, snowLine: 3.4, desertTemp: 0.70, desertMoist: 0.35, savannaMoist: 0.44, savannaTemp: 0.50, volcanoThresh: 0.82, plateauThresh: 0.72 }, veg: { treeDensity: 0.82, treeScale: 1.0, grassDensity: 1.3, flowerDensity: 1.1 }, timeOverride: null, focusVillage: true, label: 'Village', fog: { near: 68, far: 155 } },
     // --- Genshin nations ---
     MONDSTADT_ANEMO: { // Mondstadt — windy meadow, dandelion flower fields (Monstadt)
-      gen: { maxHeight: 4.5, levels: 5, rockLine: 1.8, snowLine: 3.2, desertTemp: 0.75, desertMoist: 0.35 },
-      veg: { treeDensity: 0.55, treeScale: 0.95, grassDensity: 1.7, flowerDensity: 1.45, bambooDensity: 0.2, willowDensity: 0.5 },
-      timeOverride: null, fog: { near: 85, far: 165 },
+      gen: { maxHeight: 4.4, levels: 5, stepSize: 0.50, heightFreq: 0.020, moistureFreq: 0.030, tempFreq: 0.020, riverFreq: 0.028, riverAmp: 12, riverHalf: 2.8, bankOuter: 6.5, rockLine: 1.85, snowLine: 3.6, desertTemp: 0.78, desertMoist: 0.32, savannaMoist: 0.40, savannaTemp: 0.50, volcanoThresh: 0.85, plateauThresh: 0.78 },
+      veg: { treeDensity: 0.52, treeScale: 0.94, grassDensity: 1.75, flowerDensity: 1.5, bambooDensity: 0.15, willowDensity: 0.45 },
+      timeOverride: null, fog: { near: 82, far: 175 },
     },
     LIYUE_GEO: { // Liyue — terraced geo cliffs + bamboo
-      gen: { maxHeight: 9, levels: 9, rockLine: 0.9, snowLine: 3.6, riverAmp: 7, riverFreq: 0.03 },
-      veg: { treeDensity: 0.72, bambooDensity: 0.95, grassDensity: 0.9, flowerDensity: 0.8 },
-      timeOverride: null, fog: { near: 75, far: 155 },
+      gen: { maxHeight: 9.5, levels: 9, stepSize: 0.60, heightFreq: 0.042, moistureFreq: 0.028, tempFreq: 0.022, riverFreq: 0.018, riverAmp: 7, riverHalf: 2.4, bankOuter: 5.0, rockLine: 0.82, snowLine: 3.2, desertTemp: 0.68, desertMoist: 0.40, savannaMoist: 0.48, savannaTemp: 0.48, volcanoThresh: 0.72, plateauThresh: 0.58 },
+      veg: { treeDensity: 0.72, treeScale: 0.98, bambooDensity: 0.95, grassDensity: 0.85, flowerDensity: 0.75 },
+      timeOverride: null, fog: { near: 75, far: 170 },
     },
     INAZUMA_ELECTRO: { // Inazuma — sakura isles, beach + lightning night vibe
-      gen: { bankOuter: 9, riverHalf: 3.5, riverAmp: 8, riverFreq: 0.05, desertMoist: 0.5, snowLine: 2.8 },
-      veg: { treeDensity: 0.68, grassDensity: 1.0, flowerDensity: 1.25, bambooDensity: 0.6 },
-      timeOverride: null, fog: { near: 70, far: 140 }, // misty isles
+      gen: { maxHeight: 4.0, levels: 5, stepSize: 0.48, heightFreq: 0.024, moistureFreq: 0.036, tempFreq: 0.028, riverFreq: 0.052, riverAmp: 9, riverHalf: 3.8, bankOuter: 9.5, rockLine: 1.70, snowLine: 3.2, desertTemp: 0.70, desertMoist: 0.45, savannaMoist: 0.44, savannaTemp: 0.48, volcanoThresh: 0.82, plateauThresh: 0.70 },
+      veg: { treeDensity: 0.68, treeScale: 1.0, grassDensity: 1.05, flowerDensity: 1.30, bambooDensity: 0.62, willowDensity: 0.5 },
+      timeOverride: null, fog: { near: 72, far: 158 }, // misty isles
     },
     SUMERU_DENDRO: { // Sumeru rainforest — dense jungle
-      gen: { maxHeight: 5.5, levels: 7, rockLine: 1.6, snowLine: 3.0, moistureFreq: 0.038, desertTemp: 0.7 },
-      veg: { treeDensity: 1.05, treeScale: 1.05, grassDensity: 1.3, flowerDensity: 1.1, bambooDensity: 0.85, willowDensity: 0.6 },
-      timeOverride: null,
+      gen: { maxHeight: 5.8, levels: 7, stepSize: 0.54, heightFreq: 0.030, moistureFreq: 0.040, tempFreq: 0.022, riverFreq: 0.032, riverAmp: 13, riverHalf: 3.2, bankOuter: 6.2, rockLine: 1.65, snowLine: 3.1, desertTemp: 0.76, desertMoist: 0.30, savannaMoist: 0.38, savannaTemp: 0.52, volcanoThresh: 0.78, plateauThresh: 0.68 },
+      veg: { treeDensity: 1.08, treeScale: 1.08, grassDensity: 1.35, flowerDensity: 1.15, bambooDensity: 0.88, willowDensity: 0.62 },
+      timeOverride: null, fog: { near: 65, far: 150 },
     },
     FONTAINE_HYDRO: { // Fontaine — lakes, willows, reeds
-      gen: { bankOuter: 14, riverHalf: 5, riverAmp: 6, riverFreq: 0.035, maxHeight: 4.2 },
-      veg: { treeDensity: 0.62, willowDensity: 1.15, grassDensity: 1.55, flowerDensity: 1.0, bambooDensity: 0.4 },
-      timeOverride: null, fog: { near: 78, far: 150 },
+      gen: { maxHeight: 3.6, levels: 4, stepSize: 0.46, heightFreq: 0.020, moistureFreq: 0.036, tempFreq: 0.026, riverFreq: 0.028, riverAmp: 7, riverHalf: 5.5, bankOuter: 13.5, rockLine: 1.85, snowLine: 3.6, desertTemp: 0.72, desertMoist: 0.36, savannaMoist: 0.46, savannaTemp: 0.46, volcanoThresh: 0.86, plateauThresh: 0.76 },
+      veg: { treeDensity: 0.60, treeScale: 0.98, willowDensity: 1.18, grassDensity: 1.60, flowerDensity: 1.05, bambooDensity: 0.35 },
+      timeOverride: null, fog: { near: 78, far: 165 },
     },
     NATLAN_PYRO: { // Natlan — volcanic ember fields, autumn maples
-      gen: { maxHeight: 7, levels: 7, rockLine: 1.1, snowLine: 3.4, desertTemp: 0.5, desertMoist: 0.5, heightFreq: 0.04 },
-      veg: { treeDensity: 0.6, grassDensity: 0.8, flowerDensity: 0.7 },
-      timeOverride: null, fog: { near: 60, far: 130 }, // hazy volcano
+      gen: { maxHeight: 7.2, levels: 7, stepSize: 0.56, heightFreq: 0.044, moistureFreq: 0.030, tempFreq: 0.024, riverFreq: 0.026, riverAmp: 6, riverHalf: 2.2, bankOuter: 5.0, rockLine: 1.05, snowLine: 3.8, desertTemp: 0.48, desertMoist: 0.52, savannaMoist: 0.50, savannaTemp: 0.44, volcanoThresh: 0.52, plateauThresh: 0.58 },
+      veg: { treeDensity: 0.58, treeScale: 0.96, grassDensity: 0.75, flowerDensity: 0.68, bambooDensity: 0.15, willowDensity: 0.22 },
+      timeOverride: null, fog: { near: 68, far: 158 }, // hazy volcano
     },
     __random__: { gen: {}, veg: {}, timeOverride: null, label: 'Random' },
   };
@@ -208,19 +208,33 @@ async function boot() {
       effectiveSeed = tmpSeed;
       WORLD_CONFIGS[tmpSeed] = config;
     }
-    // Genshin nations: apply both terrain and vegetation densities before rebuild
+    // Vegetation always before rebuild
     Object.assign(VEGETATION, DEFAULT_VEG, config.veg || {});
-    updateProceduralGen(config.gen);
     if (config.fog) {
       WORLD.fogNear = config.fog.near; WORLD.fogFar = config.fog.far;
       if (scene?.fog) { scene.fog.near = config.fog.near; scene.fog.far = config.fog.far; }
     } else {
-      WORLD.fogNear = 45; WORLD.fogFar = 110;
-      if (scene?.fog) { scene.fog.near = 45; scene.fog.far = 110; }
+      WORLD.fogNear = 65; WORLD.fogFar = 155;
+      if (scene?.fog) { scene.fog.near = 65; scene.fog.far = 155; }
     }
 
     const actualSeed = effectiveSeed;
+    // First regeneration builds with seed-derived jitter (for custom/random seeds)
     spawn = world.regenerate(actualSeed);
+    // Preset worlds: overwrite the jittered GEN with the preset's fully explicit
+    // GEN so each nation reads distinct instantly, then rebuild chunks with it.
+    const isPreset = !!WORLD_CONFIGS[requested] && requested !== '__random__';
+    const isRandomPreset = requested === '__random__';
+    if (isPreset || isRandomPreset) {
+      // __random__ already has its bespoke gen in `config`, but it was clobbered
+      // by the jitter inside regenerate — reapply it on a clean baseline.
+      resetProceduralGen();
+      updateProceduralGen(config.gen);
+      // Rebuild terrain with the preset GEN and recompute a valid spawn
+      const newSpawn = findSpawn();
+      spawn = newSpawn;
+      world.rebuildAll(spawn.x, spawn.z);
+    }
     removeBridges(scene, bridgeGroups);
     bridgeGroups = createBridges(scene);
     camps.regenerate(actualSeed);

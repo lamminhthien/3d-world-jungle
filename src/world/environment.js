@@ -495,19 +495,20 @@ export function createEnvironment(scene, opts = {}) {
   scene.add(rain);
 
   // ---- Vibrant time-specific beauties ----
-  // Rainbow: curved tube that appears after rain when sun is opposite rain direction. Cheap tube with 7 colors.
+  // Rainbow: thin elegant arc high in the sky, only briefly after rain + sun.
   let rainbow = null;
   let rainbowMat = null;
+  let rainbowTimer = 0; // seconds since rain->sun transition started
   try {
     const arcPts = [];
-    for (let i = 0; i <= 24; i++) {
-      const t = i / 24;
+    for (let i = 0; i <= 28; i++) {
+      const t = i / 28;
       const ang = Math.PI * t; // semicircle
-      const r = 32;
-      arcPts.push(new THREE.Vector3(Math.cos(ang) * r * 0.55, Math.sin(ang) * 14 + 6, -18 - t * 4));
+      const r = 52;
+      arcPts.push(new THREE.Vector3(Math.cos(ang) * r * 0.62, Math.sin(ang) * 19 + 14, -28 - t * 6));
     }
     const curve = new THREE.CatmullRomCurve3(arcPts);
-    const rainbowGeo = new THREE.TubeGeometry(curve, 24, 0.9, 6, false);
+    const rainbowGeo = new THREE.TubeGeometry(curve, 28, 0.28, 6, false);
     const rainbowColors = [];
     const c = new THREE.Color();
     const palette = [0xff0000, 0xff7f00, 0xffff00, 0x00ff00, 0x00ffff, 0x0000ff, 0x8b00ff];
@@ -522,7 +523,7 @@ export function createEnvironment(scene, opts = {}) {
       rainbowColors.push(c.r, c.g, c.b);
     }
     rainbowGeo.setAttribute('color', new THREE.Float32BufferAttribute(rainbowColors, 3));
-    rainbowMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0, side: THREE.DoubleSide, fog: false, depthWrite: false });
+    rainbowMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0, side: THREE.DoubleSide, fog: false, depthWrite: false, blending: THREE.AdditiveBlending });
     rainbow = new THREE.Mesh(rainbowGeo, rainbowMat);
     rainbow.frustumCulled = false;
     rainbow.visible = false;
@@ -981,20 +982,35 @@ export function createEnvironment(scene, opts = {}) {
       const isNightDeep = t >= 21 || t < 4.5;
       const isAfterRain = state.prevWeather === 'rain' || state.prevWeather === 'storm';
 
-      // Rainbow: shows for ~30s after rain stops, when sun is out
+      // Rainbow: thin elegant arc, only ~18s after rain->sun, not permanent
       if (rainbow && rainbowMat) {
-        const wantRainbow = isAfterRain && state.blend > 0.85 && (state.weather === 'clear' || state.weather === 'partlyCloudy' || state.weather === 'mist') && isDay && isMorning && wx.sun > 0.6;
-        // Also allow drizzle -> clear within golden hour for dramatic sunset rainbow
-        const sunny = state.weather === 'clear' || state.weather === 'partlyCloudy';
-        const rainbowChance = (isAfterRain && sunny && wx.sun > 0.5 && state.blend > 0.7) ? 1 : (wantRainbow ? 1 : 0);
-        const rainbowTarget = rainbowChance ? 0.92 : 0;
-        rainbowMat.opacity += (rainbowTarget - rainbowMat.opacity) * Math.min(1, dt * 0.35);
+        const justAfterRain = isAfterRain && (state.weather === 'clear' || state.weather === 'partlyCloudy') && isDay && wx.sun > 0.55;
+        // start/hold timer while conditions met, decay otherwise
+        if (justAfterRain && state.blend > 0.25 && state.blend < 1) {
+          rainbowTimer = Math.min(18, rainbowTimer + dt);
+        } else if (!justAfterRain) {
+          rainbowTimer = Math.max(0, rainbowTimer - dt * 0.7);
+        } else if (state.blend >= 1) {
+          // after transition finished, count down 18s window then hide
+          rainbowTimer = Math.max(0, rainbowTimer - dt * 0.9);
+          if (rainbowTimer <= 0.05) {
+            // clear the "after rain" flag after window expires so it doesn't retrigger until next rain
+            // keep prevWeather as is but require a new rain->clear cycle; we just wait for next weather roll
+          }
+        }
+        const wantRainbow = rainbowTimer > 0.5 && state.blend > 0.15 && wx.sun > 0.5;
+        const rainbowTarget = wantRainbow ? 0.38 : 0;
+        rainbowMat.opacity += (rainbowTarget - rainbowMat.opacity) * Math.min(1, dt * 0.45);
         rainbow.visible = rainbowMat.opacity > 0.02;
         if (rainbow.visible) {
           rainbow.position.set(focusV.x, 0, focusV.z);
-          // Face sun direction so arc is opposite sun
           const ang = Math.atan2(sunDir.z, sunDir.x);
           rainbow.rotation.y = -ang;
+        }
+        // auto-clear prevWeather after 18s window so rainbow doesn't stay forever on clear days
+        if (rainbowTimer <= 0 && state.blend >= 1 && isAfterRain) {
+          // don't mutate state.weather, just let next weather cycle naturally replace prevWeather
+          // but keep timer at 0 so no visible rainbow
         }
       }
 

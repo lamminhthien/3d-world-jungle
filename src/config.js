@@ -79,9 +79,10 @@ export const WORLD = {
   groundSegments: 64,
   playRadius: 37,
   fogColor: 0xaee3f5,
-  // Tighter fog gives depth without washing to gray at distance (screenshot looked hazy gray)
-  fogNear: 45,
-  fogFar: 110,
+  // Pulled back: was 45/110 which whitewashed mid-distance and hid biome variation.
+  // Now 65/155 lets the jungle read lush to the horizon; per-preset fog overrides still apply.
+  fogNear: 65,
+  fogFar: 155,
   // Meadow / beach polish
   grassFieldAmp: 1.8,    // Fontaine meadow extra scatter radius
   beachPalmBoost: 1.4,   // beach.cove + Inazuma beach get 40% more palms

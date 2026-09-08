@@ -42,7 +42,7 @@ export const SURFACES = {
 // Jungle-first: most of the map should be lush lowland (green) with rare
 // rocky peaks. Previous defaults (maxHeight 5, rock 1.4, snow 2.0) made ~55%
 // of non-river terrain read as gray mountain, which is what the screenshot shows.
-export const GEN = {
+export const GEN_DEFAULTS = {
   maxHeight: 4.8,
   levels: 6,
   stepSize: 0.52,
@@ -63,6 +63,12 @@ export const GEN = {
   plateauThresh: 0.52,
 };
 
+export const GEN = { ...GEN_DEFAULTS };
+
+export function resetProceduralGen() {
+  Object.assign(GEN, GEN_DEFAULTS);
+}
+
 export function updateProceduralGen(config) {
   Object.assign(GEN, config);
 }
@@ -82,6 +88,8 @@ export function getSeed() {
 }
 
 export function initProcedural(seedStr) {
+  // Always start from clean defaults so jitter does not accumulate across regenerations
+  resetProceduralGen();
   seed = String(seedStr || 'FOREST_123');
   const h = makeNoise2D(`h:${seed}`);
   const m = makeNoise2D(`m:${seed}`);
