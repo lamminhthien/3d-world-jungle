@@ -229,6 +229,12 @@ export function createAdventure(scene, spawn) {
   });
 
   updateUi();
+  // Expose for Test Mode (inventory / questLog for quick grant/reset)
+  if (typeof window !== 'undefined') {
+    window.__adventureInventory = inventory;
+    window.__adventureQuestLog = questLog;
+    window.__adventureState = state;
+  }
   return {
     update(_dt, playerPos) {
       ranger.rotation.y = Math.atan2(playerPos.x - ranger.position.x, playerPos.z - ranger.position.z);
@@ -253,5 +259,10 @@ export function createAdventure(scene, spawn) {
     },
     regenerate,
     state,
+    inventory,
+    questLog,
+    herbs,
+    resources,
+    ranger,
   };
 }

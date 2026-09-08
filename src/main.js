@@ -24,6 +24,7 @@ import { AutoPlayAgent } from './core/autoPlay.js';
 import { createAdventure } from './gameplay/adventure.js';
 import { createVillage } from './gameplay/village.js';
 import { createLandmarks } from './world/landmarks.js';
+import { createTestMode } from './core/testMode.js';
 
 // ============ Loop State ============
 let targetFps = defaultFpsCap();
@@ -700,7 +701,9 @@ async function boot() {
       _move.set(0, 0, 0).addScaledVector(_fwd, -iz).addScaledVector(_right, ix).normalize();
 
       // Analog: light push = walk slowly, hard push = walk fast.
-      const speed = SPEED * (sprinting ? 1.6 : 1) * (0.35 + 0.65 * inputMag);
+      // Test mode speed multiplier (window.__speedMul) for dev pacing.
+      const speedMul = (typeof window !== 'undefined' && window.__speedMul) ? Number(window.__speedMul) || 1 : 1;
+      const speed = SPEED * speedMul * (sprinting ? 1.6 : 1) * (0.35 + 0.65 * inputMag);
 
       let nx = player.position.x + _move.x * speed * dt;
       let nz = player.position.z + _move.z * speed * dt;
@@ -956,6 +959,49 @@ async function boot() {
 
   setProgress(1, 'Ready — into the jungle! 🌴');
   animate();
+  // ---- Test Mode: init overlay for scenario/weather/lifecycle/world QA ----
+  try {
+    const testMode = createTestMode({
+      world, env, player, camTarget, scene, coreState: state,
+      adventure, village, landmarks, camps, animals,
+      WORLD_CONFIGS,
+      applySeed: (s, t) => applySeed(s, t),
+      getSeed: () => { try { return world.stats().seed; } catch { return initialSeed; } },
+      river, sky, fireflies, core,
+    });
+    if (typeof window !== 'undefined') {
+      window.__testMode = testMode;
+      window.__world = world;
+      window.__env = env;
+      window.__player = player;
+      window.__camTarget = camTarget;
+      window.__adventure = adventure;
+      window.__village = village;
+      window.__animals = animals;
+      window.__camps = camps;
+      window.__WORLD_CONFIGS = WORLD_CONFIGS;
+      window.__setRaysEnabled = setRaysEnabled;
+      window.__setFlareEnabled = setFlareEnabled;
+      window.__setGIEnabled = setGIEnabled;
+      // Also expose inventory/questLog if adventure exposes them; otherwise try to capture
+      // For testMode we lazily try to read them from __adventureInventory etc.
+    }
+    // URL-driven initial state: ?time= & ?weather= & ?seed= already handled for seed,
+    // but test mode also honors ?time= and ?weather= for quick links.
+    try {
+      const sp = new URLSearchParams(location.search);
+      const tParam = sp.get('time');
+      const wParam = sp.get('weather');
+      if (tParam !== null && env?.setTime) {
+        const tv = Number(tParam);
+        if (!isNaN(tv)) env.setTime(tv);
+      }
+      if (wParam && env?.setWeather) {
+        // defer one tick so blend starts clean
+        setTimeout(() => { try { env.setWeather(wParam); } catch {} }, 50);
+      }
+    } catch {}
+  } catch (e) { console.warn('[testMode] init failed', e); }
   // Hold one beat so players see 100%, then reveal the title screen.
   // The world keeps rendering behind it (attract mode) until Play.
   setTimeout(() => loadingEl.classList.add('hidden'), 250);
