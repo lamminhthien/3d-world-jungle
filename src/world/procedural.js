@@ -359,26 +359,27 @@ export function densityForBiome(biome) {
   return BIOME_DENSITY[biome] || BIOME_DENSITY[BIOMES.JUNGLE];
 }
 
-// Vertex / ground colors per biome (vivid cartoon look).
-// Jungle greens pushed slightly more saturated/warm so the world reads lush
-// even in shadow; mountain gray warmed toward stone brown to avoid cold wash.
+// Vertex / ground colors per biome — Stardew Valley cozy palette.
+// Warm saturated grass with a 1m checkerboard (Stardew farm tiles), creamy
+// sand, wheat-tan plateau. Pre-saturated hexes so no runtime HSL boost needed.
 const biomeColors = {
   [BIOMES.RIVER]: [0xe8cf7e, 0xd4b45e],
-  [BIOMES.BEACH]: [0xf2d789, 0xe9c86e],
-  [BIOMES.JUNGLE]: [0x6be05a, 0x2e9d3a],
-  [BIOMES.SAVANNA]: [0xc8e06a, 0x9ab84a], // thảo nguyên - dry yellow-green prairie
-  [BIOMES.HILLS]: [0x7fbf6a, 0x5a9a45],   // đồi núi - rolling green hill
-  [BIOMES.FOOTHILLS]: [0xa8a99a, 0x8a9a85], // chân núi - rocky-green transition
-  [BIOMES.PLATEAU]: [0xd4c49a, 0xb8a87a], // cao nguyên - tan high plain
-  [BIOMES.DESERT]: [0xf2cf6e, 0xdd9f3f],
-  [BIOMES.VOLCANO]: [0x5a4a45, 0x3d2f2b], // núi lửa - dark ash / basalt
-  [BIOMES.MOUNTAIN]: [0xa8a99a, 0x7e8378],
-  [BIOMES.SNOW]: [0xffffff, 0xd8ecf7],
+  [BIOMES.BEACH]: [0xf6e3a1, 0xeccf87], // stardew cream sand
+  [BIOMES.JUNGLE]: [0x84cc55, 0x69b844], // stardew meadow: light/dark checker pair
+  [BIOMES.SAVANNA]: [0xd8c86a, 0xbfa84e], // thảo nguyên - golden meadow
+  [BIOMES.HILLS]: [0x7cc46a, 0x5da24b],   // đồi núi - rolling green hill
+  [BIOMES.FOOTHILLS]: [0x9fb08a, 0x859578], // chân núi - sage transition
+  [BIOMES.PLATEAU]: [0xdbca9c, 0xbfab7d], // cao nguyên - wheat tan
+  [BIOMES.DESERT]: [0xf2cf6e, 0xe0a44a],
+  [BIOMES.VOLCANO]: [0x6b5a52, 0x453633], // núi lửa - warm ash / basalt
+  [BIOMES.MOUNTAIN]: [0xa8a498, 0x7f7b72], // warm stone
+  [BIOMES.SNOW]: [0xffffff, 0xdcecf5],
 };
 
-// Flower-meadow speckle tints dotted over the jungle floor (hash-driven,
-// no extra noise — a few % of vertices blush pink/gold/white like petals).
-const MEADOW_DOTS = [0xff8fb5, 0xffd93b, 0xffffff, 0xc99aff, 0xff7e4f];
+// Stardew forage dots over the grass (pink poppy / gold / white / purple).
+const MEADOW_DOTS = [0xff9ec6, 0xffd93b, 0xffffff, 0xc99aff, 0xff7e4f];
+// Clover patch tints — cozy darker/lighter meadow greens (was neon teal/lime).
+const MEADOW_GREENS = [0x4fae46, 0xa8e05f];
 
 const _bcB = new THREE.Color();
 const _bcScratch = new THREE.Color();
@@ -391,54 +392,63 @@ export function hashXZ(x, z) {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 export function biomeGroundColor(biome, random, target = _bcScratch, x = 0, z = 0, y = 0) {
-  const [a, b] = biomeColors[biome] || biomeColors[BIOMES.JUNGLE];
-  // Perf: called per ground vertex (~15k times per full rebuild on SEG 24).
-  // Writes into a shared scratch color (no allocs). The two lightness tweaks
-  // (random grain ±0.02 + terrace stripe ±0.012) are fused into ONE offsetHSL:
-  // each offsetHSL does an RGB->HSL->RGB round trip, so two calls = 2x cost.
-  // Read r/g/b synchronously — do not hold the reference.
-  //
-  // NOTE: y here is already the stepped height, so lvl = y / stepSize needs
-  // no extra noise (Math.round matches the old behavior).
-  target.setHex(a).lerp(_bcB.setHex(b), random());
-  const lvl = Math.round(y / GEN.stepSize);
-  // Softer terrace banding: was ±0.012 which carved harsh grid on gray peaks
-  const dl = (random() - 0.5) * 0.036 + (lvl % 2 === 0 ? 0.008 : -0.008);
-  target.offsetHSL(0, 0, dl);
-  if (biome === BIOMES.JUNGLE) {
-    // Lime/teal patches + tiny petal dots: the floor blooms with color.
-    const h = hashXZ(x, z);
-    if (h > 0.84) {
-      target.lerp(_bcB.setHex(h > 0.92 ? 0x2fd6a0 : 0xb8e63a), 0.45);
-    } else if (h < 0.055) {
-      target.lerp(_bcB.setHex(MEADOW_DOTS[(h * 9973 | 0) % MEADOW_DOTS.length]), 0.6);
+  // Perf: called per ground vertex (~15k× per full rebuild on SEG 24).
+  // Stardew pass: ZERO offsetHSL (each is an RGB→HSL→RGB round trip, ~3× was
+  // 45k conversions/rebuild). All variation is hash-driven direct RGB scale —
+  // no RNG closure calls, no allocs (shared scratch). `random` kept for API
+  // compat but unused on the hot path.
+  const pair = biomeColors[biome] || biomeColors[BIOMES.JUNGLE];
+  const h0 = hashXZ(x + 13.7, z + 7.3);
+  target.setHex(pair[0]).lerp(_bcB.setHex(pair[1]), h0);
+  const h = hashXZ(x, z);
+  let f = 1;
+  if (biome === BIOMES.JUNGLE || biome === BIOMES.HILLS) {
+    // Stardew 1m checkerboard: alternate tiles ~7% darker — the cozy farm look.
+    if (((Math.floor(x) + Math.floor(z)) & 1) !== 0) f *= 0.93;
+    // Fine grain ±3.5% so tiles don't read flat.
+    f *= 1 + (hashXZ(x * 1.7 + 3.1, z * 1.7 + 9.2) - 0.5) * 0.07;
+    // Clover patches (cozy greens) + rare forage flower dots.
+    if (h > 0.86) {
+      target.lerp(_bcB.setHex(h > 0.93 ? MEADOW_GREENS[0] : MEADOW_GREENS[1]), 0.42);
+    } else if (h < 0.045) {
+      target.lerp(_bcB.setHex(MEADOW_DOTS[((h * 9973) | 0) % MEADOW_DOTS.length]), 0.55);
     }
-    target.offsetHSL(0, 0.045, 0); // stronger saturation lift for the jungle
-  } else if (biome === BIOMES.SAVANNA) {
-    // Thảo nguyên - golden dry grass flecks
-    const h = hashXZ(x, z);
-    if (h > 0.88) target.lerp(_bcB.setHex(0xe8d44f), 0.35);
-    else if (h < 0.06) target.lerp(_bcB.setHex(0xfff0b0), 0.35);
-    target.offsetHSL(0, 0.03, 0);
-  } else if (biome === BIOMES.SNOW) {
-    if (hashXZ(x, z) < 0.18) target.lerp(_bcB.setHex(0x8d9299), 0.45);
-  } else if (biome === BIOMES.MOUNTAIN || biome === BIOMES.HILLS) {
-    if (y >= GEN.snowLine - GEN.stepSize && hashXZ(x, z) > 0.72) {
-      target.lerp(_bcB.setHex(0xdde7ee), 0.5);
+  } else if (biome === BIOMES.SAVANNA || biome === BIOMES.BEACH) {
+    if (((Math.floor(x) + Math.floor(z)) & 1) !== 0) f *= 0.95;
+    f *= 1 + (h - 0.5) * 0.06;
+    if (biome === BIOMES.SAVANNA) {
+      if (h > 0.88) target.lerp(_bcB.setHex(0xe8d44f), 0.3);
+      else if (h < 0.06) target.lerp(_bcB.setHex(0xfff0b0), 0.3);
+    } else if (h > 0.85) {
+      target.lerp(_bcB.setHex(0xfff6d8), 0.35); // sun-bleached shell sand
     }
-  } else if (biome === BIOMES.PLATEAU) {
-    if (hashXZ(x, z) > 0.78) target.lerp(_bcB.setHex(0xc2b08a), 0.35);
-    target.offsetHSL(0, -0.02, 0.02);
-  } else if (biome === BIOMES.VOLCANO) {
-    // Ash flecks + cooling lava glow spots
-    const h = hashXZ(x, z);
-    if (h > 0.92) target.lerp(_bcB.setHex(0x8a3a2a), 0.45); // ember
-    else if (h > 0.82) target.lerp(_bcB.setHex(0x6b5a54), 0.3);
-    else if (h < 0.08) target.lerp(_bcB.setHex(0x2a1f1d), 0.4);
-  } else if (biome === BIOMES.DESERT) {
-    if (hashXZ(x, z) > 0.82) target.lerp(_bcB.setHex(0xc9a86a), 0.3);
-  } else if (biome === BIOMES.FOOTHILLS) {
-    if (hashXZ(x, z) > 0.75) target.lerp(_bcB.setHex(0x9aa08a), 0.35);
+  } else {
+    // Rock/snow/desert/volcano: soft terrace banding + grain, no checker.
+    const lvl = Math.round(y / GEN.stepSize);
+    f *= (lvl & 1) === 0 ? 1.018 : 0.982;
+    f *= 1 + (h - 0.5) * 0.07;
+    if (biome === BIOMES.SNOW) {
+      if (h < 0.18) target.lerp(_bcB.setHex(0x8d9299), 0.4);
+    } else if (biome === BIOMES.MOUNTAIN) {
+      if (y >= GEN.snowLine - GEN.stepSize && h > 0.72) {
+        target.lerp(_bcB.setHex(0xdde7ee), 0.5);
+      }
+    } else if (biome === BIOMES.PLATEAU) {
+      if (h > 0.78) target.lerp(_bcB.setHex(0xc2b08a), 0.3);
+    } else if (biome === BIOMES.VOLCANO) {
+      if (h > 0.92) target.lerp(_bcB.setHex(0x8a3a2a), 0.4); // ember
+      else if (h > 0.82) target.lerp(_bcB.setHex(0x6b5a54), 0.28);
+      else if (h < 0.08) target.lerp(_bcB.setHex(0x2a1f1d), 0.35);
+    } else if (biome === BIOMES.DESERT) {
+      if (h > 0.82) target.lerp(_bcB.setHex(0xc9a86a), 0.28);
+    } else if (biome === BIOMES.FOOTHILLS) {
+      if (h > 0.75) target.lerp(_bcB.setHex(0x9aa08a), 0.3);
+    }
+  }
+  if (f !== 1) {
+    target.r *= f;
+    target.g *= f;
+    target.b *= f;
   }
   return target;
 }

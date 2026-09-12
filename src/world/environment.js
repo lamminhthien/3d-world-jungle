@@ -700,6 +700,9 @@ export function createEnvironment(scene, opts = {}) {
   // but ONLY on day/night flips: toggling castShadow rebuilds all lit shader
   // programs, so per-frame toggling would itself hitch every frame.
   let lastIsDay = true;
+  // Perf caches for DOM overlay writes (avoid style recalc every frame).
+  let lastSunsetOv = null;
+  let lastLightningOv = null;
 
   const api = {
     state,
@@ -871,8 +874,8 @@ export function createEnvironment(scene, opts = {}) {
           ? THREE.MathUtils.clamp(1 - Math.abs(sunDir.y) * 4.5, 0, 1) * 0.55 * wx.sun
           : 0;
         const ovStr = overlayIntensity.toFixed(2);
-        if (ovStr !== update._lastSunsetOv) {
-          update._lastSunsetOv = ovStr;
+        if (ovStr !== lastSunsetOv) {
+          lastSunsetOv = ovStr;
           sunsetOverlay.style.opacity = ovStr;
         }
       }
@@ -1068,12 +1071,12 @@ export function createEnvironment(scene, opts = {}) {
         const lv = Math.max(0, lightningFlash);
         // Perf: only touch the DOM when the value actually changes.
         const lvStr = (lv * 0.85).toFixed(2);
-        if (lightningOverlay && lvStr !== update._lastLightningOv) {
-          update._lastLightningOv = lvStr;
+        if (lightningOverlay && lvStr !== lastLightningOv) {
+          lastLightningOv = lvStr;
           lightningOverlay.style.opacity = lvStr;
         }
-        if (lv <= 0 && lightningOverlay && update._lastLightningOv !== '0') {
-          update._lastLightningOv = '0';
+        if (lv <= 0 && lightningOverlay && lastLightningOv !== '0') {
+          lastLightningOv = '0';
           lightningOverlay.style.opacity = '0';
         }
       }

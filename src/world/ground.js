@@ -9,9 +9,10 @@ export function createGround(scene) {
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   const colors = [];
-  const cGrass = new THREE.Color(0x7aa856);
-  const cGrass2 = new THREE.Color(0x5f8a44);
-  const cSand = new THREE.Color(0xd9c27a);
+  // Stardew cozy pair + cream sand (matches procedural.js checker palette).
+  const cGrass = new THREE.Color(0x84cc55);
+  const cGrass2 = new THREE.Color(0x69b844);
+  const cSand = new THREE.Color(0xf6e3a1);
 
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);

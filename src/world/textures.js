@@ -693,13 +693,13 @@ function buildGround() {
   if (g) g.imageSmoothingEnabled = true;
   if (b) b.imageSmoothingEnabled = true;
 
-  // Soil patches underneath — warmer, with AO.
+  // Soil patches underneath — warm near-white (Stardew: grain, not gray wash).
   const soilCount = scaleCount(40);
   for (let i = 0; i < soilCount; i++) {
     const x = Math.random() * size;
     const y = Math.random() * size;
     const r = 5 + Math.random() * 14;
-    const v = 194 + Math.random() * 30;
+    const v = 226 + Math.random() * 24;
     const grad = g.createRadialGradient(0, 0, 0, 0, 0, r);
     grad.addColorStop(0, `rgba(${v | 0},${v | 0},${v | 0},0.56)`);
     grad.addColorStop(1, `rgba(${v | 0},${v | 0},${v | 0},0)`);
@@ -714,7 +714,7 @@ function buildGround() {
     });
   }
 
-  // Grass blades: short strokes in varied directions — curvature added.
+  // Grass blades: short strokes, Stardew-bright (205-255, no gray wash).
   const bladeCount = scaleCount(900);
   for (let i = 0; i < bladeCount; i++) {
     const x = Math.random() * size;
@@ -722,7 +722,7 @@ function buildGround() {
     const len = 3 + Math.random() * 7;
     const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.6;
     const dark = Math.random() < 0.55;
-    const v = dark ? 148 + Math.random() * 50 : 214 + Math.random() * 40;
+    const v = dark ? 205 + Math.random() * 30 : 235 + Math.random() * 20;
     const draw = (ctx, style, w) => {
       ctx.strokeStyle = style;
       ctx.lineWidth = w;
@@ -743,7 +743,7 @@ function buildGround() {
     if (b) draw(b, dark ? 'rgba(90,90,90,0.60)' : 'rgba(170,170,170,0.60)', 1.18);
   }
 
-  // Clover / pebble dots — hue jitter for variety.
+  // Clover / pebble dots — near-white so they sparkle, never gray out.
   const dotCount = scaleCount(130);
   for (let i = 0; i < dotCount; i++) {
     const x = Math.random() * size;
@@ -752,7 +752,7 @@ function buildGround() {
     const bright = Math.random() < 0.4;
     g.fillStyle = bright
       ? `rgba(255,255,255,${0.42 + Math.random() * 0.38})`
-      : `rgba(168,168,168,${0.32 + Math.random() * 0.30})`;
+      : `rgba(228,228,228,${0.30 + Math.random() * 0.28})`;
     wrapped(g, size, x, y, (px, py) => {
       g.beginPath();
       g.arc(px, py, r, 0, Math.PI * 2);
@@ -760,7 +760,7 @@ function buildGround() {
     });
   }
 
-  grain(g, b, size, 700, 0.35, 160, 240);
+  grain(g, b, size, 700, 0.3, 212, 250);
   if (g) g.imageSmoothingEnabled = false;
   if (b) b.imageSmoothingEnabled = false;
   const { map, bumpMap } = makePair(cc, bc);

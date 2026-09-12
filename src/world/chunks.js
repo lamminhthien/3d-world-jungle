@@ -189,24 +189,26 @@ export function createWorldManager(scene, seedStr) {
     const centerZ = cz * CHUNK_SIZE + CHUNK_SIZE / 2;
     geo.translate(centerX, 0, centerZ);
     const pos = geo.attributes.position;
-    const rng = rngFromString(`${getSeed()}|color|${cx},${cz}`);
     const colors = new Float32Array(pos.count * 3);
     // Direct array access: getX/getZ/setY are function calls per vert (~625×
     // per chunk). Raw .array indexing cuts ~3 call overheads per vertex.
+    // Stardew pass: biomeGroundColor is now fully hash-driven (no per-chunk
+    // RNG string hash, no offsetHSL) — pass null, colors come from x/z hash.
     const arr = pos.array;
     for (let i = 0; i < pos.count; i++) {
-      const x = arr[i * 3];
-      const z = arr[i * 3 + 2];
+      const i3 = i * 3;
+      const x = arr[i3];
+      const z = arr[i3 + 2];
       // Single noise pass for height+biome (was: proceduralGroundHeight +
       // getBiome = 2x river fbm + 2x height fbm per vert).
       const s = sampleGround(x, z);
-      arr[i * 3 + 1] = s.y;
+      arr[i3 + 1] = s.y;
       // P0 banding: altitude stripe + ragged snow edge need x/z/y (integer
       // hash, no extra noise — see procedural.js).
-      const c = biomeGroundColor(s.biome, rng, undefined, x, z, s.y);
-      colors[i * 3] = c.r;
-      colors[i * 3 + 1] = c.g;
-      colors[i * 3 + 2] = c.b;
+      const c = biomeGroundColor(s.biome, null, undefined, x, z, s.y);
+      colors[i3] = c.r;
+      colors[i3 + 1] = c.g;
+      colors[i3 + 2] = c.b;
     }
     pos.needsUpdate = true;
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));

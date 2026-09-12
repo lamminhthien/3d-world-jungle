@@ -156,6 +156,8 @@ function cactus() {
 }
 
 function ground() {
+  // Stardew pass: near-white blades only (205-255) + low opacity so the
+  // texture adds grain without graying out the saturated vertex colors.
   const color = rng('ground-color');
   const bump = rng('ground-bump');
   const draw = (isBump) => {
@@ -164,13 +166,13 @@ function ground() {
     for (let i = 0; i < 700; i++) {
       const x = r() * size;
       const y = r() * size;
-      const tone = isBump ? 70 + Math.floor(r() * 125) : 150 + Math.floor(r() * 100);
+      const tone = isBump ? 70 + Math.floor(r() * 125) : 205 + Math.floor(r() * 50);
       const w = 0.7 + r() * 2.3;
-      out += wrapPoint(x, y, (px, py) => `<path d="M${px} ${py + 2}l${(r() * 3 - 1.5).toFixed(1)} ${(-2 - r() * 3).toFixed(1)}" stroke="rgb(${tone},${tone},${tone})" stroke-width="${w.toFixed(1)}" opacity=".5"/>`);
+      out += wrapPoint(x, y, (px, py) => `<path d="M${px} ${py + 2}l${(r() * 3 - 1.5).toFixed(1)} ${(-2 - r() * 3).toFixed(1)}" stroke="rgb(${tone},${tone},${tone})" stroke-width="${w.toFixed(1)}" opacity=".32"/>`);
     }
     return out;
   };
-  return tilePattern('ground', { background: '#f7f7f7', draw });
+  return tilePattern('ground', { background: '#fbfbf6', draw });
 }
 
 function sand() {
