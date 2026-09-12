@@ -52,7 +52,7 @@ function buildBirdWingGeo() {
 }
 
 export function createBirds(scene) {
-  const mat = new THREE.MeshLambertMaterial({ color: 0x2c1e0f, side: THREE.DoubleSide });
+  const mat = new THREE.MeshLambertMaterial({ color: 0x2c1e0f, side: THREE.DoubleSide, transparent: true, opacity: 1 });
   const geo = buildBirdWingGeo();
   const n = birdCount();
   const mesh = new THREE.InstancedMesh(geo, mat, BASE_BIRD_COUNT);
@@ -85,13 +85,12 @@ export function createBirds(scene) {
     t += dt;
     const n = mesh.count;
     if (n === 0) return;
-    // Slowly drift flock centres toward the player
+    // Slowly drift flock centres toward the player (squared distance — no sqrt)
     for (let i = 0; i < n; i++) {
       const b = birds[i];
       const dx = playerPos.x - b.cx;
       const dz = playerPos.z - b.cz;
-      const dDist = Math.sqrt(dx * dx + dz * dz);
-      if (dDist > 35) {
+      if (dx * dx + dz * dz > 35 * 35) {
         b.cx += dx * dt * 0.05;
         b.cz += dz * dt * 0.05;
       }
@@ -196,7 +195,7 @@ function buildDeerGeo() {
 
 export function createDeer(scene) {
   const deerGeo = buildDeerGeo();
-  const deerMat = new THREE.MeshLambertMaterial({ color: 0x8b5e3c, flatShading: true });
+  const deerMat = new THREE.MeshLambertMaterial({ color: 0x8b5e3c, flatShading: true, transparent: true, opacity: 1 });
   const mesh = new THREE.InstancedMesh(deerGeo, deerMat, BASE_DEER_COUNT);
   mesh.count = deerCount();
   mesh.frustumCulled = false;
@@ -206,9 +205,11 @@ export function createDeer(scene) {
   const deer = [];
   for (let i = 0; i < BASE_DEER_COUNT; i++) {
     const angle = Math.random() * Math.PI * 2;
+    const dx = (Math.random() - 0.5) * 40;
+    const dz = (Math.random() - 0.5) * 40;
     deer.push({
-      x: (Math.random() - 0.5) * 40,
-      z: (Math.random() - 0.5) * 40,
+      x: dx,
+      z: dz,
       ry: Math.random() * Math.PI * 2,
       speed: 0.4 + Math.random() * 0.8,
       phase: Math.random() * Math.PI * 2,
@@ -217,6 +218,10 @@ export function createDeer(scene) {
       scale: 0.7 + Math.random() * 0.3,
       state: 'idle', // 'idle' | 'walk'
       idleTimer: 1 + Math.random() * 3,
+      // Perf: groundHeight() is ~15 noise evals — cache per deer, refresh
+      // staggered (~0.2s) since terrain changes slowly under a walking deer.
+      _gy: 0,
+      _gyT: 0,
     });
   }
 
@@ -268,11 +273,16 @@ export function createDeer(scene) {
         }
       }
 
-      const groundY = groundHeight(d.x, d.z);
+      d._gyT -= dt;
+      if (d._gyT <= 0 || d.state === 'walk') {
+        // Walking deer move — refresh at ~5Hz; idle deer rarely.
+        d._gy = groundHeight(d.x, d.z);
+        d._gyT = d.state === 'walk' ? 0.2 : 0.6;
+      }
+      const groundY = d._gy;
       // Leg bob animation
       const bob = d.state === 'walk' ? Math.abs(Math.sin(t * 4 + d.phase)) * 0.05 : 0;
       const py = groundY + 0.35 * d.scale + bob;
-
       _p.set(d.x, py, d.z);
       _e.set(0, d.ry, 0);
       _q.setFromEuler(_e);
@@ -428,7 +438,8 @@ export function createButterflies(scene) {
     b.push({
       x:(Math.random()-0.5)*30, z:(Math.random()-0.5)*30,
       ry:Math.random()*6.28, flap:Math.random()*6.28, speed:0.7+Math.random()*1.2,
-      bob:Math.random()*6.28, wander:Math.random()*6.28, scale:0.45+Math.random()*0.25
+      bob:Math.random()*6.28, wander:Math.random()*6.28, scale:0.45+Math.random()*0.25,
+      _gy: 0, _gyT: 0
     });
   }
   mesh.instanceColor.needsUpdate = true;
@@ -446,7 +457,9 @@ export function createButterflies(scene) {
       // stay near player + flower meadows (moist lowland)
       const dx=bf.x-playerPos.x, dz=bf.z-playerPos.z;
       if(dx*dx+dz*dz>35*35){ bf.x+= (playerPos.x-bf.x)*dt*0.08; bf.z+=(playerPos.z-bf.z)*dt*0.08; }
-      const gy=groundHeight(bf.x,bf.z)+0.45+Math.sin(t*1.2+bf.bob)*0.25;
+      bf._gyT -= dt;
+      if (bf._gyT <= 0) { bf._gy = groundHeight(bf.x,bf.z); bf._gyT = 0.25; }
+      const gy=bf._gy+0.45+Math.sin(t*1.2+bf.bob)*0.25;
       const flap=Math.sin(t*9+bf.flap)*0.55;
       _p.set(bf.x, gy, bf.z);
       _e.set(flap, bf.ry + Math.sin(t*0.8+bf.flap)*0.6, 0);
@@ -492,7 +505,7 @@ export function createCrabs(scene){
     const rx=riverXAt(z);
     // place on beach band (bankOuter +-1.5)
     const side=Math.random()<0.5?-1:1;
-    crabs.push({ z, x: rx + side*(4.5+Math.random()*1.8), ry:Math.random()*6.28, phase:Math.random()*6.28, speed:0.5+Math.random()*0.7, scale:0.7+Math.random()*0.3, dir: side });
+    crabs.push({ z, x: rx + side*(4.5+Math.random()*1.8), ry:Math.random()*6.28, phase:Math.random()*6.28, speed:0.5+Math.random()*0.7, scale:0.7+Math.random()*0.3, dir: side, _gy: 0, _gyT: 0 });
   }
   let t=0;
   function applyDensity() { mesh.count = crabCount(); }
@@ -505,7 +518,9 @@ export function createCrabs(scene){
       c.z += c.dir * c.speed * dt * 0.6;
       // side-walk waddle
       c.x = riverXAt(c.z) + c.dir*4.8 + Math.sin(t*2+c.phase)*0.4;
-      const gy=groundHeight(c.x,c.z)+0.07;
+      c._gyT -= dt;
+      if (c._gyT <= 0) { c._gy = groundHeight(c.x,c.z); c._gyT = 0.25; }
+      const gy=c._gy+0.07;
       const waddle=Math.sin(t*6+c.phase)*0.25;
       _p.set(c.x, gy, c.z); _e.set(0, c.ry + waddle, 0); _q.setFromEuler(_e); _s.setScalar(c.scale);
       _m.compose(_p,_q,_s); mesh.setMatrixAt(i,_m);
@@ -529,13 +544,14 @@ function boarCount() {
 export function createBoars(scene){
   const geo=buildDeerGeo();
   // scale slightly chunkier via instance scale, darker tint
-  const mat=new THREE.MeshLambertMaterial({ color:0x4a2f1a, flatShading:true });
+  // transparent:true from birth — avoids per-frame program recompiles on fade
+  const mat=new THREE.MeshLambertMaterial({ color:0x4a2f1a, flatShading:true, transparent: true, opacity: 1 });
   const mesh=new THREE.InstancedMesh(geo, mat, BASE_BOAR_COUNT);
   mesh.count = boarCount();
   mesh.frustumCulled=false; mesh.castShadow=QUALITY.shadowsEnabled; scene.add(mesh);
   const boars=[];
   for(let i=0;i<BASE_BOAR_COUNT;i++){
-    boars.push({ x:(Math.random()-0.5)*35, z:(Math.random()-0.5)*35, ry:Math.random()*6.28, speed:0.35+Math.random()*0.5, phase:Math.random()*6.28, wander:Math.random()*6.28, scale:0.95+Math.random()*0.25, idle:1+Math.random()*2, state:'walk' });
+    boars.push({ x:(Math.random()-0.5)*35, z:(Math.random()-0.5)*35, ry:Math.random()*6.28, speed:0.35+Math.random()*0.5, phase:Math.random()*6.28, wander:Math.random()*6.28, scale:0.95+Math.random()*0.25, idle:1+Math.random()*2, state:'walk', _gy: 0, _gyT: 0 });
   }
   let t=0;
   function applyDensity() { mesh.count = boarCount(); }
@@ -550,9 +566,12 @@ export function createBoars(scene){
         const nx=b.x+Math.cos(b.wander)*b.speed*dt, nz=b.z+Math.sin(b.wander)*b.speed*dt;
         if(Math.abs(nx - riverXAt(nz))>4){ b.x=nx; b.z=nz; }
         b.ry=Math.atan2(Math.sin(b.wander), Math.cos(b.wander));
-        if(Math.hypot(b.x-playerPos.x,b.z-playerPos.z)>60){ const a=Math.random()*6.28, r=18+Math.random()*12; b.x=playerPos.x+Math.cos(a)*r; b.z=playerPos.z+Math.sin(a)*r; }
+        const bdx=b.x-playerPos.x, bdz=b.z-playerPos.z;
+        if(bdx*bdx+bdz*bdz>60*60){ const a=Math.random()*6.28, r=18+Math.random()*12; b.x=playerPos.x+Math.cos(a)*r; b.z=playerPos.z+Math.sin(a)*r; }
       }
-      const gy=groundHeight(b.x,b.z)+0.38*b.scale+Math.sin(t*3+b.phase)*0.03;
+      b._gyT -= dt;
+      if (b._gyT <= 0) { b._gy = groundHeight(b.x,b.z); b._gyT = 0.25; }
+      const gy=b._gy+0.38*b.scale+Math.sin(t*3+b.phase)*0.03;
       _p.set(b.x,gy,b.z); _e.set(0,b.ry,0); _q.setFromEuler(_e); _s.setScalar(b.scale*1.15);
       _m.compose(_p,_q,_s); mesh.setMatrixAt(i,_m);
     }
@@ -651,7 +670,8 @@ function buildBatGeo() {
 }
 export function createBats(scene) {
   const geo = buildBatGeo();
-  const mat = new THREE.MeshLambertMaterial({ color: 0x1a1a2e, side: THREE.DoubleSide });
+  // transparent from birth — per-frame toggling recompiles the program
+  const mat = new THREE.MeshLambertMaterial({ color: 0x1a1a2e, side: THREE.DoubleSide, transparent: true, opacity: 1 });
   const mesh = new THREE.InstancedMesh(geo, mat, BASE_BAT_COUNT);
   mesh.count = batCount();
   mesh.frustumCulled = false; scene.add(mesh);
@@ -667,10 +687,8 @@ export function createBats(scene) {
     const weather = env?.weather ?? 'clear';
     const want = isNight && weather !== 'storm';
     const targetOpacity = want ? 1 : 0;
-    mat.opacity = mat.opacity ?? 1;
-    if (mat.opacity !== targetOpacity) {
-      mat.transparent = true;
-      mat.opacity += (targetOpacity - mat.opacity) * Math.min(1, dt * 1.5);
+    if (Math.abs((mat.opacity ?? 1) - targetOpacity) > 0.001) {
+      mat.opacity += (targetOpacity - (mat.opacity ?? 1)) * Math.min(1, dt * 1.5);
     }
     mesh.visible = (mat.opacity ?? 1) > 0.02;
     if (!mesh.visible) return;
@@ -749,12 +767,15 @@ export function createAnimals(scene) {
       frame++;
       // Pass env for lifecycle so individual meshes can fade
       birds.update(dt, playerPos);
-      // lifecycle dimming for birds (opacity via material, not count)
+      // lifecycle dimming for birds (opacity via material, not count).
+      // Material is transparent:true from birth — only lerp opacity so we
+      // never toggle `transparent` per frame (that recompiles the program).
       try {
         const bOp = lifecycleOpacity('bird', env);
         if (birds.mesh?.material) {
-          birds.mesh.material.transparent = bOp < 0.99;
-          birds.mesh.material.opacity = birds.mesh.material.opacity === undefined ? 1 : THREE.MathUtils.lerp(birds.mesh.material.opacity, bOp, Math.min(1, dt * 1.2));
+          const m = birds.mesh.material;
+          m.opacity = m.opacity === undefined ? 1 : THREE.MathUtils.lerp(m.opacity, bOp, Math.min(1, dt * 1.2));
+          birds.mesh.visible = m.opacity > 0.02;
         }
       } catch {}
       fish.update(dt, playerPos);
@@ -762,10 +783,10 @@ export function createAnimals(scene) {
       if (shouldRunHeavy() || frame % 3 === 0) {
         deer.update(dt, playerPos);
         boars.update(dt, playerPos);
-        // deer/boar hide during storm (fade)
+        // deer/boar hide during storm (fade, no transparent toggling)
         try {
           const dOp = lifecycleOpacity('deer', env);
-          for (const m of [deer.mesh, boars.mesh]) if (m?.material) { m.material.transparent = dOp < 0.99; m.material.opacity = THREE.MathUtils.lerp(m.material.opacity ?? 1, dOp, Math.min(1, dt * 0.8)); }
+          for (const m of [deer.mesh, boars.mesh]) if (m?.material) { m.material.opacity = THREE.MathUtils.lerp(m.material.opacity ?? 1, dOp, Math.min(1, dt * 0.8)); }
         } catch {}
       } else {
         deer.update(0, playerPos);
@@ -778,12 +799,11 @@ export function createAnimals(scene) {
         butterflies.update(dt, playerPos);
         crabs.update(dt, playerPos);
       }
-      // butterfly lifecycle: fade by time/weather
+      // butterfly lifecycle: fade by time/weather (transparent fixed at creation)
       try {
         const bfOp = lifecycleOpacity('butterfly', env);
         if (butterflies.mesh?.material) {
           butterflies.mesh.material.opacity = THREE.MathUtils.lerp(butterflies.mesh.material.opacity ?? 0.95, bfOp * 0.95, Math.min(1, dt * 1.0));
-          butterflies.mesh.material.transparent = true;
         }
       } catch {}
       dragonflies.update(dt, playerPos, env);

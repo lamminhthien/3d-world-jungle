@@ -465,11 +465,9 @@ export function createEnvironment(scene, opts = {}) {
   moonLight.shadow.normalBias = 0.015;
   scene.add(moonLight); scene.add(moonLight.target);
 
-  // ---- Rain particles (box around focus, wraps) ----
-  // Lower density + size so the iso view never whites out.
-  // Low tier halves the count (CPU sim + point overdraw both cost).
-  // Graphics particles scales count; Apple Silicon can handle full 450.
-  const RAIN_N_BASE = QUALITY.low ? 200 : 450;
+  // ---- Rain particles: STRIPPED for performance (450-point sim removed).
+  // Kept as zero-count so update guards stay valid.
+  const RAIN_N_BASE = 0;
   const RAIN_N = (() => {
     try { const g = getGraphics(); if (g?.rain === false) return 0; return Math.max(0, Math.round(RAIN_N_BASE * (g?.particles ?? 1))); } catch { return RAIN_N_BASE; }
   })();
@@ -494,75 +492,20 @@ export function createEnvironment(scene, opts = {}) {
   rain.visible = false;
   scene.add(rain);
 
-  // ---- Vibrant time-specific beauties ----
+  // ---- Vibrant time-specific beauties: STRIPPED (rainbow/aurora/pollen/
+  // shooting stars/dew removed for performance). Vars stay null; update()
+  // guards (`if (rainbow && ...)`) skip them at zero cost.
   // Rainbow: thin elegant arc high in the sky, only briefly after rain + sun.
   let rainbow = null;
   let rainbowMat = null;
   let rainbowTimer = 0; // seconds since rain->sun transition started
-  try {
-    const arcPts = [];
-    for (let i = 0; i <= 28; i++) {
-      const t = i / 28;
-      const ang = Math.PI * t; // semicircle
-      const r = 52;
-      arcPts.push(new THREE.Vector3(Math.cos(ang) * r * 0.62, Math.sin(ang) * 19 + 14, -28 - t * 6));
-    }
-    const curve = new THREE.CatmullRomCurve3(arcPts);
-    const rainbowGeo = new THREE.TubeGeometry(curve, 28, 0.28, 6, false);
-    const rainbowColors = [];
-    const c = new THREE.Color();
-    const palette = [0xff0000, 0xff7f00, 0xffff00, 0x00ff00, 0x00ffff, 0x0000ff, 0x8b00ff];
-    const posAttr = rainbowGeo.attributes.position;
-    const count = posAttr.count;
-    const radialSeg = 6;
-    for (let i = 0; i < count; i++) {
-      const tubeIdx = i % (radialSeg + 1);
-      const t = tubeIdx / radialSeg;
-      const idx = Math.min(palette.length - 1, Math.floor(t * palette.length));
-      c.setHex(palette[idx]);
-      rainbowColors.push(c.r, c.g, c.b);
-    }
-    rainbowGeo.setAttribute('color', new THREE.Float32BufferAttribute(rainbowColors, 3));
-    rainbowMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0, side: THREE.DoubleSide, fog: false, depthWrite: false, blending: THREE.AdditiveBlending });
-    rainbow = new THREE.Mesh(rainbowGeo, rainbowMat);
-    rainbow.frustumCulled = false;
-    rainbow.visible = false;
-    rainbow.renderOrder = -5;
-    scene.add(rainbow);
-  } catch { /* rainbow fallback: skip */ }
 
   // Aurora borealis: shimmering plane at northern sky, visible on clear nights 22-03
   let aurora = null;
   let auroraMat = null;
-  try {
-    const auroraGeo = new THREE.PlaneGeometry(120, 28, 24, 6);
-    auroraMat = new THREE.ShaderMaterial({
-      transparent: true, side: THREE.DoubleSide, depthWrite: false, fog: false,
-      uniforms: { uTime: { value: 0 }, uOpacity: { value: 0 } },
-      vertexShader: `varying vec2 vUv; void main(){ vUv=uv; vec3 p=position; p.y += sin(uv.x*6.0)*1.2; gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0); }`,
-      fragmentShader: `
-        uniform float uTime; uniform float uOpacity; varying vec2 vUv;
-        void main(){
-          float wave = sin(vUv.x*8.0 + uTime*0.6)*0.5 + sin(vUv.x*3.0 - uTime*0.3)*0.3;
-          float band = smoothstep(0.35, 0.55, vUv.y + wave*0.12) * smoothstep(1.0, 0.65, vUv.y + wave*0.12);
-          vec3 c1 = vec3(0.1, 0.9, 0.55); vec3 c2 = vec3(0.2, 0.45, 1.0); vec3 c3 = vec3(0.9, 0.3, 0.9);
-          float t = fract(vUv.x*0.7 + uTime*0.05);
-          vec3 col = mix(mix(c1,c2, smoothstep(0.0,0.5,t)), c3, smoothstep(0.5,1.0,t));
-          float a = band * 0.55 * uOpacity * (0.7 + 0.3*sin(uTime*1.2 + vUv.x*10.0));
-          gl_FragColor = vec4(col, a);
-        }`,
-    });
-    aurora = new THREE.Mesh(auroraGeo, auroraMat);
-    aurora.position.set(0, 42, -55);
-    aurora.rotation.x = 0.18;
-    aurora.frustumCulled = false;
-    aurora.visible = true;
-    aurora.renderOrder = -6;
-    scene.add(aurora);
-  } catch { /* aurora skip on low */ }
 
-  // Pollen / dust motes: floating golden specks visible in sunbeams (10-17, clear/partlyCloudy)
-  const POLLEN_N = QUALITY.low ? 0 : 120;
+  // Pollen / dust motes: STRIPPED (120-point sim removed).
+  const POLLEN_N = 0;
   const pollenPos = POLLEN_N ? new Float32Array(POLLEN_N * 3) : null;
   const pollenPhase = POLLEN_N ? new Float32Array(POLLEN_N) : null;
   let pollen = null; let pollenMat = null; let pollenGeo = null;
@@ -582,8 +525,8 @@ export function createEnvironment(scene, opts = {}) {
     scene.add(pollen);
   }
 
-  // Shooting stars: occasional streaks at night (clear). Reuses a single Points with trail.
-  const SHOOT_N = QUALITY.low ? 0 : 1;
+  // Shooting stars: STRIPPED (trail points removed).
+  const SHOOT_N = 0;
   let shootingStar = null; let shootingMat = null; let shootTimer = 8 + Math.random() * 10; let shootActive = 0; let shootDir = new THREE.Vector3();
   if (SHOOT_N) {
     const sg = new THREE.BufferGeometry();
@@ -597,19 +540,13 @@ export function createEnvironment(scene, opts = {}) {
     shootDir.set(-0.8, -0.35, 0.15).normalize();
   }
 
-  // Lightning flash: full-screen white overlay + sun intensity spike for storm
-  let lightningOverlay = document.getElementById('lightning-overlay');
-  if (!lightningOverlay) {
-    lightningOverlay = document.createElement('div');
-    lightningOverlay.id = 'lightning-overlay';
-    lightningOverlay.style.cssText = 'position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:5;transition:opacity 0.08s;';
-    document.body.appendChild(lightningOverlay);
-  }
+  // Lightning flash: STRIPPED (overlay + spikes removed). Var stays null.
+  let lightningOverlay = null;
   let lightningTimer = 3 + Math.random() * 5;
   let lightningFlash = 0;
 
-  // Dew / mist particles at dawn (5-7, mist): ground-hugging sparkles — beautiful, not foggy
-  const DEW_N = QUALITY.low ? 0 : 80;
+  // Dew / mist particles at dawn: STRIPPED (80-point sim removed).
+  const DEW_N = 0;
   const dewPos = DEW_N ? new Float32Array(DEW_N * 3) : null;
   let dew = null; let dewMat = null; let dewGeo = null;
   if (DEW_N && dewPos) {
@@ -794,6 +731,18 @@ export function createEnvironment(scene, opts = {}) {
     },
 
     update(dt, focus, extra = {}) {
+      // Perf: single clock read per frame — reused by moon pulse, pollen,
+      // dew (was: performance.now() inside per-particle loops, 120+ syscalls).
+      const nowMs = performance.now();
+      const nowSec = nowMs * 0.001;
+      // Perf: getGraphics() is now a cached ref — read once per frame.
+      let gfxRainOff = false;
+      let gfxPartMul = 1;
+      try {
+        const g = getGraphics();
+        gfxRainOff = g?.rain === false;
+        gfxPartMul = g?.particles ?? 1;
+      } catch {}
       // Phase 5: global wind (affects foliage sway, water, clouds, audio)
       updateWind(dt, state.weather);
       // Debug / tuning handle (e.g. `__env.setTime(0)` in the console).      // --- advance clock + weather machine ---
@@ -905,7 +854,7 @@ export function createEnvironment(scene, opts = {}) {
       const veil = (1 - wx.rain * 0.55) * (state.weather === 'overcast' ? 0.62 : 1);
       // A restrained pulse keeps the moon from reading as a flat billboard,
       // while the actual directional light remains stable enough for shadows.
-      const moonPulse = 0.94 + 0.06 * Math.sin(performance.now() * 0.0014);
+      const moonPulse = 0.94 + 0.06 * Math.sin(nowSec * 1.4);
       moonMesh.material.opacity = THREE.MathUtils.clamp(moonDir.y * 4 + 0.3, 0, 0.9) * veil * moonPulse;
       moonHalo.position.copy(moonMesh.position);
       moonHalo.visible = moonMesh.visible;
@@ -913,6 +862,7 @@ export function createEnvironment(scene, opts = {}) {
       moonHalo.scale.setScalar(1 + (1 - moonPulse) * 0.3);
 
       // --- Sunset CSS overlay: warm orange radial glow near horizon ---
+      // Perf: DOM style writes force recalc — only write when changed >0.01.
       if (sunsetOverlay) {
         // Intensity: max when sun is at horizon ±15° (|sunDir.y| < 0.26)
         const isSunset = state.timeOfDay > 14 && state.timeOfDay < 21;
@@ -920,7 +870,11 @@ export function createEnvironment(scene, opts = {}) {
         const overlayIntensity = (isSunset || isSunrise)
           ? THREE.MathUtils.clamp(1 - Math.abs(sunDir.y) * 4.5, 0, 1) * 0.55 * wx.sun
           : 0;
-        sunsetOverlay.style.opacity = overlayIntensity.toFixed(3);
+        const ovStr = overlayIntensity.toFixed(2);
+        if (ovStr !== update._lastSunsetOv) {
+          update._lastSunsetOv = ovStr;
+          sunsetOverlay.style.opacity = ovStr;
+        }
       }
 
       // --- clouds: thicker + grayer when overcast/rain, dark blue-grey at night ---
@@ -933,8 +887,7 @@ export function createEnvironment(scene, opts = {}) {
       }
 
       // --- rain ---
-      let targetRain = wx.rain;
-      try { if (getGraphics()?.rain === false) targetRain = 0; } catch {}
+      let targetRain = gfxRainOff ? 0 : wx.rain;
       // Disable rain when graphics says off (saves CPU + overdraw on low/iPad).
       if (RAIN_N === 0) targetRain = 0;
       rainMat.opacity += ((targetRain * 0.55) - rainMat.opacity) * Math.min(1, dt * 2);
@@ -944,8 +897,7 @@ export function createEnvironment(scene, opts = {}) {
         const slant = -1.2 * targetRain;
         const half = RAIN_BOX / 2;
         // On low particles, step rain every other particle to halve CPU.
-        const gMul = (() => { try { return getGraphics()?.particles ?? 1; } catch { return 1; }})();
-        const rainStep = gMul < 0.5 ? 2 : 1;
+        const rainStep = gfxPartMul < 0.5 ? 2 : 1;
         for (let i = 0; i < RAIN_N; i += rainStep) {
           p[i * 3 + 1] -= rainVel[i] * dt;
           p[i * 3] += slant * dt;
@@ -1035,8 +987,8 @@ export function createEnvironment(scene, opts = {}) {
         if (pollen.visible) {
           const arr = pollenGeo.attributes.position.array;
           for (let i = 0; i < POLLEN_N; i++) {
-            arr[i * 3 + 1] += Math.sin(performance.now() * 0.0005 + pollenPhase[i]) * dt * 0.12;
-            arr[i * 3] += Math.sin(performance.now() * 0.0003 + pollenPhase[i] * 1.3) * dt * 0.15;
+            arr[i * 3 + 1] += Math.sin(nowMs * 0.0005 + pollenPhase[i]) * dt * 0.12;
+            arr[i * 3] += Math.sin(nowMs * 0.0003 + pollenPhase[i] * 1.3) * dt * 0.15;
             // wrap around focus
             if (arr[i * 3 + 1] > 8) arr[i * 3 + 1] = 1;
             if (arr[i * 3 + 1] < 0.5) arr[i * 3 + 1] = 7;
@@ -1055,7 +1007,7 @@ export function createEnvironment(scene, opts = {}) {
         dewMat.opacity += (targetD - dewMat.opacity) * Math.min(1, dt * 0.5);
         dew.visible = dewMat.opacity > 0.02;
         if (dew.visible) {
-          dewMat.color.setHSL(0.55 + Math.sin(performance.now() * 0.001) * 0.03, 0.6, 0.85);
+          dewMat.color.setHSL(0.55 + Math.sin(nowSec * 1.0) * 0.03, 0.6, 0.85);
           const arr = dewGeo.attributes.position.array;
           // subtle twinkle via size pulse (opacity modulation per point is via global opacity)
           dewGeo.attributes.position.needsUpdate = false;
@@ -1114,8 +1066,16 @@ export function createEnvironment(scene, opts = {}) {
       if (lightningFlash > 0) {
         lightningFlash -= dt * 2.5;
         const lv = Math.max(0, lightningFlash);
-        if (lightningOverlay) lightningOverlay.style.opacity = (lv * 0.85).toFixed(3);
-        if (lv <= 0 && lightningOverlay) lightningOverlay.style.opacity = '0';
+        // Perf: only touch the DOM when the value actually changes.
+        const lvStr = (lv * 0.85).toFixed(2);
+        if (lightningOverlay && lvStr !== update._lastLightningOv) {
+          update._lastLightningOv = lvStr;
+          lightningOverlay.style.opacity = lvStr;
+        }
+        if (lv <= 0 && lightningOverlay && update._lastLightningOv !== '0') {
+          update._lastLightningOv = '0';
+          lightningOverlay.style.opacity = '0';
+        }
       }
 
       // --- HUD text (throttled) ---

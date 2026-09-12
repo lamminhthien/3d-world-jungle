@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { riverDist, isOnBridge, obstacles } from '../utils.js';
+import { riverDist, isOnBridge, isObstacleNear } from '../utils.js';
 import { RIVER_HALF, BRIDGES } from '../config.js';
 import { riverXAt } from '../world/procedural.js';
 
@@ -211,28 +211,22 @@ export class AutoPlayAgent {
         this.headingChangeTimer = 2.0;
       }
 
-      // ── Obstacle lookahead probe ────────────────────────────────────────
+      // ── Obstacle lookahead probe (spatial hash: O(nearby)) ─────────────
       const lookDist = 3.0;
       const probeX = px + Math.sin(this.targetHeading) * lookDist;
       const probeZ = pz + Math.cos(this.targetHeading) * lookDist;
 
-      for (let i = 0; i < obstacles.length; i++) {
-        const o = obstacles[i];
-        const odx = probeX - o.x;
-        const odz = probeZ - o.z;
-        const clearance = o.r + 1.5;
-        if (odx * odx + odz * odz < clearance * clearance) {
-          // Choose / maintain avoidance bias direction so we don't oscillate
-          if (this._avoidBiasTimer <= 0) {
-            // 70% chance to keep current bias, 30% to flip it
-            this._avoidDir = Math.random() < 0.7 ? this._avoidDir : -this._avoidDir;
-            this._avoidBiasTimer = 3.0;
-          }
-          const awayAngle = Math.atan2(px - o.x, pz - o.z);
-          this.targetHeading = awayAngle + this._avoidDir * (0.7 + Math.random() * 0.4);
-          this.headingChangeTimer = 1.5;
-          break;
+      const hit = isObstacleNear(probeX, probeZ, 1.5);
+      if (hit) {
+        // Choose / maintain avoidance bias direction so we don't oscillate
+        if (this._avoidBiasTimer <= 0) {
+          // 70% chance to keep current bias, 30% to flip it
+          this._avoidDir = Math.random() < 0.7 ? this._avoidDir : -this._avoidDir;
+          this._avoidBiasTimer = 3.0;
         }
+        const awayAngle = Math.atan2(px - hit.x, pz - hit.z);
+        this.targetHeading = awayAngle + this._avoidDir * (0.7 + Math.random() * 0.4);
+        this.headingChangeTimer = 1.5;
       }
     }
 

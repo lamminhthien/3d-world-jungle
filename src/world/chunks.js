@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { BRIDGES, VEGETATION } from '../config.js';
 import { QUALITY } from '../core/setup.js';
-import { obstacles } from '../utils.js';
+import { obstacles, markObstaclesDirty } from '../utils.js';
 import { rngFromString } from './noise.js';
 import { getGroundBump, getGroundTexture } from './textures.js';
 import { attachGroundWind, attachWindToKit } from './wind.js';
@@ -527,9 +527,12 @@ export function createWorldManager(scene, seedStr) {
     obstacles.length = 0;
     const bucket = { ti: 0, pi: 0, bi: 0, palmi: 0, bu: 0, ci: 0, ri: 0, gi: 0, reedi: 0, lci: 0, fri: 0, fsti: 0, fhi: 0 };
     // Stable order => stable world for the same seed.
+    // Perf: avoid key.split(',').map(Number) alloc per chunk — parse ints directly.
     const sorted = [...cells].sort();
     for (const key of sorted) {
-      const [cx, cz] = key.split(',').map(Number);
+      const comma = key.indexOf(',');
+      const cx = +key.slice(0, comma);
+      const cz = +key.slice(comma + 1);
       collectChunk(cx, cz, bucket, spawn);
     }
     trunkMesh.count = bucket.ti;
@@ -549,6 +552,7 @@ export function createWorldManager(scene, seedStr) {
       m.instanceMatrix.needsUpdate = true;
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
     }
+    markObstaclesDirty();
   }
 
   function ensureAround(px, pz) {

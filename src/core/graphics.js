@@ -9,37 +9,40 @@
 const STORAGE_KEY = 'jungle_graphics_v1';
 
 export const GRAPHICS_PRESETS = {
+  // Heavy graphics stripped: no post FX (rays/flare/gi), no HQ water, no
+  // wind sway particles, no clouds/rain/fireflies extras. Presets now only
+  // scale resolution, view distance, vegetation/animals, shadows, fps.
   low: {
     label: 'Low · Battery saver',
     resolution: 0.7, shadows: 'off', viewDistance: 1,
     vegetation: 0.5, animals: 0.35, particles: 0.4,
-    clouds: true, cloudCount: 4, rain: true, fireflies: false,
+    clouds: false, cloudCount: 0, rain: false, fireflies: false,
     rays: false, flare: false, gi: false,
     windSway: false, waterHigh: false, fpsCap: 30,
   },
   medium: {
     label: 'Medium · Balanced',
-    resolution: 0.85, shadows: 'low', viewDistance: 2,
+    resolution: 0.8, shadows: 'low', viewDistance: 2,
     vegetation: 0.75, animals: 0.65, particles: 0.7,
-    clouds: true, cloudCount: 6, rain: true, fireflies: true,
-    rays: false, flare: false, gi: true,
-    windSway: true, waterHigh: false, fpsCap: 45,
+    clouds: false, cloudCount: 0, rain: false, fireflies: false,
+    rays: false, flare: false, gi: false,
+    windSway: false, waterHigh: false, fpsCap: 45,
   },
   high: {
     label: 'High · Detailed',
-    resolution: 1.0, shadows: 'high', viewDistance: 2,
+    resolution: 0.85, shadows: 'high', viewDistance: 2,
     vegetation: 1.0, animals: 1.0, particles: 1.0,
-    clouds: true, cloudCount: 9, rain: true, fireflies: true,
-    rays: true, flare: true, gi: true,
-    windSway: true, waterHigh: true, fpsCap: 60,
+    clouds: false, cloudCount: 0, rain: false, fireflies: false,
+    rays: false, flare: false, gi: false,
+    windSway: false, waterHigh: false, fpsCap: 60,
   },
   ultra: {
     label: 'Ultra · Apple Silicon / Desktop',
-    resolution: 1.0, shadows: 'ultra', viewDistance: 3,
-    vegetation: 1.15, animals: 1.0, particles: 1.0,
-    clouds: true, cloudCount: 9, rain: true, fireflies: true,
-    rays: true, flare: true, gi: true,
-    windSway: true, waterHigh: true, fpsCap: 60,
+    resolution: 0.9, shadows: 'high', viewDistance: 2,
+    vegetation: 1.0, animals: 1.0, particles: 1.0,
+    clouds: false, cloudCount: 0, rain: false, fireflies: false,
+    rays: false, flare: false, gi: false,
+    windSway: false, waterHigh: false, fpsCap: 60,
   },
 };
 
@@ -173,9 +176,17 @@ export function getEffectiveGraphics(state) {
 // ---------- Live store ----------
 let _state = loadGraphicsStored();
 const _listeners = new Set();
+// Perf: getGraphics() is called per-frame from ~10 systems (fireflies,
+// river, wind, clouds, env rain...). Each call previously spread a new
+// object. Cache the effective object and only rebuild on state change.
+let _effCache = null;
+function _computeEff() {
+  _effCache = getEffectiveGraphics(_state);
+  return _effCache;
+}
 
 export function getGraphicsState() { return _state; }
-export function getGraphics() { return getEffectiveGraphics(_state); }
+export function getGraphics() { return _effCache || _computeEff(); }
 
 export function setPreset(preset) {
   _state = { preset, overrides: {} };
@@ -204,13 +215,16 @@ export function onGraphicsChange(fn) {
 }
 
 function emit() {
-  const eff = getEffectiveGraphics(_state);
+  _computeEff();
   for (const fn of _listeners) {
-    try { fn(eff, _state); } catch { /* non-fatal */ }
+    try { fn(_effCache, _state); } catch { /* non-fatal */ }
   }
 }
 
 // FPS-cap helper shared with the main loop (30/45/60/90/120 list + presets).
 export function defaultFpsCap() {
-  return getEffectiveGraphics(_state).fpsCap || 60;
+  return getGraphics().fpsCap || 60;
 }
+
+// Prime the cache at module load so first-frame callers get a stable ref.
+_computeEff();

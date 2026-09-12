@@ -56,10 +56,9 @@ export const QUALITY = {
   tier: deviceTier,
   low: isLowTierDevice || (isMobileDevice && typeof screen !== 'undefined' && Math.min(screen.width, screen.height) < 420),
   mid: isMidTierDevice,
-  // DPR caps by tier: low 1.0 / medium 1.5 / high 1.75 (Retina MacBook + iPad
-  // thermal guard — full 2x is ~1.8x the pixels of 1.5x) / ultra 2.
-  // Multiplied at runtime by graphics resolution 0.5..1.0. Adaptive may go lower.
-  maxPixelRatio: isLowTierDevice ? 1 : deviceTier === 'medium' ? 1.5 : deviceTier === 'high' ? 1.75 : 2,
+  // Heavy graphics stripped: DPR capped at 1.0 on all tiers (no Retina 2x
+  // framebuffers), MSAA off. Multiplied by graphics resolution slider.
+  maxPixelRatio: 1,
   minPixelRatio: isLowTierDevice ? 0.6 : 0.75,
   shadowSize: shadowSizeForTier(),
   shadowMode: isLowTierDevice ? 'off' : deviceTier === 'medium' ? 'low' : 'high',
@@ -88,10 +87,8 @@ export function refreshQualityFromGraphics() {
   QUALITY.shadowMode = mode;
   QUALITY.shadowsEnabled = mode !== 'off';
   QUALITY.shadowSize = mode === 'ultra' ? 2048 : mode === 'high' ? 2048 : mode === 'low' ? 1024 : 512;
-  // DPR cap follows tier, scaled by resolution slider. Apple Silicon Retina:
-  // resolution 1.0 + cap 1.75 keeps native-ish sharpness minus the worst
-  // fill-rate cliff; battery preset drops to ~0.7 effective.
-  const tierCap = deviceTier === 'low' ? 1 : deviceTier === 'medium' ? 1.5 : deviceTier === 'high' ? 1.75 : 2;
+  // DPR cap follows tier, scaled by resolution slider. Stripped: hard cap 1.0.
+  const tierCap = 1;
   QUALITY.maxPixelRatio = Math.max(0.6, tierCap * (g.resolution ?? 1));
 }
 
@@ -132,8 +129,9 @@ export function applyGraphicsToRenderer(renderer, sun = null) {
 export function setupCore(canvas) {
   const renderer = new THREE.WebGLRenderer({
     canvas,
-    // MSAA 4x is expensive on tiled mobile GPUs — off there, on for desktop.
-    antialias: !isMobileDevice,
+    // Heavy graphics stripped: MSAA off on all tiers (tiled mobile GPUs +
+    // fill-rate). No antialias framebuffer cost.
+    antialias: false,
     powerPreference: 'high-performance',
     stencil: false,
     preserveDrawingBuffer: true,

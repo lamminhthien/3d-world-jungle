@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { DEFAULT_SEED, ENV, RIVER_HALF, SPEED, VEGETATION, WORLD } from './config.js';
-import { groundHeight, isOnBridge, obstacles, riverDist } from './utils.js';
+import { groundHeight, isOnBridge, resolveObstacleCollision, riverDist } from './utils.js';
 import { getGraphics, getGraphicsState, setPreset, setOverride, onGraphicsChange, defaultFpsCap } from './core/graphics.js';
 import { QUALITY, setupCore, applyGraphicsToRenderer, effectivePixelRatio } from './core/setup.js';
 import { runPreGameCache } from './core/bootCache.js';
@@ -19,7 +19,6 @@ import { setupPwaUi } from './core/pwa.js';
 import { randomSeedString, rngFromString } from './world/noise.js';
 import { windState } from './world/wind.js';
 import { createWindParticles } from './world/windParticles.js';
-import { createComposer, updateAdvancedEffects, disposeComposer, isRaysEnabled, isFlareEnabled, isGIEnabled, setRaysEnabled, setFlareEnabled, setGIEnabled } from './core/postprocessing.js';
 import { createBounceLight, createDynamicLightRig, updateBounceLight } from './core/globalIllumination.js';
 import { AutoPlayAgent } from './core/autoPlay.js';
 import { createAdventure } from './gameplay/adventure.js';
@@ -94,10 +93,9 @@ async function boot() {
   const animals = createAnimals(scene);
   const windParticles = createWindParticles(scene);
 
-  // FX composer (desktop only, tier-gated). Falls back to direct render on low tier.
-  let composer = createComposer(renderer, scene, camera);
-  // Expose for debugging / toggle
-  if (typeof window !== 'undefined') window.__composer = composer;
+  // Post FX removed (god rays / lens flare / AO composer stripped for perf).
+  // Direct render only — no composer, no per-frame FX updates.
+  const composer = null;
 
   // Phase 7: Dynamic GI lights — always active (cheap) even without composer
   const bounceLight = createBounceLight(scene);
@@ -299,11 +297,6 @@ async function boot() {
   const gfxAnimalsValue = document.getElementById('gfxAnimalsValue');
   const gfxParticles = document.getElementById('gfxParticles');
   const gfxParticlesValue = document.getElementById('gfxParticlesValue');
-  const gfxCloudsToggle = document.getElementById('gfxCloudsToggle');
-  const gfxRainToggle = document.getElementById('gfxRainToggle');
-  const gfxFirefliesToggle = document.getElementById('gfxFirefliesToggle');
-  const gfxWindToggle = document.getElementById('gfxWindToggle');
-  const gfxWaterToggle = document.getElementById('gfxWaterToggle');
   const gfxReset = document.getElementById('gfxReset');
 
   function syncGraphicsUI() {
@@ -326,18 +319,6 @@ async function boot() {
     if (gfxAnimalsValue) gfxAnimalsValue.textContent = `${Math.round(eff.animals * 100)}%`;
     if (gfxParticles) gfxParticles.value = String(eff.particles);
     if (gfxParticlesValue) gfxParticlesValue.textContent = `${Math.round(eff.particles * 100)}%`;
-    if (gfxCloudsToggle) gfxCloudsToggle.textContent = eff.clouds === false ? '☁️ Clouds: Off' : '☁️ Clouds: On';
-    if (gfxRainToggle) gfxRainToggle.textContent = eff.rain === false ? '🌧️ Rain: Off' : '🌧️ Rain: On';
-    if (gfxFirefliesToggle) gfxFirefliesToggle.textContent = eff.fireflies === false ? '✨ Fireflies: Off' : '✨ Fireflies: On';
-    if (gfxWindToggle) gfxWindToggle.textContent = eff.windSway === false ? '🍃 Wind: Off' : '🍃 Wind: On';
-    if (gfxWaterToggle) gfxWaterToggle.textContent = eff.waterHigh === false ? '💧 Water HQ: Off' : '💧 Water HQ: On';
-    // FX toggles (query directly — buttons are defined later in file)
-    const _rays = document.getElementById('godRaysToggle');
-    if (_rays) _rays.textContent = eff.rays === false ? 'Rays: Off' : 'Rays: On';
-    const _flare = document.getElementById('lensFlareToggle');
-    if (_flare) _flare.textContent = eff.flare === false ? 'Flare: Off' : 'Flare: On';
-    const _gi = document.getElementById('giToggle');
-    if (_gi) _gi.textContent = eff.gi === false ? 'GI: Off' : 'GI: On';
   }
 
   function applyLiveGraphics() {
@@ -362,21 +343,11 @@ async function boot() {
       applyLiveGraphics._lastVeg = eff.vegetation;
     } catch {}
     // Vegetation density already via QUALITY.vegetationMul, force rebuild on change
-    try { sky.applyGraphics?.(eff); } catch {}
-    try { fireflies.applyGraphics?.(eff); } catch {}
     try { river.applyGraphics?.(eff); } catch {}
-    try { windParticles.applyGraphics?.(eff); } catch {}
     try { animals.applyDensity?.(); } catch {}
     // FPS cap follows preset unless user manually overrode via fpsSelect
     targetFps = eff.fpsCap || targetFps;
     if (fpsSelect) fpsSelect.value = String(targetFps);
-    // FX passes enable via graphics store (postprocessing reads it each frame)
-    try {
-      if (composer?.userData?.volumetric) composer.userData.volumetric.pass.enabled = eff.rays !== false;
-      if (composer?.userData?.lensFlare) composer.userData.lensFlare.pass.enabled = eff.flare !== false;
-      if (composer?.userData?.aoPass) composer.userData.aoPass.enabled = eff.gi !== false;
-      if (typeof window !== 'undefined' && window.__bounceLight) window.__bounceLight.visible = eff.gi !== false;
-    } catch {}
     syncGraphicsUI();
   }
   // Expose for other modules / console
@@ -402,13 +373,24 @@ async function boot() {
       syncGraphicsUI();
     });
   }
-  if (gfxResolution) {
-    gfxResolution.addEventListener('input', (e) => {
-      const v = Number(e.target.value);
-      if (gfxResolutionValue) gfxResolutionValue.textContent = `${Math.round(v * 100)}%`;
-    });
-    gfxResolution.addEventListener('change', (e) => {
-      setOverride('resolution', Number(e.target.value));
+  // Refactor: data-driven slider wiring (was 4x copy-pasted input/change pairs).
+  const _pctLabel = (v) => `${Math.round(v * 100)}%`;
+  const _chunkLabel = (v) => `${v} (${v === 1 ? '9' : v === 2 ? '25' : '49'} chunks)`;
+  const _sliderBindings = [
+    { el: gfxResolution, label: gfxResolutionValue, key: 'resolution', parse: Number, fmt: _pctLabel },
+    { el: gfxViewDistance, label: gfxViewDistanceValue, key: 'viewDistance', parse: Number, fmt: _chunkLabel },
+    { el: gfxAnimals, label: gfxAnimalsValue, key: 'animals', parse: Number, fmt: _pctLabel },
+    { el: gfxParticles, label: gfxParticlesValue, key: 'particles', parse: Number, fmt: _pctLabel },
+  ];
+  for (const b of _sliderBindings) {
+    if (!b.el) continue;
+    if (b.label) {
+      b.el.addEventListener('input', (e) => {
+        b.label.textContent = b.fmt(b.parse(e.target.value));
+      });
+    }
+    b.el.addEventListener('change', (e) => {
+      setOverride(b.key, b.parse(e.target.value));
       applyLiveGraphics();
     });
   }
@@ -419,56 +401,6 @@ async function boot() {
       applyLiveGraphics();
     });
   }
-  if (gfxViewDistance) {
-    gfxViewDistance.addEventListener('input', (e) => {
-      const v = Number(e.target.value);
-      if (gfxViewDistanceValue) gfxViewDistanceValue.textContent = `${v} (${v === 1 ? '9' : v === 2 ? '25' : '49'} chunks)`;
-    });
-    gfxViewDistance.addEventListener('change', (e) => {
-      setOverride('viewDistance', Number(e.target.value));
-      applyLiveGraphics();
-    });
-  }
-  if (gfxAnimals) {
-    gfxAnimals.addEventListener('input', (e) => {
-      const v = Number(e.target.value);
-      if (gfxAnimalsValue) gfxAnimalsValue.textContent = `${Math.round(v * 100)}%`;
-    });
-    gfxAnimals.addEventListener('change', (e) => {
-      setOverride('animals', Number(e.target.value));
-      applyLiveGraphics();
-    });
-  }
-  if (gfxParticles) {
-    gfxParticles.addEventListener('input', (e) => {
-      const v = Number(e.target.value);
-      if (gfxParticlesValue) gfxParticlesValue.textContent = `${Math.round(v * 100)}%`;
-    });
-    gfxParticles.addEventListener('change', (e) => {
-      setOverride('particles', Number(e.target.value));
-      applyLiveGraphics();
-    });
-  }
-  function bindToggle(btn, key) {
-    if (!btn) return;
-    btn.addEventListener('click', () => {
-      const eff = getGraphics();
-      const cur = eff[key];
-      // cur is boolean or undefined; toggle to opposite bool
-      const next = cur === false ? true : false;
-      setOverride(key, next ? null : false);
-      // For rays/flare/gi, also keep legacy localStorage in sync
-      if (key === 'rays') setRaysEnabled(next);
-      if (key === 'flare') setFlareEnabled(next);
-      if (key === 'gi') setGIEnabled(next);
-      applyLiveGraphics();
-    });
-  }
-  bindToggle(gfxCloudsToggle, 'clouds');
-  bindToggle(gfxRainToggle, 'rain');
-  bindToggle(gfxFirefliesToggle, 'fireflies');
-  bindToggle(gfxWindToggle, 'windSway');
-  bindToggle(gfxWaterToggle, 'waterHigh');
   if (gfxReset) {
     gfxReset.addEventListener('click', () => {
       const state = getGraphicsState();
@@ -670,12 +602,12 @@ async function boot() {
       if (keys.KeyS || keys.ArrowDown) { iz += 1; manualInput = true; }
       if (keys.KeyA || keys.ArrowLeft) { ix -= 1; manualInput = true; }
       if (keys.KeyD || keys.ArrowRight) { ix += 1; manualInput = true; }
-      if (Math.hypot(joy.x, joy.y) > 0.1) {
+      if (joy.x * joy.x + joy.y * joy.y > 0.01) {
         ix += joy.x;
         iz += joy.y;
         manualInput = true;
       }
-      sprinting = keys.ShiftLeft || keys.ShiftRight || touch?.sprintHeld || joy.mag > 0.92;
+      sprinting = keys.ShiftLeft || keys.ShiftRight || touch?.sprintHeld || (joy.mag !== undefined && joy.mag > 0.92);
 
       // If player manually interacts with movement controls while auto play is active, pause auto play
       if (manualInput && autoPlay.enabled) {
@@ -690,14 +622,15 @@ async function boot() {
       }
     }
 
-    const moving = Math.hypot(ix, iz) > 0.1;
+    const _inputLen2 = ix * ix + iz * iz;
+    const moving = _inputLen2 > 0.01;
     if (moving) {
       // Camera-relative movement on the ground plane.
       const az = state.azimuth;
       _fwd.set(-Math.cos(az), 0, -Math.sin(az));
       _right.set(Math.sin(az), 0, -Math.cos(az));
 
-      const len = Math.hypot(ix, iz);
+      const len = Math.sqrt(_inputLen2);
       const inputMag = Math.min(1, len);
       ix /= Math.max(1, len);
       iz /= Math.max(1, len);
@@ -717,20 +650,10 @@ async function boot() {
       nx = villagePosition.x;
       nz = villagePosition.z;
 
-      // Circle collision against trees / rocks / cacti (squared distances —
-      // Math.hypot per obstacle per frame is needlessly slow).
-      for (let i = 0; i < obstacles.length; i++) {
-        const o = obstacles[i];
-        const dx = nx - o.x;
-        const dz = nz - o.z;
-        const min = o.r + 0.45;
-        const d2 = dx * dx + dz * dz;
-        if (d2 < min * min && d2 > 1e-8) {
-          const d = Math.sqrt(d2);
-          nx = o.x + (dx / d) * min;
-          nz = o.z + (dz / d) * min;
-        }
-      }
+      // Circle collision via spatial hash (O(nearby), not O(all obstacles)).
+      const resolved = resolveObstacleCollision(nx, nz, 0.45, _desired);
+      nx = resolved.x;
+      nz = resolved.z;
       // Block the winding river (unless on a bridge). No map edge: chunks stream.
       // Simplest stable response: revert to previous position.
       if (riverDist(nx, nz) < RIVER_HALF + 0.5 && !isOnBridge(nx, nz)) {
@@ -738,8 +661,9 @@ async function boot() {
         nz = player.position.z;
       }
       // Safety bound against float precision, far beyond the visible area.
-      const r = Math.hypot(nx, nz);
-      if (r > 500) {
+      const r2 = nx * nx + nz * nz;
+      if (r2 > 500 * 500) {
+        const r = Math.sqrt(r2);
         nx *= 500 / r;
         nz *= 500 / r;
       }
@@ -815,51 +739,12 @@ async function boot() {
   }
 
   // ============ Loop ============
-  // prCap is dynamic — follows graphics resolution + tier (Apple Silicon can
-  // sustain higher DPR than low/medium Android).
+  // prCap is dynamic — follows graphics resolution + tier (capped at 1.0
+  // after heavy-graphics strip: no Retina 2x framebuffers).
   const getPrCap = () => Math.min(devicePixelRatio || 1, QUALITY.maxPixelRatio);
   let qualityCooldown = 0;
   let downVotes = 0;
   let upVotes = 0;
-
-  // FX toggles — now driven by graphics preset + overrides (kept in sync with syncGraphicsUI).
-  // These handlers update both the legacy localStorage keys and the graphics overrides.
-  const raysBtn = document.getElementById('godRaysToggle');
-  const flareBtn = document.getElementById('lensFlareToggle');
-  const giBtn = document.getElementById('giToggle');
-  function syncFxButtons() {
-    if (raysBtn) raysBtn.textContent = isRaysEnabled() ? 'Rays: On' : 'Rays: Off';
-    if (flareBtn) flareBtn.textContent = isFlareEnabled() ? 'Flare: On' : 'Flare: Off';
-    if (giBtn) giBtn.textContent = isGIEnabled() ? 'GI: On' : 'GI: Off';
-  }
-  syncFxButtons();
-  if (raysBtn) {
-    raysBtn.onclick = () => {
-      const nowOn = !isRaysEnabled();
-      setRaysEnabled(nowOn);
-      setOverride('rays', nowOn ? null : false);
-      syncFxButtons(); syncGraphicsUI();
-    };
-  }
-  if (flareBtn) {
-    flareBtn.onclick = () => {
-      const nowOn = !isFlareEnabled();
-      setFlareEnabled(nowOn);
-      setOverride('flare', nowOn ? null : false);
-      syncFxButtons(); syncGraphicsUI();
-    };
-  }
-  if (giBtn) {
-    giBtn.onclick = () => {
-      const nowOn = !isGIEnabled();
-      setGIEnabled(nowOn);
-      setOverride('gi', nowOn ? null : false);
-      syncFxButtons(); syncGraphicsUI();
-      if (bounceLight) bounceLight.visible = nowOn;
-    };
-  }
-  // Init bounce visibility from stored GI toggle / graphics
-  if (bounceLight && !isGIEnabled()) bounceLight.visible = false;
 
   function animate(now) {
     requestAnimationFrame(animate);
@@ -869,20 +754,8 @@ async function boot() {
 
     const dt = Math.min(clock.getDelta(), 0.05);
     update(dt);
-    // Volumetric + lens flare
-    if (composer) {
-      try {
-        updateAdvancedEffects(composer, {
-          camera,
-          env,
-          sunWorldPos: env.sunMesh?.position || null,
-          moonWorldPos: env.moonMesh?.position || null,
-        });
-      } catch (e) { /* effects: non-fatal */ }
-      composer.render();
-    } else {
-      renderer.render(scene, camera);
-    }
+    // Post FX removed — direct render only.
+    renderer.render(scene, camera);
 
     fpsAcc += 1 / Math.max(dt, 1e-4);
     fpsN++;
@@ -911,39 +784,16 @@ async function boot() {
           if (++downVotes >= 2) {
             downVotes = 0;
             renderer.setPixelRatio(Math.max(QUALITY.minPixelRatio, pr - 0.25));
-            if (composer) composer.setPixelRatio?.(renderer.getPixelRatio());
           }
         } else if (avg > targetFps * 0.95 && pr < getPrCap()) {
           downVotes = 0;
           if (++upVotes >= 2) {
             upVotes = 0;
             renderer.setPixelRatio(Math.min(getPrCap(), pr + 0.25));
-            if (composer) composer.setPixelRatio?.(renderer.getPixelRatio());
           }
         } else {
           downVotes = 0;
           upVotes = 0;
-        }
-      }
-      // FX guard: if <42 FPS, shed heavy passes
-      if (composer && !QUALITY.low) {
-        if (avg < 42) {
-          const ao = composer.userData.aoPass;
-          const vol = composer.userData.volumetric;
-          if (ao && ao.enabled) ao.enabled = false;
-          else if (vol && vol.pass.enabled) vol.pass.enabled = false;
-          else {
-            const lf = composer.userData.lensFlare;
-            if (lf && lf.pass.enabled) lf.pass.enabled = false;
-          }
-        } else if (avg > 55) {
-          // headroom: restore FX if toggles say they should be on
-          const ao = composer.userData.aoPass;
-          const vol = composer.userData.volumetric;
-          const lf = composer.userData.lensFlare;
-          if (ao && !ao.enabled && isGIEnabled()) ao.enabled = true;
-          else if (vol && !vol.pass.enabled && isRaysEnabled()) vol.pass.enabled = true;
-          else if (lf && !lf.pass.enabled && isFlareEnabled()) lf.pass.enabled = true;
         }
       }
       fpsAcc = 0;
@@ -984,9 +834,6 @@ async function boot() {
       window.__animals = animals;
       window.__camps = camps;
       window.__WORLD_CONFIGS = WORLD_CONFIGS;
-      window.__setRaysEnabled = setRaysEnabled;
-      window.__setFlareEnabled = setFlareEnabled;
-      window.__setGIEnabled = setGIEnabled;
       // Also expose inventory/questLog if adventure exposes them; otherwise try to capture
       // For testMode we lazily try to read them from __adventureInventory etc.
     }

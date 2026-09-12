@@ -252,10 +252,12 @@ export function createCampsites(scene, seed = 'FOREST_123') {
   function nearestDist(px, pz) {
     let best = Infinity;
     for (const s of sites) {
-      const d = Math.hypot(px - s.pos.x, pz - s.pos.z);
-      if (d < best) best = d;
+      const dx = px - s.pos.x;
+      const dz = pz - s.pos.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < best) best = d2;
     }
-    return best;
+    return Math.sqrt(best);
   }
 
   return {
@@ -283,6 +285,11 @@ export function createCampsites(scene, seed = 'FOREST_123') {
           if (d2 < best) { best = d2; nearestIdx = i; }
         }
       }
+      // Perf: particle budgets depend only on graphics settings, not per
+      // site — hoist out of the per-site loop (was 2x getGraphics per site
+      // per frame = 10 allocs/frame).
+      const ec = emberCount();
+      const sc = smokeCount();
       for (let si = 0; si < sites.length; si++) {
         const s = sites[si];
         const dx = s.pos.x - fx;
@@ -322,7 +329,6 @@ export function createCampsites(scene, seed = 'FOREST_123') {
         s.flameInner.rotation.y -= dt * 3;
 
         // Embers rise + respawn. Skip when particles ~0.
-        const ec = emberCount();
         if (ec > 0) {
           const ep = s.embers.geo.attributes.position.array;
           for (let i = 0; i < ec; i++) {
@@ -346,7 +352,6 @@ export function createCampsites(scene, seed = 'FOREST_123') {
         }
 
         // Smoke drifts up, wraps.
-        const sc = smokeCount();
         if (sc > 0) {
           const mp = s.smoke.geo.attributes.position.array;
           for (let i = 0; i < sc; i++) {

@@ -1,38 +1,18 @@
 import * as THREE from 'three';
 import { FOAM_COUNT, RIVER_HALF } from '../config.js';
-import { QUALITY } from '../core/setup.js';
 import { getGraphics } from '../core/graphics.js';
 import { rand } from '../utils.js';
 import { riverXAt } from './procedural.js';
-import { getWaterBump, getWaterTexture } from './textures.js';
+import { getWaterTexture } from './textures.js';
 
 // Winding river: one large water plane follows the player (the carved channel
 // dips below y=-0.32 so water only shows inside the riverbed). Foam streaks
 // drift downstream and respawn inside the channel near the player.
+// Heavy graphics stripped: HQ Physical water (transmission/thickness/
+// clearcoat + bump) removed — cheap Lambert only.
 export function createRiver(scene) {
   const waterDetail = getWaterTexture();
-  const waterBump = getWaterBump();
-  // Phase 3 realism: desktop gets subsurface tint + wind-driven normals.
-  // Low tier: opaque Lambert (fill-rate bound), no bump. Desktop: Physical with
-  // transmission/thickness/clearcoat for semi-transparent depth; normal scale tied
-  // to wind (river.js:waterBump.offset.x += windDir.x * dt * 0.05).
-  const wantHigh = (() => { try { return getGraphics()?.waterHigh !== false && !QUALITY.low; } catch { return !QUALITY.low; } })();
-  const waterMat = !wantHigh
-    ? new THREE.MeshLambertMaterial({ color: 0x0fc3e8, map: waterDetail })
-    : new THREE.MeshPhysicalMaterial({
-      color: 0x0fb6dd,
-      map: waterDetail,
-      bumpMap: waterBump,
-      bumpScale: 0.09,
-      roughness: 0.14,
-      metalness: 0.08,
-      transparent: true,
-      opacity: 0.88,
-      transmission: 0.18,
-      thickness: 0.65,
-      clearcoat: 0.35,
-      clearcoatRoughness: 0.25,
-    });
+  const waterMat = new THREE.MeshLambertMaterial({ color: 0x0fc3e8, map: waterDetail });
 
   const water = new THREE.Mesh(new THREE.PlaneGeometry(130, 130), waterMat);
   water.rotation.x = -Math.PI / 2;
@@ -90,12 +70,13 @@ export function createRiver(scene) {
   function applyGraphics(g) {
     const mul = g?.particles ?? 1;
     foamMesh.count = Math.max(0, Math.round(FOAM_COUNT * mul));
-    const wantHigh2 = g?.waterHigh !== false && !QUALITY.low;
-    // Hot-swap write handled via roughness; full material swap needs reload so
-    // we scale bump instead. Hide foam entirely on battery saver.
+    // Hide foam entirely on battery saver.
     foamMesh.visible = (g?.particles ?? 1) > 0.15;
   }
 
+  // Wind-driven X drift accumulates separately so the sine shimmer doesn't
+  // wipe it out each frame (previous code overwrote offset.x outright).
+  let _windAccX = 0;
   function update(dt, focus, wind = null) {
     const fx = focus ? focus.x : 0;
     const fz = focus ? focus.z : 0;
@@ -103,32 +84,32 @@ export function createRiver(scene) {
     water.position.z = fz;
     // Flow the surface grain downstream (+z) so the river visibly streams.
     // Throttle water uv scroll on low particles / low tier (CPU + texture upload).
-    let tickWater = true;
-    try { const g = getGraphics(); if ((g?.particles ?? 1) < 0.4 && (performance.now() % 100) > 50) tickWater = false; } catch {}
+    // Perf: single performance.now() per frame; frame-parity throttle instead
+    // of performance.now()%100 (which jittered the scroll on/off randomly).
     const now = performance.now();
+    let tickWater = true;
+    try {
+      const g = getGraphics();
+      if ((g?.particles ?? 1) < 0.4 && ((update._frame = (update._frame || 0) + 1) & 1) === 0) tickWater = false;
+    } catch {}
     const windDir = wind?.direction || { x: 0, y: 0 };
     const windAmp = wind?.strength ?? 0;
     if (tickWater) {
       waterDetail.offset.y -= dt * (0.08 + windAmp * 0.04);
-      waterDetail.offset.x = Math.sin(now * 0.0002) * 0.022 + windDir.x * dt * 0.05;
-      // Second caustic layer: bump scrolls at 45° to detail for organic shimmer + wind drift.
-      waterBump.offset.y -= dt * (0.055 + windAmp * 0.03);
-      waterBump.offset.x += dt * (0.055 + windDir.x * 0.03);
-    }
-    // Depth tint: center (deep) pushes blue, bank pushes turquoise via subtle color lerp.
-    // Cheap depth proxy: modulate opacity/roughness with wind gust (choppy -> rougher).
-    if (waterMat.roughness !== undefined) {
-      waterMat.roughness = THREE.MathUtils.clamp(0.14 + windAmp * 0.07, 0.12, 0.22);
+      _windAccX += windDir.x * dt * 0.05;
+      waterDetail.offset.x = Math.sin(now * 0.0002) * 0.022 + _windAccX;
     }
     let moved = false;
+    // Only compose matrices for visible instances (count may be reduced by
+    // graphics slider); still drift all so hidden ones stay in the channel.
+    const visibleFoam = foamMesh.count;
     for (let i = 0; i < foams.length; i++) {
       const f = foams[i];
       f.z += f.speed * dt;
       if (Math.abs(f.z - fz) > 48 || Math.abs(f.x - fx) > 48) {
         spawnFoam(f, fx, fz);
       }
-      writeFoamMatrix(i, f);
-      moved = true;
+      if (i < visibleFoam) { writeFoamMatrix(i, f); moved = true; }
     }
     if (moved) foamMesh.instanceMatrix.needsUpdate = true;
   }
