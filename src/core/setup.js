@@ -56,9 +56,10 @@ export const QUALITY = {
   tier: deviceTier,
   low: isLowTierDevice || (isMobileDevice && typeof screen !== 'undefined' && Math.min(screen.width, screen.height) < 420),
   mid: isMidTierDevice,
-  // Heavy graphics stripped: DPR capped at 1.0 on all tiers (no Retina 2x
-  // framebuffers), MSAA off. Multiplied by graphics resolution slider.
-  maxPixelRatio: 1,
+  // Sharp trees need real pixels: DPR capped per tier (low stays 1.0 for
+  // fill-rate, medium 1.5, high/ultra up to 2.0 for crisp facets). Multiplied
+  // by the graphics resolution slider.
+  maxPixelRatio: isLowTierDevice ? 1 : deviceTier === 'medium' ? 1.5 : 2,
   minPixelRatio: isLowTierDevice ? 0.6 : 0.75,
   shadowSize: shadowSizeForTier(),
   shadowMode: isLowTierDevice ? 'off' : deviceTier === 'medium' ? 'low' : 'high',
@@ -87,8 +88,9 @@ export function refreshQualityFromGraphics() {
   QUALITY.shadowMode = mode;
   QUALITY.shadowsEnabled = mode !== 'off';
   QUALITY.shadowSize = mode === 'ultra' ? 2048 : mode === 'high' ? 2048 : mode === 'low' ? 1024 : 512;
-  // DPR cap follows tier, scaled by resolution slider. Stripped: hard cap 1.0.
-  const tierCap = 1;
+  // DPR cap follows tier, scaled by resolution slider. Low stays 1.0 (tile GPU
+  // fill-rate bound); higher tiers allow >1 for sharp canopy facets.
+  const tierCap = QUALITY.low ? 1 : QUALITY.tier === 'medium' ? 1.5 : 2;
   QUALITY.maxPixelRatio = Math.max(0.6, tierCap * (g.resolution ?? 1));
 }
 
@@ -129,9 +131,9 @@ export function applyGraphicsToRenderer(renderer, sun = null) {
 export function setupCore(canvas) {
   const renderer = new THREE.WebGLRenderer({
     canvas,
-    // Heavy graphics stripped: MSAA off on all tiers (tiled mobile GPUs +
-    // fill-rate). No antialias framebuffer cost.
-    antialias: false,
+    // Sharp canopy edges need MSAA on desktop. Tile mobile GPUs stay off
+    // (fill-rate bound); desktop/Apple Silicon get AA for crisp facets.
+    antialias: !isLowTierDevice,
     powerPreference: 'high-performance',
     stencil: false,
     preserveDrawingBuffer: true,

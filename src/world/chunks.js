@@ -35,6 +35,10 @@ import {
   placeReed,
   placeRock,
   placeSakura,
+  placeStardewApple,
+  placeStardewBirch,
+  placeStardewOak,
+  placeStardewPine,
   placeWillow,
 } from './presets.js';
 import {
@@ -274,37 +278,40 @@ export function createWorldManager(scene, seedStr) {
         if (roll < 0.44 * VEGETATION.treeDensity && bucket.ti + 4 <= POOL.trees) {
           const s = rand(rng, 0.8, 1.5) * VEGETATION.treeScale;
           const kind = rng();
-          // Genshin-weighted lottery: Mondstadt/Liyue/Inazuma/Sumeru/Fontaine nations mixed.
-          // Pine Broadleaf Sakura Maple Autumn Kapok Willow Bamboo + rare rainbow etc.
-          if (kind < 0.14 && bucket.pi + 3 <= POOL.crowns) {
-            placePine(meshes, bucket, obstacles, x, y, z, s, rng);
-          } else if (kind < 0.26 && bucket.bi + 3 <= POOL.crowns) {
-            placeBroadleaf(meshes, bucket, obstacles, x, y, z, s, rng);
-          } else if (kind < 0.34 && bucket.bi + 3 <= POOL.crowns && bucket.fri + 7 <= POOL.fruit) {
-            placeFruitTree(meshes, bucket, obstacles, x, y, z, s, rng);
-          } else if (kind < 0.41 && bucket.bi + 4 <= POOL.crowns && bucket.fhi + 6 <= POOL.flowerHead) {
-            // Inazuma sakura — paler, airy
-            placeSakura(meshes, bucket, obstacles, x, y, z, s, rng);
-          } else if (kind < 0.47 && bucket.bi + 3 <= POOL.crowns && bucket.fhi + 6 <= POOL.flowerHead) {
-            placeBlossomTree(meshes, bucket, obstacles, x, y, z, s, rng);
+          // Stardew-first lottery: chunky oak/pine/apple/birch dominate (~52%),
+          // Genshin accents stay as variety, rainbow/kapok rare eye-catchers.
+          // Stardew kinds use 3 tight puffs, no satellites/leaf-cards => cheaper.
+          if (kind < 0.20 && bucket.bi + 3 <= POOL.crowns) {
+            placeStardewOak(meshes, bucket, obstacles, x, y, z, s, rng);
+          } else if (kind < 0.32 && bucket.pi + 3 <= POOL.crowns) {
+            placeStardewPine(meshes, bucket, obstacles, x, y, z, s, rng);
+          } else if (kind < 0.42 && bucket.bi + 3 <= POOL.crowns && bucket.fri + 8 <= POOL.fruit) {
+            placeStardewApple(meshes, bucket, obstacles, x, y, z, s, rng);
           } else if (kind < 0.52 && bucket.bi + 3 <= POOL.crowns) {
-            // Mondstadt maple — fiery red
+            placeStardewBirch(meshes, bucket, obstacles, x, y, z, s, rng);
+          } else if (kind < 0.60 && bucket.bi + 3 <= POOL.crowns) {
+            placeBroadleaf(meshes, bucket, obstacles, x, y, z, s, rng);
+          } else if (kind < 0.66 && bucket.bi + 3 <= POOL.crowns && bucket.fri + 7 <= POOL.fruit) {
+            placeFruitTree(meshes, bucket, obstacles, x, y, z, s, rng);
+          } else if (kind < 0.71 && bucket.bi + 4 <= POOL.crowns && bucket.fhi + 6 <= POOL.flowerHead) {
+            placeSakura(meshes, bucket, obstacles, x, y, z, s, rng);
+          } else if (kind < 0.75 && bucket.bi + 3 <= POOL.crowns && bucket.fhi + 6 <= POOL.flowerHead) {
+            placeBlossomTree(meshes, bucket, obstacles, x, y, z, s, rng);
+          } else if (kind < 0.79 && bucket.bi + 3 <= POOL.crowns) {
             placeMaple(meshes, bucket, obstacles, x, y, z, s, rng);
-          } else if (kind < 0.57 && bucket.bi + 3 <= POOL.crowns) {
+          } else if (kind < 0.82 && bucket.bi + 3 <= POOL.crowns) {
             placeAutumnTree(meshes, bucket, obstacles, x, y, z, s, rng);
-          } else if (kind < 0.61 && bucket.bi + 3 <= POOL.crowns) {
+          } else if (kind < 0.845 && bucket.bi + 3 <= POOL.crowns) {
             placeGoldenTree(meshes, bucket, obstacles, x, y, z, s, rng);
-          } else if (kind < 0.65 && bucket.bi + 4 <= POOL.crowns) {
+          } else if (kind < 0.865 && bucket.bi + 4 <= POOL.crowns) {
             placeRainbowTree(meshes, bucket, obstacles, x, y, z, rand(rng, 0.9, 1.4) * VEGETATION.treeScale, rng);
-          } else if (kind < 0.71 && bucket.bi + 5 <= POOL.crowns) {
+          } else if (kind < 0.895 && bucket.bi + 5 <= POOL.crowns) {
             placeKapok(meshes, bucket, obstacles, x, y, z, rand(rng, 1.0, 1.5) * VEGETATION.treeScale, rng);
-          } else if (kind < 0.77 && bucket.bi + 5 <= POOL.crowns) {
-            // Fontaine willow — drooping teal
+          } else if (kind < 0.92 && bucket.bi + 5 <= POOL.crowns) {
             placeWillow(meshes, bucket, obstacles, x, y, z, s, rng);
-          } else if (kind < 0.83 && bucket.ti + 3 <= POOL.trees && bucket.bi + 3 <= POOL.crowns) {
-            // Liyue bamboo grove — 3 culms
+          } else if (kind < 0.945 && bucket.ti + 3 <= POOL.trees && bucket.bi + 3 <= POOL.crowns) {
             placeBamboo(meshes, bucket, obstacles, x, y, z, s, rng);
-          } else if (kind < 0.90 && bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
+          } else if (kind < 0.97 && bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
             placeBanana(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.2) * VEGETATION.treeScale, rng);
           } else if (bucket.palmi + PALM_FRONDS <= POOL.palms && bucket.fri + 3 <= POOL.fruit) {
             placePalm(meshes, bucket, obstacles, x, y, z, s, rng);
@@ -371,8 +378,11 @@ export function createWorldManager(scene, seedStr) {
         // Thảo nguyên - open prairie: few trees, endless grass & flowers (nhiều hoa cỏ, ít cây)
         const d = densityForBiome(biome);
         if (roll < 0.18 * VEGETATION.treeDensity * d.trees * 3.5 && bucket.bi + 3 <= POOL.crowns) {
-          // Sparse acacia-like: golden / broadleaf lone trees
-          if (rng() < 0.5) placeGoldenTree(meshes, bucket, obstacles, x, y, z, rand(rng, 0.8, 1.2) * VEGETATION.treeScale, rng);
+          // Sparse Stardew lone trees: oak / apple read cozy on gold meadow
+          const sr = rng();
+          if (sr < 0.4) placeStardewOak(meshes, bucket, obstacles, x, y, z, rand(rng, 0.8, 1.2) * VEGETATION.treeScale, rng);
+          else if (sr < 0.7 && bucket.fri + 8 <= POOL.fruit) placeStardewApple(meshes, bucket, obstacles, x, y, z, rand(rng, 0.8, 1.15) * VEGETATION.treeScale, rng);
+          else if (sr < 0.85) placeGoldenTree(meshes, bucket, obstacles, x, y, z, rand(rng, 0.8, 1.2) * VEGETATION.treeScale, rng);
           else placeBroadleaf(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.1) * VEGETATION.treeScale, rng);
         } else if (roll < 0.28 && bucket.bu < POOL.bushes) {
           placeBush(meshes, bucket, x, y, z, rand(rng, 0.4, 0.8), rng, rng() < 0.5 ? PALETTES.bush : PALETTES.dryBush);
@@ -391,10 +401,13 @@ export function createWorldManager(scene, seedStr) {
           placeRock(meshes, bucket, obstacles, x, y, z, rand(rng, 0.3, 0.7), rng, 0xc9b78a);
         }
       } else if (biome === BIOMES.HILLS) {
-        // Đồi núi - rolling hills: moderate trees, mixed pine/maple, rocks
+        // Đồi núi - rolling hills: Stardew pine/birch mix, crisp on green slopes
         const d = densityForBiome(biome);
         if (roll < 0.24 * VEGETATION.treeDensity * d.trees * 2.2 && bucket.pi + 3 <= POOL.crowns) {
-          if (rng() < 0.5) placePine(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.1) * VEGETATION.treeScale, rng);
+          const hr = rng();
+          if (hr < 0.4) placeStardewPine(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.1) * VEGETATION.treeScale, rng);
+          else if (hr < 0.65 && bucket.bi + 3 <= POOL.crowns) placeStardewBirch(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.0) * VEGETATION.treeScale, rng);
+          else if (hr < 0.85) placePine(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.1) * VEGETATION.treeScale, rng);
           else placeMaple(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.0) * VEGETATION.treeScale, rng);
         } else if (roll < 0.32 && bucket.bi + 3 <= POOL.crowns && bucket.ti + 2 <= POOL.trees) {
           placeBamboo(meshes, bucket, obstacles, x, y, z, rand(rng, 0.7, 1.0) * VEGETATION.treeScale, rng);

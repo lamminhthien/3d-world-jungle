@@ -30,7 +30,7 @@ export const GRAPHICS_PRESETS = {
   },
   high: {
     label: 'High · Detailed',
-    resolution: 0.85, shadows: 'high', viewDistance: 2,
+    resolution: 1.0, shadows: 'high', viewDistance: 2,
     vegetation: 1.0, animals: 1.0, particles: 1.0,
     clouds: false, cloudCount: 0, rain: false, fireflies: false,
     rays: false, flare: false, gi: false,
@@ -38,7 +38,7 @@ export const GRAPHICS_PRESETS = {
   },
   ultra: {
     label: 'Ultra · Apple Silicon / Desktop',
-    resolution: 0.9, shadows: 'high', viewDistance: 2,
+    resolution: 1.0, shadows: 'high', viewDistance: 2,
     vegetation: 1.0, animals: 1.0, particles: 1.0,
     clouds: false, cloudCount: 0, rain: false, fireflies: false,
     rays: false, flare: false, gi: false,

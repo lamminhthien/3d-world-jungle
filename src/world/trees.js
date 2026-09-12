@@ -21,6 +21,10 @@ import {
   placePalm,
   placePine,
   placeRainbowTree,
+  placeStardewApple,
+  placeStardewBirch,
+  placeStardewOak,
+  placeStardewPine,
 } from './presets.js';
 
 export function createTrees(scene) {
@@ -51,23 +55,33 @@ export function createTrees(scene) {
     const s = rand(0.8, 1.5) * VEGETATION.treeScale;
     const kind = rng();
     if (bucket.ti + 4 > MAX_TREES * 4) return;
-    if (kind < 0.2) {
+    if (kind < 0.18) {
+      if (bucket.bi + 3 <= MAX_TREES * 4) placeStardewOak(meshes, bucket, obstacles, x, y, z, s, rng);
+    } else if (kind < 0.30) {
+      if (bucket.pi + 3 <= MAX_TREES * 3) placeStardewPine(meshes, bucket, obstacles, x, y, z, s, rng);
+    } else if (kind < 0.40) {
+      if (bucket.bi + 3 <= MAX_TREES * 4 && bucket.fri + 8 <= MAX_TREES * 6) {
+        placeStardewApple(meshes, bucket, obstacles, x, y, z, s, rng);
+      }
+    } else if (kind < 0.50) {
+      if (bucket.bi + 3 <= MAX_TREES * 4) placeStardewBirch(meshes, bucket, obstacles, x, y, z, s, rng);
+    } else if (kind < 0.58) {
       if (bucket.pi + 3 <= MAX_TREES * 3) placePine(meshes, bucket, obstacles, x, y, z, s, rng);
-    } else if (kind < 0.36) {
+    } else if (kind < 0.66) {
       if (bucket.bi + 3 <= MAX_TREES * 4) placeBroadleaf(meshes, bucket, obstacles, x, y, z, s, rng);
-    } else if (kind < 0.5) {
+    } else if (kind < 0.72) {
       if (bucket.bi + 3 <= MAX_TREES * 4 && bucket.fri + 7 <= MAX_TREES * 6) {
         placeFruitTree(meshes, bucket, obstacles, x, y, z, s, rng);
       }
-    } else if (kind < 0.58) {
-      if (bucket.bi + 3 <= MAX_TREES * 4) placeBlossomTree(meshes, bucket, obstacles, x, y, z, s, rng);
-    } else if (kind < 0.62) {
-      if (bucket.bi + 4 <= MAX_TREES * 4) placeRainbowTree(meshes, bucket, obstacles, x, y, z, rand(0.9, 1.4) * VEGETATION.treeScale, rng);
-    } else if (kind < 0.66) {
-      if (bucket.bi + 3 <= MAX_TREES * 4) placeGoldenTree(meshes, bucket, obstacles, x, y, z, s, rng);
-    } else if (kind < 0.7) {
-      if (bucket.bi + 5 <= MAX_TREES * 4) placeKapok(meshes, bucket, obstacles, x, y, z, rand(1.0, 1.5) * VEGETATION.treeScale, rng);
     } else if (kind < 0.78) {
+      if (bucket.bi + 3 <= MAX_TREES * 4) placeBlossomTree(meshes, bucket, obstacles, x, y, z, s, rng);
+    } else if (kind < 0.81) {
+      if (bucket.bi + 4 <= MAX_TREES * 4) placeRainbowTree(meshes, bucket, obstacles, x, y, z, rand(0.9, 1.4) * VEGETATION.treeScale, rng);
+    } else if (kind < 0.84) {
+      if (bucket.bi + 3 <= MAX_TREES * 4) placeGoldenTree(meshes, bucket, obstacles, x, y, z, s, rng);
+    } else if (kind < 0.87) {
+      if (bucket.bi + 5 <= MAX_TREES * 4) placeKapok(meshes, bucket, obstacles, x, y, z, rand(1.0, 1.5) * VEGETATION.treeScale, rng);
+    } else if (kind < 0.93) {
       if (bucket.palmi + PALM_FRONDS <= MAX_TREES * PALM_FRONDS) {
         placeBanana(meshes, bucket, obstacles, x, y, z, s, rng);
       }

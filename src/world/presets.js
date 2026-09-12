@@ -54,6 +54,16 @@ export const PALETTES = {
   bambooLeaf: 0x6bcf7a,
   bambooCulm: 0xc9d6a0,
   autumn: [0xff7e3a, 0xffb347, 0xffe27a, 0xd35400],
+  // Stardew Valley chunky trees: saturated, high-contrast, cozy.
+  stardewOak: [0x2f9e44, 0x3fbf4f, 0x5ee35a],
+  stardewOakDeep: 0x1f7a33,
+  stardewPine: [0x1e6b3a, 0x2a8a48, 0x3cb85c],
+  stardewApple: [0x37b24d, 0x51cf66, 0x8ce99a],
+  stardewAppleFruit: 0xe03131,
+  stardewBirch: [0x69db7c, 0x8ce99a, 0xb2f2bb],
+  stardewBirchTrunk: 0xe9e4d8,
+  stardewTrunk: 0x7a4a2b,
+  stardewTrunkDark: 0x5a3520,
   // Flower heads: one vivid color per instance (12 brights).
   flower: [0xff2e88, 0xff3b30, 0xff9500, 0xffcc00, 0xffffff, 0xb388ff,
     0x7b2ff7, 0xff6fa5, 0x00c2ff, 0xff5e3a, 0x7dff5e, 0xff4fd8],
@@ -69,6 +79,10 @@ export const PALETTES = {
 
 // ---- Static preset catalog: pick by id for hand placement / UI ----
 export const VEGETATION_PRESETS = [
+  { id: 'stardew-oak',   kind: 'stardewOak', sMin: 0.8, sMax: 1.4,  collisionR: 0.55, biomes: ['jungle', 'savanna'] },
+  { id: 'stardew-pine',  kind: 'stardewPine',sMin: 0.8, sMax: 1.4,  collisionR: 0.55, biomes: ['jungle', 'mountain', 'hills'] },
+  { id: 'stardew-apple', kind: 'stardewApple',sMin: 0.8, sMax: 1.4, collisionR: 0.55, biomes: ['jungle', 'savanna'] },
+  { id: 'stardew-birch', kind: 'stardewBirch',sMin: 0.8, sMax: 1.4, collisionR: 0.55, biomes: ['jungle', 'hills'] },
   { id: 'pine-tall',     kind: 'pine',      sMin: 0.8, sMax: 1.5,  collisionR: 0.55, biomes: ['jungle', 'mountain'] },
   { id: 'pine-snow',     kind: 'pineSnow',  sMin: 0.7, sMax: 1.2,  collisionR: 0.55, biomes: ['snow', 'mountain'] },
   { id: 'broadleaf',     kind: 'broadleaf', sMin: 0.8, sMax: 1.5,  collisionR: 0.55, biomes: ['jungle'] },
@@ -264,20 +278,21 @@ function createTrunkGeometry() {
   return geo;
 }
 
-// Canopy puff: faceted icosahedron (cartoon look) with a cushioned squash
-// (bottom vertices tucked in 15% so blobs stack like cotton instead of balls),
-// baked asymmetric jitter for silhouette variety, and baked top-light so the
-// crown glows and the underside sits in soft shadow — no texture needed.
-// Desktop uses detail 1 (80 facets, rounder foliage); low tier keeps 20.
+// Canopy puff: Stardew-style chunky facets. Detail 0 (20 faces) on ALL tiers:
+// sharper silhouette, 4x fewer tris than detail 1 (80 faces), and the big flat
+// facets catch the sun like Stardew's chunky crowns. Stronger jitter (±11%)
+// for asymmetric character + punchy top-light (0.58 dark roots -> 1.15 glowing
+// crown) for that crisp cozy contrast. Perf win: 6800 crowns * 20 tris = 136k
+// tris instead of 544k.
 function createCanopyGeometry() {
-  const g = new THREE.IcosahedronGeometry(1.25, QUALITY.low ? 0 : 1);
+  const g = new THREE.IcosahedronGeometry(1.25, 0);
   const pos = g.attributes.position;
   for (let i = 0; i < pos.count; i++) {
-    if (pos.getY(i) < 0) pos.setY(i, pos.getY(i) * 0.85);
+    if (pos.getY(i) < 0) pos.setY(i, pos.getY(i) * 0.82);
   }
   g.computeVertexNormals();
-  jitterRadial(g, QUALITY.low ? 0.09 : 0.07, 'canopy');
-  return bakeTopLight(g, 0.66, 1.1);
+  jitterRadial(g, 0.11, 'canopy');
+  return bakeTopLight(g, 0.58, 1.15);
 }
 
 // Flower stem: thin green spike, base at origin.
@@ -574,16 +589,17 @@ function setTrunk(meshes, bucket, obstacles, x, y, z, s, rng, tint = PALETTES.tr
   return bucket.ti - 1; // trunk instance index (palms overwrite it taller)
 }
 
-// Dense foliage helpers — desktop only (tier-gated via bucket capacity checks).
-// Reuse the blob pool for 3 satellite puffs per tree: overlap ±0.4u, scale 0.7-0.9
-// Leaf cards: cheap 2-tri billboards around the canopy shell (alphaTest).
+// Dense foliage helpers — desktop only (tier-gated via capacity checks).
+// Reuse the blob pool for 2 satellite puffs per tree (was 3): overlap ±0.4u,
+// scale 0.7-0.9. Stardew trees skip this entirely (tight 3-puff body is crisp
+// enough) — saves ~1/3 crown instances + fill rate.
+// Capacity = instanceMatrix.count (allocated size), NOT .count (used size).
 function addSatelliteBlobs(meshes, bucket, x, y, z, s, rng, baseTint) {
   if (QUALITY.low) return;
-  if (bucket.bi + 3 > (meshes.blob?.count ?? Infinity) && bucket.bi + 3 > 5600) return;
-  for (let k = 0; k < 3; k++) {
-    if (bucket.bi >= (meshes.blob?.instanceMatrix?.count ?? 5600)) break;
-    // Guard against overflow: pool sizing lives in chunks.js POOL.crowns
-    if (bucket.bi >= 5600) break;
+  const cap = meshes.blob?.instanceMatrix?.count ?? 6800;
+  if (bucket.bi + 2 > cap) return;
+  for (let k = 0; k < 2; k++) {
+    if (bucket.bi >= cap) break;
     meshes.blob.setColorAt(bucket.bi, tintFast(baseTint, rand(rng, -0.04, 0.04)));
     dummy.position.set(x + rand(rng, -0.4, 0.4) * s, y + rand(rng, 2.0, 3.2) * s, z + rand(rng, -0.4, 0.4) * s);
     dummy.rotation.set(rand(rng, 0, 3), rand(rng, 0, 3), 0);
@@ -917,6 +933,92 @@ export function placeAutumnTree(meshes, bucket, obstacles, x, y, z, s, rng) {
   addLeafCards(meshes, bucket, x, y, z, s, rng, pick(rng, PALETTES.autumn));
 }
 
+// ---- Stardew Valley chunky trees ----
+// Design rules (Stardew read): short THICK trunk, 2-3 BIG round puffs stacked
+// tight (no gaps, no satellites), saturated 3-tone gradient (deep base, vivid
+// mid, sunlit top), zero leaf-cards (crisp silhouette, cheaper). All reuse the
+// shared trunk/blob/fruit pools => zero new draw calls, fewer instances/tree.
+
+// Stardew oak: the iconic round ball-top. 1 big + 2 small tight puffs.
+export function placeStardewOak(meshes, bucket, obstacles, x, y, z, s, rng) {
+  setTrunk(meshes, bucket, obstacles, x, y + 0.65 * s, z, s * 1.1, rng, PALETTES.stardewTrunk);
+  const puffs = [
+    { dy: 1.9, ox: 0, oz: 0, sc: 1.35, tint: PALETTES.stardewOakDeep },
+    { dy: 2.6, ox: 0.35, oz: 0.2, sc: 1.05, tint: PALETTES.stardewOak[0] },
+    { dy: 3.1, ox: -0.15, oz: -0.2, sc: 0.8, tint: PALETTES.stardewOak[2] },
+  ];
+  for (const p of puffs) {
+    meshes.blob.setColorAt(bucket.bi, tintFast(p.tint, rand(rng, -0.02, 0.02)));
+    dummy.position.set(x + p.ox * s, y + p.dy * s, z + p.oz * s);
+    dummy.rotation.set(0, rand(rng, 0, 6.28), 0);
+    dummy.scale.set(s * p.sc, s * p.sc * 0.92, s * p.sc);
+    dummy.updateMatrix();
+    meshes.blob.setMatrixAt(bucket.bi++, dummy.matrix);
+  }
+}
+
+// Stardew pine: short fat Christmas-tree. 2 stout tiers (not 3 skinny).
+export function placeStardewPine(meshes, bucket, obstacles, x, y, z, s, rng) {
+  setTrunk(meshes, bucket, obstacles, x, y + 0.55 * s, z, s * 0.95, rng, PALETTES.stardewTrunkDark);
+  const tiers = [
+    { dy: 1.6, sc: 1.15, col: PALETTES.stardewPine[0] },
+    { dy: 2.45, sc: 0.8, col: PALETTES.stardewPine[1] },
+    { dy: 3.05, sc: 0.5, col: PALETTES.stardewPine[2] },
+  ];
+  for (const t of tiers) {
+    meshes.pine.setColorAt(bucket.pi, tintFast(t.col, rand(rng, -0.02, 0.02)));
+    dummy.position.set(x, y + t.dy * s, z);
+    dummy.rotation.set(0, rand(rng, 0, 6.28), 0);
+    dummy.scale.setScalar(s * t.sc);
+    dummy.updateMatrix();
+    meshes.pine.setMatrixAt(bucket.pi++, dummy.matrix);
+  }
+}
+
+// Stardew apple: oak body + BIG red fruit ring (6-8 orbs, front-loaded).
+export function placeStardewApple(meshes, bucket, obstacles, x, y, z, s, rng) {
+  setTrunk(meshes, bucket, obstacles, x, y + 0.65 * s, z, s * 1.05, rng, PALETTES.stardewTrunk);
+  const puffs = [
+    { dy: 1.85, ox: 0, oz: 0, sc: 1.3, tint: PALETTES.stardewApple[0] },
+    { dy: 2.55, ox: 0.3, oz: -0.2, sc: 1.0, tint: PALETTES.stardewApple[1] },
+    { dy: 3.0, ox: -0.2, oz: 0.2, sc: 0.75, tint: PALETTES.stardewApple[2] },
+  ];
+  for (const p of puffs) {
+    meshes.blob.setColorAt(bucket.bi, tintFast(p.tint, rand(rng, -0.02, 0.02)));
+    dummy.position.set(x + p.ox * s, y + p.dy * s, z + p.oz * s);
+    dummy.rotation.set(0, rand(rng, 0, 6.28), 0);
+    dummy.scale.set(s * p.sc, s * p.sc * 0.92, s * p.sc);
+    dummy.updateMatrix();
+    meshes.blob.setMatrixAt(bucket.bi++, dummy.matrix);
+  }
+  const n = 6 + ((rng() * 3) | 0);
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2 + rand(rng, -0.25, 0.25);
+    const r = rand(rng, 0.85, 1.25) * s;
+    addFruit(meshes, bucket,
+      x + Math.cos(a) * r, y + rand(rng, 1.6, 2.5) * s, z + Math.sin(a) * r,
+      s * rand(rng, 0.85, 1.05), rng, PALETTES.stardewAppleFruit, 1.0);
+  }
+}
+
+// Stardew birch: pale white trunk + airy lime crown. Reads instantly vs oak.
+export function placeStardewBirch(meshes, bucket, obstacles, x, y, z, s, rng) {
+  setTrunk(meshes, bucket, obstacles, x, y + 0.75 * s, z, s * 0.9, rng, PALETTES.stardewBirchTrunk);
+  const puffs = [
+    { dy: 2.0, ox: 0, oz: 0, sc: 1.1, tint: PALETTES.stardewBirch[0] },
+    { dy: 2.7, ox: 0.3, oz: 0.25, sc: 0.85, tint: PALETTES.stardewBirch[1] },
+    { dy: 3.2, ox: -0.2, oz: -0.15, sc: 0.65, tint: PALETTES.stardewBirch[2] },
+  ];
+  for (const p of puffs) {
+    meshes.blob.setColorAt(bucket.bi, tintFast(p.tint, rand(rng, -0.02, 0.02)));
+    dummy.position.set(x + p.ox * s, y + p.dy * s, z + p.oz * s);
+    dummy.rotation.set(0, rand(rng, 0, 6.28), 0);
+    dummy.scale.set(s * p.sc, s * p.sc * 0.95, s * p.sc);
+    dummy.updateMatrix();
+    meshes.blob.setMatrixAt(bucket.bi++, dummy.matrix);
+  }
+}
+
 // Kapok emergent giant: tallest silhouette, buttress roots, umbrella crown.
 export function placeKapok(meshes, bucket, obstacles, x, y, z, s, rng) {
   const ti = setTrunk(meshes, bucket, obstacles, x, y + 1.15 * s, z, s, rng, PALETTES.trunkDark);
@@ -1135,7 +1237,29 @@ export function buildPresetGroup(presetId, { materials } = {}) {
     return m;
   };
   const s = 1;
-  if (preset.kind === 'pine' || preset.kind === 'pineSnow') {
+  if (preset.kind === 'stardewOak') {
+    add(geos.trunk, mats.trunk, PALETTES.stardewTrunk, [0, 0.65, 0], [0, 0, 0], [1.1, 1.1, 1.1]);
+    add(geos.blob, mats.blob, PALETTES.stardewOakDeep, [0, 1.9, 0], [0, 0, 0], [1.35, 1.24, 1.35]);
+    add(geos.blob, mats.blob, PALETTES.stardewOak[0], [0.35, 2.6, 0.2], [0, 1, 0], [1.05, 0.97, 1.05]);
+    add(geos.blob, mats.blob, PALETTES.stardewOak[2], [-0.15, 3.1, -0.2], [0, 2, 0], [0.8, 0.74, 0.8]);
+  } else if (preset.kind === 'stardewPine') {
+    add(geos.trunk, mats.trunk, PALETTES.stardewTrunkDark, [0, 0.55, 0], [0, 0, 0], [0.95, 0.95, 0.95]);
+    add(geos.pine, mats.pine, PALETTES.stardewPine[0], [0, 1.6, 0], [0, 0, 0], [1.15, 1.15, 1.15]);
+    add(geos.pine, mats.pine, PALETTES.stardewPine[1], [0, 2.45, 0], [0, 1, 0], [0.8, 0.8, 0.8]);
+    add(geos.pine, mats.pine, PALETTES.stardewPine[2], [0, 3.05, 0], [0, 2, 0], [0.5, 0.5, 0.5]);
+  } else if (preset.kind === 'stardewApple') {
+    add(geos.trunk, mats.trunk, PALETTES.stardewTrunk, [0, 0.65, 0], [0, 0, 0], [1.05, 1.05, 1.05]);
+    add(geos.blob, mats.blob, PALETTES.stardewApple[0], [0, 1.85, 0], [0, 0, 0], [1.3, 1.2, 1.3]);
+    add(geos.blob, mats.blob, PALETTES.stardewApple[1], [0.3, 2.55, -0.2], [0, 1, 0], [1.0, 0.92, 1.0]);
+    add(geos.fruit, mats.fruit, PALETTES.stardewAppleFruit, [0.85, 1.9, 0.4], [0, 0, 0], [0.9, 0.9, 0.9]);
+    add(geos.fruit, mats.fruit, PALETTES.stardewAppleFruit, [-0.7, 2.1, -0.5], [0, 0, 0], [0.9, 0.9, 0.9]);
+    add(geos.fruit, mats.fruit, PALETTES.stardewAppleFruit, [0.1, 2.4, 0.9], [0, 0, 0], [0.9, 0.9, 0.9]);
+  } else if (preset.kind === 'stardewBirch') {
+    add(geos.trunk, mats.trunk, PALETTES.stardewBirchTrunk, [0, 0.75, 0], [0, 0, 0], [0.9, 0.9, 0.9]);
+    add(geos.blob, mats.blob, PALETTES.stardewBirch[0], [0, 2.0, 0], [0, 0, 0], [1.1, 1.05, 1.1]);
+    add(geos.blob, mats.blob, PALETTES.stardewBirch[1], [0.3, 2.7, 0.25], [0, 1, 0], [0.85, 0.8, 0.85]);
+    add(geos.blob, mats.blob, PALETTES.stardewBirch[2], [-0.2, 3.2, -0.15], [0, 2, 0], [0.65, 0.62, 0.65]);
+  } else if (preset.kind === 'pine' || preset.kind === 'pineSnow') {
     const pal = preset.kind === 'pineSnow' ? PALETTES.snowPine : PALETTES.pine;
     add(geos.trunk, mats.trunk, PALETTES.trunk, [0, 0.8, 0], [0, 0, 0], [s, s, s]);
     add(geos.pine, mats.pine, pal[1] ?? pal[0], [0, 1.85, 0], [0, 0, 0], [s, s, s]);
