@@ -1,91 +1,233 @@
-// animals.js — Low-poly animated animals: birds, deer, fish.
-// All use InstancedMesh for performance (1 draw call each).
-// Animations are pure sine-wave math — no skeleton, no assets.
+// animals.js — Minecraft-style voxel animals: birds, deer, fish, butterflies,
+// crabs, boars, dragonflies, bats + NEW chickens & sheep.
+// Perf: 1 InstancedMesh per species (10 draw calls total), merged voxel
+// geometry with vertex colors, opaque materials unless fading, staggered
+// ground/river queries, frame-sliced heavy AI, early-out when hidden.
 
 import * as THREE from 'three';
 import { QUALITY } from '../core/setup.js';
 import { groundHeight } from '../utils.js';
-import { riverXAt, moistureAt } from '../world/procedural.js';
+import { riverXAt } from '../world/procedural.js';
 import { ANIMALS } from '../config.js';
 
-// ---- Helper ----
+// ---- Shared scratch (no per-frame allocs) ----
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
 const _e = new THREE.Euler();
-const _axis = new THREE.Vector3(0, 1, 0);
+const _c = new THREE.Color();
 
-function compose(px, py, pz, ry, sx, sy, sz) {
-  _p.set(px, py, pz);
-  _e.set(0, ry, 0);
-  _q.setFromEuler(_e);
-  _s.set(sx, sy, sz);
-  return _m.compose(_p, _q, _s);
+// Variable-animal registry: every species + its config key. UI / testMode can
+// iterate this instead of hardcoding species. `createAnimals(scene, { only })`
+// can spawn a subset.
+export const ANIMAL_TYPES = [
+  'birds', 'deer', 'fish', 'butterflies', 'crabs',
+  'boars', 'dragonflies', 'bats', 'chickens', 'sheep',
+];
+
+const FALLBACK_COUNT = {
+  birds: 22, deer: 6, fish: 14, butterflies: 18, crabs: 10,
+  boars: 4, dragonflies: 10, bats: 9, chickens: 8, sheep: 6,
+};
+const FALLBACK_MIN = {
+  birds: 4, deer: 1, fish: 2, butterflies: 2, crabs: 2,
+  boars: 1, dragonflies: 2, bats: 2, chickens: 2, sheep: 1,
+};
+const CONFIG_KEY = {
+  birds: 'birdCount', deer: 'deerCount', fish: 'fishCount',
+  butterflies: 'butterflyCount', crabs: 'crabCount', boars: 'boarCount',
+  dragonflies: 'dragonflyCount', bats: 'batCount',
+  chickens: 'chickenCount', sheep: 'sheepCount',
+};
+
+/** Base (full-quality) count for a species — always reads ANIMALS config. */
+export function baseAnimalCount(type) {
+  return ANIMALS[CONFIG_KEY[type]] ?? FALLBACK_COUNT[type] ?? 6;
 }
 
-// ============================================================
-// BIRDS — Genshin sky gliders over Mondstadt plains
-// ============================================================
-const BASE_BIRD_COUNT = ANIMALS.birdCount;
-function birdCount() {
+/** Max instances to preallocate: headroom for animalsMul > 1 sliders. */
+export function maxAnimalCount(type) {
+  return Math.ceil(baseAnimalCount(type) * 1.6) + 2;
+}
+
+/** Live count after quality scaling. Cheap — call on applyDensity only. */
+export function liveAnimalCount(type) {
   const mul = QUALITY.animalsMul ?? 1;
-  const base = QUALITY.low ? BASE_BIRD_COUNT - 10 : BASE_BIRD_COUNT;
-  return Math.max(4, Math.round(base * mul));
+  const base = QUALITY.low
+    ? Math.ceil(baseAnimalCount(type) * 0.5)
+    : baseAnimalCount(type);
+  return Math.min(
+    maxAnimalCount(type),
+    Math.max(FALLBACK_MIN[type] ?? 1, Math.round(base * mul)),
+  );
 }
 
-function buildBirdWingGeo() {
-  // Single flat diamond "wing" centred at origin, swept up/down in update.
+// ============================================================
+// Voxel builder — Minecraft look via merged boxes + vertex colors.
+// One geometry per species, non-indexed (tiny: <500 verts), no UVs.
+// boxes: [w,h,d, x,y,z, hex], tris: [{ p:[9 nums], c:hex }]
+// ============================================================
+function buildVoxelGeo(boxes, tris = null) {
+  const pos = [];
+  const nor = [];
+  const col = [];
+  const tmp = new THREE.Color();
+
+  for (let i = 0; i < boxes.length; i++) {
+    const [w, h, d, x, y, z, hex] = boxes[i];
+    const g = new THREE.BoxGeometry(w, h, d);
+    g.translate(x, y, z);
+    const ng = g.toNonIndexed();
+    const pa = ng.attributes.position.array;
+    const na = ng.attributes.normal.array;
+    tmp.setHex(hex);
+    for (let v = 0; v < pa.length; v += 3) {
+      pos.push(pa[v], pa[v + 1], pa[v + 2]);
+      nor.push(na[v], na[v + 1], na[v + 2]);
+      col.push(tmp.r, tmp.g, tmp.b);
+    }
+    g.dispose();
+    ng.dispose();
+  }
+
+  if (tris) {
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    const c = new THREE.Vector3();
+    const ab = new THREE.Vector3();
+    const ac = new THREE.Vector3();
+    const n = new THREE.Vector3();
+    for (let i = 0; i < tris.length; i++) {
+      const t = tris[i];
+      const p = t.p;
+      a.set(p[0], p[1], p[2]);
+      b.set(p[3], p[4], p[5]);
+      c.set(p[6], p[7], p[8]);
+      ab.subVectors(b, a);
+      ac.subVectors(c, a);
+      n.crossVectors(ab, ac).normalize();
+      if (n.y < 0 && t.up !== false) n.negate(); // wings face up
+      tmp.setHex(t.c);
+      pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+      for (let k = 0; k < 3; k++) nor.push(n.x, n.y, n.z);
+      for (let k = 0; k < 3; k++) col.push(tmp.r, tmp.g, tmp.b);
+    }
+  }
+
   const geo = new THREE.BufferGeometry();
-  // Two triangles forming a thin diamond (width 1.0, depth 0.4)
-  const verts = new Float32Array([
-    // left wing
-    0, 0, 0,   -0.5, 0, 0.1,   -0.15, 0.05, -0.2,
-    // right wing
-    0, 0, 0,    0.5, 0, 0.1,    0.15, 0.05, -0.2,
-    // body stub
-    0, 0, 0,    0, 0, 0.25,     0, 0.04, -0.05,
-  ]);
-  geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
-  geo.computeVertexNormals();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nor), 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(col), 3));
+  geo.computeBoundingSphere();
   return geo;
 }
 
-export function createBirds(scene) {
-  const mat = new THREE.MeshLambertMaterial({ color: 0x2c1e0f, side: THREE.DoubleSide, transparent: true, opacity: 1 });
-  const geo = buildBirdWingGeo();
-  const n = birdCount();
-  const mesh = new THREE.InstancedMesh(geo, mat, BASE_BIRD_COUNT);
-  mesh.count = n;
+function voxelMat({ doubleSide = false, transparent = false, opacity = 1 } = {}) {
+  return new THREE.MeshLambertMaterial({
+    vertexColors: true,
+    side: doubleSide ? THREE.DoubleSide : THREE.FrontSide,
+    transparent,
+    opacity,
+  });
+}
+
+function makeHerdMesh(geo, mat, capacity, shadow = false) {
+  const mesh = new THREE.InstancedMesh(geo, mat, capacity);
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.frustumCulled = false;
-  mesh.castShadow = false;
+  mesh.castShadow = shadow;
+  mesh.receiveShadow = false;
+  return mesh;
+}
+
+// Staggered ground probe: walking animals refresh fast, idle ones rarely.
+// Returns cached height; mutates `o` (_gy/_gyT).
+function probeGround(o, x, z, dt, walkRate, idleRate) {
+  o._gyT -= dt;
+  if (o._gyT <= 0) {
+    o._gy = groundHeight(x, z);
+    o._gyT = walkRate;
+    return o._gy;
+  }
+  return o._gy;
+}
+function probeGroundState(o, x, z, dt, walking) {
+  return probeGround(o, x, z, dt, walking ? 0.3 : 1.0);
+}
+
+// Cached river centre: riverXAt is ~9 noise evals — refresh at ~4Hz per
+// animal and lerp toward it instead of calling it every frame.
+function probeRiver(o, z, dt) {
+  o._rxT -= dt;
+  if (o._rxT <= 0 || o._rx === undefined) {
+    o._rx = riverXAt(z);
+    o._rxT = 0.25;
+  }
+  return o._rx;
+}
+
+function lerpOpacity(mat, target, dt, speed = 1.2) {
+  const cur = mat.opacity;
+  if (cur === target) return cur;
+  const v = cur + (target - cur) * Math.min(1, dt * speed);
+  mat.opacity = Math.abs(v - target) < 0.005 ? target : v;
+  return mat.opacity;
+}
+
+// ============================================================
+// BIRDS — blocky voxel glider: cube body + head + beak + flat wings
+// ============================================================
+function buildBirdGeo() {
+  return buildVoxelGeo(
+    [
+      // body, belly, head, beak, tail
+      [0.24, 0.18, 0.38, 0, 0, 0, 0x3d3d4a],
+      [0.20, 0.06, 0.30, 0, -0.10, 0.02, 0xd8d8e2],
+      [0.20, 0.18, 0.20, 0, 0.14, 0.22, 0x3d3d4a],
+      [0.08, 0.06, 0.10, 0, 0.12, 0.36, 0xf2a541],
+      [0.16, 0.05, 0.18, 0, 0.02, -0.26, 0x2b2b34],
+    ],
+    [
+      // left / right wings — thin flat diamonds (flap faked via roll)
+      { p: [0, 0.04, 0.08, -0.62, 0.04, -0.02, -0.18, 0.04, -0.16], c: 0x2b2b34 },
+      { p: [0, 0.04, 0.08, 0.62, 0.04, -0.02, 0.18, 0.04, -0.16], c: 0x2b2b34 },
+    ],
+  );
+}
+
+export function createBirds(scene) {
+  const geo = buildBirdGeo();
+  const mat = voxelMat({ doubleSide: true }); // opaque — lifecycle uses visible
+  const cap = maxAnimalCount('birds');
+  const mesh = makeHerdMesh(geo, mat, cap, false);
+  mesh.count = liveAnimalCount('birds');
   scene.add(mesh);
 
-  // Each bird: position, orbit radius, orbit speed, phase, altitude, flapPhase
   const birds = [];
-  for (let i = 0; i < BASE_BIRD_COUNT; i++) {
-    const angle = (i / BASE_BIRD_COUNT) * Math.PI * 2;
-    const radius = 8 + Math.random() * 18;
+  for (let i = 0; i < cap; i++) {
+    const angle = (i / cap) * Math.PI * 2;
     birds.push({
-      cx: (Math.random() - 0.5) * 30,     // flock centre X
-      cz: (Math.random() - 0.5) * 30,     // flock centre Z
+      cx: (Math.random() - 0.5) * 30,
+      cz: (Math.random() - 0.5) * 30,
       angle,
-      radius,
+      radius: 8 + Math.random() * 18,
       orbitSpeed: 0.3 + Math.random() * 0.4,
       altitude: 10 + Math.random() * 12,
       flapPhase: Math.random() * Math.PI * 2,
       flapSpeed: 3 + Math.random() * 3,
-      scale: 0.35 + Math.random() * 0.2,
+      scale: 0.9 + Math.random() * 0.5,
     });
   }
 
   let t = 0;
-  function applyDensity() { mesh.count = birdCount(); }
+  function applyDensity() { mesh.count = liveAnimalCount('birds'); }
+  // target 0..1 activity; hidden => mesh invisible, update skipped
+  let activity = 1;
   function update(dt, playerPos) {
+    if (!mesh.visible || mesh.count === 0 || activity <= 0.02) return;
     t += dt;
     const n = mesh.count;
-    if (n === 0) return;
-    // Slowly drift flock centres toward the player (squared distance — no sqrt)
     for (let i = 0; i < n; i++) {
       const b = birds[i];
       const dx = playerPos.x - b.cx;
@@ -100,191 +242,133 @@ export function createBirds(scene) {
       const bz = b.cz + Math.sin(b.angle) * b.radius;
       const by = b.altitude + Math.sin(t * 0.4 + b.flapPhase) * 0.8;
 
-      // Wing flap: rotate slightly around Z axis
-      const flap = Math.sin(t * b.flapSpeed + b.flapPhase) * 0.4;
-      const headingY = b.angle + Math.PI * 0.5;
-
+      const flap = Math.sin(t * b.flapSpeed + b.flapPhase) * 0.45;
       _p.set(bx, by, bz);
-      _e.set(flap, headingY, 0);
+      _e.set(flap * 0.4, b.angle + Math.PI * 0.5, flap);
       _q.setFromEuler(_e);
-      _s.setScalar(b.scale);
+      // wing-beat squash gives flap illusion with a single rigid mesh
+      _s.set(b.scale, b.scale * (1 + flap * 0.18), b.scale);
       _m.compose(_p, _q, _s);
       mesh.setMatrixAt(i, _m);
     }
     mesh.instanceMatrix.needsUpdate = true;
   }
 
-  return { mesh, update, applyDensity };
+  return { mesh, update, applyDensity, setActivity(v) { activity = v; } };
 }
 
 // ============================================================
-// DEER  (simple low-poly quadruped)
+// DEER — Minecraft deer: big cube head, ears, antlers, spot patches
 // ============================================================
-const BASE_DEER_COUNT = 6;
-function deerCount() {
-  const mul = QUALITY.animalsMul ?? 1;
-  const base = QUALITY.low ? 3 : BASE_DEER_COUNT;
-  return Math.max(1, Math.round(base * mul));
-}
-
 function buildDeerGeo() {
-  // Body: stretched box + 4 legs cylinders + head box, merged into one geometry.
-  const parts = [];
-
-  // Body
-  parts.push(new THREE.BoxGeometry(0.55, 0.35, 0.9));
-
-  // Head (translated forward + up)
-  const head = new THREE.BoxGeometry(0.28, 0.28, 0.32);
-  head.translate(0, 0.22, 0.52);
-  parts.push(head);
-
-  // Neck
-  const neck = new THREE.BoxGeometry(0.16, 0.25, 0.16);
-  neck.translate(0, 0.12, 0.38);
-  parts.push(neck);
-
-  // 4 legs
-  const legPositions = [
-    [-0.18, -0.34, -0.28],
-    [ 0.18, -0.34, -0.28],
-    [-0.18, -0.34,  0.22],
-    [ 0.18, -0.34,  0.22],
-  ];
-  for (const [lx, ly, lz] of legPositions) {
-    const leg = new THREE.BoxGeometry(0.1, 0.35, 0.1);
-    leg.translate(lx, ly, lz);
-    parts.push(leg);
-  }
-
-  // Merge all into one geometry using BufferGeometryUtils pattern
-  // (manual merge — no import needed)
-  let totalVerts = 0;
-  let totalIdx = 0;
-  for (const p of parts) {
-    totalVerts += p.attributes.position.count;
-    if (p.index) totalIdx += p.index.count;
-  }
-
-  const positions = new Float32Array(totalVerts * 3);
-  const normals = new Float32Array(totalVerts * 3);
-  const indices = [];
-  let vOffset = 0;
-  let iOffset = 0;
-
-  for (const p of parts) {
-    const srcPos = p.attributes.position.array;
-    const srcNorm = p.attributes.normals ? p.attributes.normals.array : null;
-    positions.set(srcPos, vOffset * 3);
-    if (srcNorm) normals.set(srcNorm, vOffset * 3);
-    if (p.index) {
-      for (let k = 0; k < p.index.count; k++) {
-        indices.push(p.index.array[k] + vOffset);
-      }
-    }
-    vOffset += p.attributes.position.count;
-    iOffset += p.index ? p.index.count : 0;
-  }
-
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  if (indices.length) geo.setIndex(indices);
-  geo.computeVertexNormals();
-  return geo;
+  return buildVoxelGeo([
+    [0.55, 0.40, 0.95, 0, 0.05, 0, 0x8b5e3c],      // torso
+    [0.45, 0.12, 0.75, 0, -0.14, 0, 0xd9b48f],     // belly
+    [0.30, 0.10, 0.50, -0.12, 0.28, -0.05, 0xf2e8dc], // back patch L
+    [0.30, 0.10, 0.50, 0.12, 0.28, -0.05, 0xf2e8dc],  // back patch R
+    [0.18, 0.30, 0.18, 0, 0.32, 0.48, 0x8b5e3c],   // neck
+    [0.32, 0.32, 0.34, 0, 0.58, 0.58, 0x8b5e3c],   // head (big minecraft cube)
+    [0.18, 0.14, 0.10, 0, 0.50, 0.78, 0x5d3d24],   // snout
+    [0.05, 0.05, 0.03, -0.07, 0.56, 0.83, 0x1a1a1a], // nostril L
+    [0.05, 0.05, 0.03, 0.07, 0.56, 0.83, 0x1a1a1a],  // nostril R
+    [0.07, 0.07, 0.02, -0.10, 0.64, 0.74, 0x1a1a1a], // eye L
+    [0.07, 0.07, 0.02, 0.10, 0.64, 0.74, 0x1a1a1a],  // eye R
+    [0.10, 0.16, 0.06, -0.22, 0.72, 0.52, 0x8b5e3c], // ear L
+    [0.10, 0.16, 0.06, 0.22, 0.72, 0.52, 0x8b5e3c],  // ear R
+    [0.06, 0.22, 0.06, -0.16, 0.90, 0.48, 0xe8dcc0], // antler L
+    [0.06, 0.22, 0.06, 0.16, 0.90, 0.48, 0xe8dcc0],  // antler R
+    [0.16, 0.06, 0.06, -0.16, 1.00, 0.48, 0xe8dcc0], // antler tine L
+    [0.16, 0.06, 0.06, 0.16, 1.00, 0.48, 0xe8dcc0],  // antler tine R
+    [0.12, 0.42, 0.12, -0.19, -0.33, -0.30, 0x6b442a], // legs
+    [0.12, 0.42, 0.12, 0.19, -0.33, -0.30, 0x6b442a],
+    [0.12, 0.42, 0.12, -0.19, -0.33, 0.28, 0x6b442a],
+    [0.12, 0.42, 0.12, 0.19, -0.33, 0.28, 0x6b442a],
+    [0.14, 0.08, 0.06, 0, 0.10, -0.50, 0xf2e8dc],   // tail
+  ]);
 }
 
-export function createDeer(scene) {
-  const deerGeo = buildDeerGeo();
-  const deerMat = new THREE.MeshLambertMaterial({ color: 0x8b5e3c, flatShading: true, transparent: true, opacity: 1 });
-  const mesh = new THREE.InstancedMesh(deerGeo, deerMat, BASE_DEER_COUNT);
-  mesh.count = deerCount();
-  mesh.frustumCulled = false;
-  mesh.castShadow = QUALITY.shadowsEnabled;
-  scene.add(mesh);
-
-  const deer = [];
-  for (let i = 0; i < BASE_DEER_COUNT; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const dx = (Math.random() - 0.5) * 40;
-    const dz = (Math.random() - 0.5) * 40;
-    deer.push({
-      x: dx,
-      z: dz,
+function makeWalkerGeoState(cap, spread, opts = {}) {
+  const herd = [];
+  for (let i = 0; i < cap; i++) {
+    herd.push({
+      x: (Math.random() - 0.5) * spread,
+      z: (Math.random() - 0.5) * spread,
       ry: Math.random() * Math.PI * 2,
-      speed: 0.4 + Math.random() * 0.8,
+      speed: (opts.speed ?? 0.6) * (0.7 + Math.random() * 0.6),
       phase: Math.random() * Math.PI * 2,
       wanderTimer: 2 + Math.random() * 6,
       wanderAngle: Math.random() * Math.PI * 2,
-      scale: 0.7 + Math.random() * 0.3,
-      state: 'idle', // 'idle' | 'walk'
+      scale: (opts.scale ?? 0.8) * (0.85 + Math.random() * 0.3),
+      state: 'idle',
       idleTimer: 1 + Math.random() * 3,
-      // Perf: groundHeight() is ~15 noise evals — cache per deer, refresh
-      // staggered (~0.2s) since terrain changes slowly under a walking deer.
-      _gy: 0,
-      _gyT: 0,
+      _gy: 0, _gyT: Math.random() * 0.5,
     });
   }
+  return herd;
+}
 
+// Shared wander state machine (deer/sheep/boar/chicken). Returns walking bool.
+function stepWander(d, dt, playerPos, keepOutRiver) {
+  let walking = d.state === 'walk';
+  if (!walking) {
+    d.idleTimer -= dt;
+    if (d.idleTimer <= 0) {
+      d.state = 'walk';
+      d.wanderAngle = Math.random() * Math.PI * 2;
+      d.wanderTimer = 2 + Math.random() * 5;
+      walking = true;
+    }
+  } else {
+    d.wanderTimer -= dt;
+    if (d.wanderTimer <= 0) {
+      d.state = 'idle';
+      d.idleTimer = 1 + Math.random() * 4;
+      walking = false;
+    } else {
+      const nx = d.x + Math.cos(d.wanderAngle) * d.speed * dt;
+      const nz = d.z + Math.sin(d.wanderAngle) * d.speed * dt;
+      if (!keepOutRiver || Math.abs(nx - riverXAt(nz)) > 4) {
+        d.x = nx;
+        d.z = nz;
+      } else {
+        d.wanderAngle += Math.PI;
+      }
+      d.ry = d.wanderAngle + Math.PI / 2;
+      const dx = d.x - playerPos.x;
+      const dz = d.z - playerPos.z;
+      if (dx * dx + dz * dz > 60 * 60) {
+        const a = Math.random() * Math.PI * 2;
+        const r = 20 + Math.random() * 20;
+        d.x = playerPos.x + Math.cos(a) * r;
+        d.z = playerPos.z + Math.sin(a) * r;
+      }
+    }
+  }
+  return walking;
+}
+
+export function createDeer(scene) {
+  const geo = buildDeerGeo();
+  const mat = voxelMat(); // opaque — no fade cost
+  const cap = maxAnimalCount('deer');
+  const mesh = makeHerdMesh(geo, mat, cap, QUALITY.shadowsEnabled);
+  mesh.count = liveAnimalCount('deer');
+  scene.add(mesh);
+
+  const deer = makeWalkerGeoState(cap, 40, { speed: 0.6, scale: 0.8 });
   let t = 0;
-  function applyDensity() { mesh.count = deerCount(); }
+  function applyDensity() { mesh.count = liveAnimalCount('deer'); }
   function update(dt, playerPos) {
-    // Throttle deer AI on low: updates still run but mesh.count already reduced
+    if (!mesh.visible || mesh.count === 0) return;
     t += dt;
     const n = mesh.count;
-    if (n === 0) return;
     for (let i = 0; i < n; i++) {
       const d = deer[i];
-
-      // State machine: idle ↔ walk
-      if (d.state === 'idle') {
-        d.idleTimer -= dt;
-        if (d.idleTimer <= 0) {
-          d.state = 'walk';
-          d.wanderAngle = Math.random() * Math.PI * 2;
-          d.wanderTimer = 2 + Math.random() * 5;
-        }
-      } else {
-        d.wanderTimer -= dt;
-        if (d.wanderTimer <= 0) {
-          d.state = 'idle';
-          d.idleTimer = 1 + Math.random() * 4;
-        }
-        // Walk forward
-        const nx = d.x + Math.cos(d.wanderAngle) * d.speed * dt;
-        const nz = d.z + Math.sin(d.wanderAngle) * d.speed * dt;
-        // Don't walk into river
-        const rd = Math.abs(nx - riverXAt(nz));
-        if (rd > 4) {
-          d.x = nx;
-          d.z = nz;
-        } else {
-          d.wanderAngle += Math.PI; // turn around
-        }
-        d.ry = d.wanderAngle + Math.PI / 2;
-        // Stay near player
-        const dx = d.x - playerPos.x;
-        const dz = d.z - playerPos.z;
-        if (dx * dx + dz * dz > 60 * 60) {
-          // Teleport to near player when too far
-          const a = Math.random() * Math.PI * 2;
-          const r = 20 + Math.random() * 20;
-          d.x = playerPos.x + Math.cos(a) * r;
-          d.z = playerPos.z + Math.sin(a) * r;
-        }
-      }
-
-      d._gyT -= dt;
-      if (d._gyT <= 0 || d.state === 'walk') {
-        // Walking deer move — refresh at ~5Hz; idle deer rarely.
-        d._gy = groundHeight(d.x, d.z);
-        d._gyT = d.state === 'walk' ? 0.2 : 0.6;
-      }
-      const groundY = d._gy;
-      // Leg bob animation
-      const bob = d.state === 'walk' ? Math.abs(Math.sin(t * 4 + d.phase)) * 0.05 : 0;
-      const py = groundY + 0.35 * d.scale + bob;
-      _p.set(d.x, py, d.z);
-      _e.set(0, d.ry, 0);
+      const walking = stepWander(d, dt, playerPos, true);
+      const groundY = probeGroundState(d, d.x, d.z, dt, walking);
+      const bob = walking ? Math.abs(Math.sin(t * 5 + d.phase)) * 0.06 : Math.sin(t * 1.2 + d.phase) * 0.015;
+      _p.set(d.x, groundY + 0.55 * d.scale + bob, d.z);
+      _e.set(0, d.ry, walking ? Math.sin(t * 5 + d.phase) * 0.03 : 0);
       _q.setFromEuler(_e);
       _s.setScalar(d.scale);
       _m.compose(_p, _q, _s);
@@ -297,96 +381,70 @@ export function createDeer(scene) {
 }
 
 // ============================================================
-// FISH (animated near river surface)
+// FISH — Minecraft cod: blocky body + tail fin + striped back
 // ============================================================
-const BASE_FISH_COUNT = 14;
-function fishCount() {
-  const mul = QUALITY.animalsMul ?? 1;
-  const base = QUALITY.low ? 6 : BASE_FISH_COUNT;
-  return Math.max(2, Math.round(base * mul));
-}
-
 function buildFishGeo() {
-  // Simple diamond body + triangle tail
-  const geo = new THREE.BufferGeometry();
-  const verts = new Float32Array([
-    // body diamond
-     0,    0, 0.35,   // nose
-    -0.12, 0.06, 0,   // top-left
-     0.12, 0.06, 0,   // top-right
-     0,   -0.06, 0,   // bottom
-
-    // tail
-     0,    0.07, -0.22,
-    -0.14, 0,    -0.22,
-     0.14, 0,    -0.22,
-     0,   -0.07, -0.22,
+  return buildVoxelGeo([
+    [0.20, 0.22, 0.42, 0, 0, 0.04, 0xff7043],   // body
+    [0.16, 0.08, 0.34, 0, -0.13, 0.04, 0xffd9a0], // belly
+    [0.10, 0.10, 0.30, 0, 0.14, 0.02, 0xd84315],  // dorsal stripe
+    [0.04, 0.16, 0.14, 0, 0, -0.24, 0xe64a19],    // tail stem
+    [0.02, 0.26, 0.12, 0, 0, -0.34, 0xe64a19],    // tail fin (thin voxel)
+    [0.22, 0.04, 0.12, 0, 0.02, 0.02, 0xd84315],  // side fins
+    [0.06, 0.06, 0.02, -0.11, 0.04, 0.20, 0x1a1a1a], // eye L
+    [0.06, 0.06, 0.02, 0.11, 0.04, 0.20, 0x1a1a1a],  // eye R
   ]);
-  const idx = [
-    0, 1, 3,  0, 3, 2,  0, 2, 1,  // body
-    4, 5, 6,  4, 6, 7,              // tail top/bot
-  ];
-  geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
-  geo.setIndex(idx);
-  geo.computeVertexNormals();
-  return geo;
 }
 
 export function createFish(scene) {
-  const fishGeo = buildFishGeo();
-  const fishMat = new THREE.MeshLambertMaterial({ color: 0xff7043, flatShading: true, transparent: true, opacity: 0.85 });
-  const mesh = new THREE.InstancedMesh(fishGeo, fishMat, BASE_FISH_COUNT);
-  mesh.count = fishCount();
-  mesh.frustumCulled = false;
-  mesh.castShadow = false;
+  const geo = buildFishGeo();
+  const mat = voxelMat(); // opaque — reads as river fish, no sorting cost
+  const cap = maxAnimalCount('fish');
+  const mesh = makeHerdMesh(geo, mat, cap, false);
+  mesh.count = liveAnimalCount('fish');
   scene.add(mesh);
 
   const fish = [];
-  for (let i = 0; i < BASE_FISH_COUNT; i++) {
+  for (let i = 0; i < cap; i++) {
     const pz = (Math.random() - 0.5) * 60;
     fish.push({
       z: pz,
       x: riverXAt(pz) + (Math.random() - 0.5) * 3,
-      ry: Math.random() * Math.PI * 2,
+      ry: 0,
       phase: Math.random() * Math.PI * 2,
       speed: 0.6 + Math.random() * 1.2,
-      scale: 0.3 + Math.random() * 0.2,
+      scale: 0.8 + Math.random() * 0.5,
       waveAmp: 0.8 + Math.random() * 1.2,
+      _rx: 0, _rxT: Math.random() * 0.25,
     });
   }
 
   let t = 0;
-  function applyDensity() { mesh.count = fishCount(); }
+  function applyDensity() { mesh.count = liveAnimalCount('fish'); }
   function update(dt, playerPos) {
+    if (!mesh.visible || mesh.count === 0) return;
     t += dt;
     const n = mesh.count;
-    if (n === 0) return;
     for (let i = 0; i < n; i++) {
       const f = fish[i];
-      // Swim along river: drift in Z
       f.z += f.speed * dt;
-      // Follow river X centre with a side-to-side wobble
-      const riverX = riverXAt(f.z);
-      f.x += (riverX - f.x) * dt * 2;
+      const riverX = probeRiver(f, f.z, dt);
+      f.x += (riverX - f.x) * Math.min(1, dt * 2);
       f.x += Math.sin(t * f.waveAmp + f.phase) * 0.8 * dt;
+      f.ry = Math.atan2(Math.sin(t * f.waveAmp + f.phase) * f.waveAmp * 0.8, f.speed);
 
-      // Facing direction: tangent of swim path
-      f.ry = Math.atan2(
-        Math.sin(t * f.waveAmp + f.phase) * f.waveAmp * 0.8,
-        f.speed
-      );
-
-      // Stay near player
       const dz = f.z - playerPos.z;
       if (Math.abs(dz) > 55) {
         f.z = playerPos.z + (Math.random() - 0.5) * 30;
         f.x = riverXAt(f.z) + (Math.random() - 0.5) * 2;
+        f._rx = f.x;
+        f._rxT = 0.25;
       }
 
-      const py = -0.15 + Math.sin(t * 1.5 + f.phase) * 0.04; // near water surface
-
+      const py = -0.15 + Math.sin(t * 1.5 + f.phase) * 0.04;
       _p.set(f.x, py, f.z);
-      _e.set(0, f.ry, 0);
+      // tail-wag roll sells the swim with a rigid voxel mesh
+      _e.set(0, f.ry, Math.sin(t * 6 + f.phase) * 0.25);
       _q.setFromEuler(_e);
       _s.setScalar(f.scale);
       _m.compose(_p, _q, _s);
@@ -399,299 +457,363 @@ export function createFish(scene) {
 }
 
 // ============================================================
-// BUTTERFLIES — Inazuma/Monstadt flower fields (Genshin gliders)
+// BUTTERFLIES — voxel body + big flat wings, tinted per instance
 // ============================================================
-const BASE_BUTTERFLY_COUNT = ANIMALS.butterflyCount;
-function butterflyCount() {
-  const mul = QUALITY.animalsMul ?? 1;
-  const base = QUALITY.low ? 8 : BASE_BUTTERFLY_COUNT;
-  return Math.max(2, Math.round(base * mul));
-}
-
 function buildButterflyGeo() {
-  const geo = new THREE.BufferGeometry();
-  // Two pairs of wings — colorful flat diamonds
-  const v = new Float32Array([
-    0, 0.02, 0,  -0.22, 0.04, 0.08,  -0.32, 0, -0.06,
-    0, 0.02, 0,   0.22, 0.04, 0.08,   0.32, 0, -0.06,
-    0, 0.02, 0,  -0.14, -0.03, 0.06, -0.18, -0.06, -0.05,
-    0, 0.02, 0,   0.14, -0.03, 0.06,  0.18, -0.06, -0.05,
-  ]);
-  const idx = [0,1,2, 3,4,5, 6,7,8, 9,10,11];
-  geo.setAttribute('position', new THREE.BufferAttribute(v, 3));
-  geo.setIndex(idx);
-  geo.computeVertexNormals();
-  return geo;
+  return buildVoxelGeo(
+    [
+      [0.07, 0.07, 0.26, 0, 0, 0, 0xffffff], // body (white → tinted)
+      [0.05, 0.10, 0.05, 0, 0.08, 0.10, 0xffffff], // head
+    ],
+    [
+      { p: [0, 0.02, 0.04, -0.34, 0.02, 0.10, -0.38, 0.02, -0.14], c: 0xffffff },
+      { p: [0, 0.02, 0.04, 0.34, 0.02, 0.10, 0.38, 0.02, -0.14], c: 0xffffff },
+      { p: [0, 0.02, -0.02, -0.20, 0.02, 0.02, -0.24, 0.02, -0.14], c: 0xf2f2f2 },
+      { p: [0, 0.02, -0.02, 0.20, 0.02, 0.02, 0.24, 0.02, -0.14], c: 0xf2f2f2 },
+    ],
+  );
 }
 
 export function createButterflies(scene) {
   const geo = buildButterflyGeo();
-  const mat = new THREE.MeshLambertMaterial({ color: 0xff7ee8, side: THREE.DoubleSide, transparent: true, opacity: 0.95 });
-  const mesh = new THREE.InstancedMesh(geo, mat, BASE_BUTTERFLY_COUNT);
-  mesh.count = butterflyCount();
-  mesh.frustumCulled = false; scene.add(mesh);
-  const colors = [0xff7ee8, 0x7de8ff, 0xffd93b, 0x7dff7a, 0xff9a7a];
-  const col = new THREE.Color();
-  const b = [];
-  for (let i=0;i<BASE_BUTTERFLY_COUNT;i++) {
-    mesh.setColorAt(i, col.setHex(colors[i % colors.length]));
-    b.push({
-      x:(Math.random()-0.5)*30, z:(Math.random()-0.5)*30,
-      ry:Math.random()*6.28, flap:Math.random()*6.28, speed:0.7+Math.random()*1.2,
-      bob:Math.random()*6.28, wander:Math.random()*6.28, scale:0.45+Math.random()*0.25,
-      _gy: 0, _gyT: 0
+  const mat = voxelMat({ doubleSide: true, transparent: true, opacity: 0.95 });
+  const cap = maxAnimalCount('butterflies');
+  const mesh = makeHerdMesh(geo, mat, cap, false);
+  mesh.count = liveAnimalCount('butterflies');
+  scene.add(mesh);
+
+  const palette = [0xff7ee8, 0x7de8ff, 0xffd93b, 0x7dff7a, 0xff9a7a];
+  const list = [];
+  for (let i = 0; i < cap; i++) {
+    mesh.setColorAt(i, _c.setHex(palette[i % palette.length]));
+    list.push({
+      x: (Math.random() - 0.5) * 30, z: (Math.random() - 0.5) * 30,
+      ry: Math.random() * 6.28, flap: Math.random() * 6.28,
+      speed: 0.7 + Math.random() * 1.2,
+      bob: Math.random() * 6.28, wander: Math.random() * 6.28,
+      scale: 0.8 + Math.random() * 0.45,
+      _gy: 0, _gyT: Math.random() * 0.4,
     });
   }
-  mesh.instanceColor.needsUpdate = true;
-  let t=0;
-  function applyDensity() { mesh.count = butterflyCount(); }
-  function update(dt, playerPos) {
-    t+=dt;
-    const n = mesh.count;
-    if (n === 0) return;
-    for(let i=0;i<n;i++){
-      const bf=b[i];
-      bf.wander+=dt*0.6;
-      bf.x += Math.cos(bf.wander)*bf.speed*dt*0.4;
-      bf.z += Math.sin(bf.wander*0.7)*bf.speed*dt*0.4;
-      // stay near player + flower meadows (moist lowland)
-      const dx=bf.x-playerPos.x, dz=bf.z-playerPos.z;
-      if(dx*dx+dz*dz>35*35){ bf.x+= (playerPos.x-bf.x)*dt*0.08; bf.z+=(playerPos.z-bf.z)*dt*0.08; }
-      bf._gyT -= dt;
-      if (bf._gyT <= 0) { bf._gy = groundHeight(bf.x,bf.z); bf._gyT = 0.25; }
-      const gy=bf._gy+0.45+Math.sin(t*1.2+bf.bob)*0.25;
-      const flap=Math.sin(t*9+bf.flap)*0.55;
-      _p.set(bf.x, gy, bf.z);
-      _e.set(flap, bf.ry + Math.sin(t*0.8+bf.flap)*0.6, 0);
-      _q.setFromEuler(_e); _s.setScalar(bf.scale);
-      _m.compose(_p,_q,_s); mesh.setMatrixAt(i,_m);
-    }
-    mesh.instanceMatrix.needsUpdate=true;
-  }
-  return { mesh, update, applyDensity };
-}
+  if (mesh.instanceColor) mesh.instanceColor.setUsage(THREE.StaticDrawUsage);
 
-// ============================================================
-// CRABS — Fontaine beach tide pools
-// ============================================================
-const BASE_CRAB_COUNT = ANIMALS.crabCount;
-function crabCount() {
-  const mul = QUALITY.animalsMul ?? 1;
-  const base = QUALITY.low ? 6 : BASE_CRAB_COUNT;
-  return Math.max(2, Math.round(base * mul));
-}
-
-function buildCrabGeo(){
-  const g=new THREE.BoxGeometry(0.32,0.14,0.24);
-  const eyeL=new THREE.SphereGeometry(0.06,5,5); eyeL.translate(-0.1,0.12,0.1);
-  const eyeR=new THREE.SphereGeometry(0.06,5,5); eyeR.translate(0.1,0.12,0.1);
-  // merge quick
-  const geos=[g,eyeL,eyeR];
-  let vT=0,iT=0; for(const gg of geos){ vT+=gg.attributes.position.count; iT+=gg.index.count; }
-  const pos=new Float32Array(vT*3), norm=new Float32Array(vT*3), idx=[];
-  let vo=0; for(const gg of geos){ pos.set(gg.attributes.position.array, vo*3); if(gg.index) for(let k=0;k<gg.index.count;k++) idx.push(gg.index.array[k]+vo); vo+=gg.attributes.position.count; }
-  const mg=new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.BufferAttribute(pos,3)); mg.setIndex(idx); mg.computeVertexNormals(); return mg;
-}
-
-export function createCrabs(scene){
-  const geo=buildCrabGeo();
-  const mat=new THREE.MeshLambertMaterial({ color:0xff6b35, flatShading:true });
-  const mesh=new THREE.InstancedMesh(geo, mat, BASE_CRAB_COUNT);
-  mesh.count = crabCount();
-  mesh.frustumCulled=false; scene.add(mesh);
-  const crabs=[];
-  for(let i=0;i<BASE_CRAB_COUNT;i++){
-    const z=(Math.random()-0.5)*50;
-    const rx=riverXAt(z);
-    // place on beach band (bankOuter +-1.5)
-    const side=Math.random()<0.5?-1:1;
-    crabs.push({ z, x: rx + side*(4.5+Math.random()*1.8), ry:Math.random()*6.28, phase:Math.random()*6.28, speed:0.5+Math.random()*0.7, scale:0.7+Math.random()*0.3, dir: side, _gy: 0, _gyT: 0 });
-  }
-  let t=0;
-  function applyDensity() { mesh.count = crabCount(); }
-  function update(dt, playerPos){
-    t+=dt;
-    const n = mesh.count;
-    if (n === 0) return;
-    for(let i=0;i<n;i++){
-      const c=crabs[i];
-      c.z += c.dir * c.speed * dt * 0.6;
-      // side-walk waddle
-      c.x = riverXAt(c.z) + c.dir*4.8 + Math.sin(t*2+c.phase)*0.4;
-      c._gyT -= dt;
-      if (c._gyT <= 0) { c._gy = groundHeight(c.x,c.z); c._gyT = 0.25; }
-      const gy=c._gy+0.07;
-      const waddle=Math.sin(t*6+c.phase)*0.25;
-      _p.set(c.x, gy, c.z); _e.set(0, c.ry + waddle, 0); _q.setFromEuler(_e); _s.setScalar(c.scale);
-      _m.compose(_p,_q,_s); mesh.setMatrixAt(i,_m);
-      if(Math.abs(c.z-playerPos.z)>50){ c.z=playerPos.z+(Math.random()-0.5)*20; }
-    }
-    mesh.instanceMatrix.needsUpdate=true;
-  }
-  return { mesh, update, applyDensity };
-}
-
-// ============================================================
-// BOARS — Sumeru forest (chunky deer variant)
-// ============================================================
-const BASE_BOAR_COUNT = ANIMALS.boarCount;
-function boarCount() {
-  const mul = QUALITY.animalsMul ?? 1;
-  const base = QUALITY.low ? 2 : BASE_BOAR_COUNT;
-  return Math.max(1, Math.round(base * mul));
-}
-
-export function createBoars(scene){
-  const geo=buildDeerGeo();
-  // scale slightly chunkier via instance scale, darker tint
-  // transparent:true from birth — avoids per-frame program recompiles on fade
-  const mat=new THREE.MeshLambertMaterial({ color:0x4a2f1a, flatShading:true, transparent: true, opacity: 1 });
-  const mesh=new THREE.InstancedMesh(geo, mat, BASE_BOAR_COUNT);
-  mesh.count = boarCount();
-  mesh.frustumCulled=false; mesh.castShadow=QUALITY.shadowsEnabled; scene.add(mesh);
-  const boars=[];
-  for(let i=0;i<BASE_BOAR_COUNT;i++){
-    boars.push({ x:(Math.random()-0.5)*35, z:(Math.random()-0.5)*35, ry:Math.random()*6.28, speed:0.35+Math.random()*0.5, phase:Math.random()*6.28, wander:Math.random()*6.28, scale:0.95+Math.random()*0.25, idle:1+Math.random()*2, state:'walk', _gy: 0, _gyT: 0 });
-  }
-  let t=0;
-  function applyDensity() { mesh.count = boarCount(); }
-  function update(dt, playerPos){
-    t+=dt;
-    const n = mesh.count;
-    if (n === 0) return;
-    for(let i=0;i<n;i++){
-      const b=boars[i];
-      b.wander+=dt*0.4;
-      if(b.state==='walk'){
-        const nx=b.x+Math.cos(b.wander)*b.speed*dt, nz=b.z+Math.sin(b.wander)*b.speed*dt;
-        if(Math.abs(nx - riverXAt(nz))>4){ b.x=nx; b.z=nz; }
-        b.ry=Math.atan2(Math.sin(b.wander), Math.cos(b.wander));
-        const bdx=b.x-playerPos.x, bdz=b.z-playerPos.z;
-        if(bdx*bdx+bdz*bdz>60*60){ const a=Math.random()*6.28, r=18+Math.random()*12; b.x=playerPos.x+Math.cos(a)*r; b.z=playerPos.z+Math.sin(a)*r; }
-      }
-      b._gyT -= dt;
-      if (b._gyT <= 0) { b._gy = groundHeight(b.x,b.z); b._gyT = 0.25; }
-      const gy=b._gy+0.38*b.scale+Math.sin(t*3+b.phase)*0.03;
-      _p.set(b.x,gy,b.z); _e.set(0,b.ry,0); _q.setFromEuler(_e); _s.setScalar(b.scale*1.15);
-      _m.compose(_p,_q,_s); mesh.setMatrixAt(i,_m);
-    }
-    mesh.instanceMatrix.needsUpdate=true;
-  }
-  return { mesh, update, applyDensity };
-}
-
-// ============================================================
-// DRAGONFLIES — river jewel gliders (day, clear/partlyCloudy, near water)
-// ============================================================
-const BASE_DRAGONFLY_COUNT = 10;
-function dragonflyCount() {
-  const mul = QUALITY.animalsMul ?? 1;
-  const base = QUALITY.low ? 5 : BASE_DRAGONFLY_COUNT;
-  return Math.max(2, Math.round(base * mul));
-}
-function buildDragonflyGeo() {
-  const geo = new THREE.BufferGeometry();
-  const v = new Float32Array([
-    0, 0, 0.28,  0, 0.02, -0.18,  -0.28, 0.02, 0.04,
-    0, 0, 0.28,  0, 0.02, -0.18,   0.28, 0.02, 0.04,
-  ]);
-  geo.setAttribute('position', new THREE.BufferAttribute(v, 3));
-  geo.setIndex([0,1,2, 3,4,5]);
-  geo.computeVertexNormals();
-  return geo;
-}
-export function createDragonflies(scene) {
-  const geo = buildDragonflyGeo();
-  const mat = new THREE.MeshLambertMaterial({ color: 0x2de2a8, transparent: true, opacity: 0.95, side: THREE.DoubleSide });
-  const mesh = new THREE.InstancedMesh(geo, mat, BASE_DRAGONFLY_COUNT);
-  mesh.count = dragonflyCount();
-  mesh.frustumCulled = false; scene.add(mesh);
-  const cols = [0x2de2a8, 0x3ac8ff, 0x7dff7a, 0xffd93b];
-  const col = new THREE.Color();
-  const df = [];
-  for (let i = 0; i < BASE_DRAGONFLY_COUNT; i++) {
-    mesh.setColorAt(i, col.setHex(cols[i % cols.length]));
-    const z = (Math.random() - 0.5) * 40;
-    df.push({ z, x: riverXAt(z) + (Math.random() - 0.5) * 2.5, y: 0.55 + Math.random() * 0.9, phase: Math.random() * 6.28, wander: Math.random() * 6.28, speed: 1.1 + Math.random() * 0.9, scale: 0.5 + Math.random() * 0.3 });
-  }
-  mesh.instanceColor.needsUpdate = true;
   let t = 0;
-  function applyDensity() { mesh.count = dragonflyCount(); }
-  function update(dt, playerPos, env) {
-    // Lifecycle: only vibrant by day when clear/partlyCloudy/drizzle; hide at night/storm
-    const tod = env?.timeOfDay ?? 12;
-    const weather = env?.weather ?? 'clear';
-    const isDay = tod >= 6 && tod < 18.5;
-    const badWeather = weather === 'storm';
-    const want = isDay && !badWeather;
-    const targetOpacity = want ? 0.95 : 0;
-    mat.opacity += (targetOpacity - mat.opacity) * Math.min(1, dt * 1.2);
-    mesh.visible = mat.opacity > 0.02;
-    if (!mesh.visible) return;
+  function applyDensity() { mesh.count = liveAnimalCount('butterflies'); }
+  function update(dt, playerPos) {
+    if (!mesh.visible || mesh.count === 0 || mat.opacity <= 0.02) return;
     t += dt;
     const n = mesh.count;
-    if (n === 0) return;
+    for (let i = 0; i < n; i++) {
+      const bf = list[i];
+      bf.wander += dt * 0.6;
+      bf.x += Math.cos(bf.wander) * bf.speed * dt * 0.4;
+      bf.z += Math.sin(bf.wander * 0.7) * bf.speed * dt * 0.4;
+      const dx = bf.x - playerPos.x;
+      const dz = bf.z - playerPos.z;
+      if (dx * dx + dz * dz > 35 * 35) {
+        bf.x += (playerPos.x - bf.x) * dt * 0.08;
+        bf.z += (playerPos.z - bf.z) * dt * 0.08;
+      }
+      const gy = probeGround(bf, bf.x, bf.z, dt, 0.5, 0.5)
+        + 0.5 + Math.sin(t * 1.2 + bf.bob) * 0.25;
+      const flap = Math.sin(t * 9 + bf.flap) * 0.55;
+      _p.set(bf.x, gy, bf.z);
+      _e.set(flap, bf.ry + Math.sin(t * 0.8 + bf.flap) * 0.6, 0);
+      _q.setFromEuler(_e);
+      _s.setScalar(bf.scale);
+      _m.compose(_p, _q, _s);
+      mesh.setMatrixAt(i, _m);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  return { mesh, update, applyDensity };
+}
+
+// ============================================================
+// CRABS — Minecraft crab: cube body, stalk eyes, big claws, legs
+// ============================================================
+function buildCrabGeo() {
+  return buildVoxelGeo([
+    [0.36, 0.16, 0.26, 0, 0, 0, 0xff6b35],       // shell
+    [0.30, 0.06, 0.20, 0, 0.10, 0, 0xff8c5a],    // shell highlight
+    [0.06, 0.12, 0.06, -0.10, 0.14, 0.12, 0xff6b35], // stalk L
+    [0.06, 0.12, 0.06, 0.10, 0.14, 0.12, 0xff6b35],  // stalk R
+    [0.09, 0.09, 0.06, -0.10, 0.22, 0.12, 0xffffff], // eye white L
+    [0.09, 0.09, 0.06, 0.10, 0.22, 0.12, 0xffffff],  // eye white R
+    [0.04, 0.04, 0.02, -0.10, 0.22, 0.155, 0x1a1a1a], // pupil L
+    [0.04, 0.04, 0.02, 0.10, 0.22, 0.155, 0x1a1a1a],  // pupil R
+    [0.10, 0.08, 0.16, -0.26, -0.02, 0.10, 0xc24a20], // arm L
+    [0.10, 0.08, 0.16, 0.26, -0.02, 0.10, 0xc24a20],  // arm R
+    [0.16, 0.12, 0.14, -0.32, 0.0, 0.22, 0xff8c5a],   // claw L
+    [0.16, 0.12, 0.14, 0.32, 0.0, 0.22, 0xff8c5a],    // claw R
+    [0.16, 0.04, 0.04, -0.26, -0.06, 0.06, 0xc24a20], // legs L
+    [0.16, 0.04, 0.04, -0.26, -0.06, -0.06, 0xc24a20],
+    [0.16, 0.04, 0.04, 0.26, -0.06, 0.06, 0xc24a20],  // legs R
+    [0.16, 0.04, 0.04, 0.26, -0.06, -0.06, 0xc24a20],
+  ]);
+}
+
+export function createCrabs(scene) {
+  const geo = buildCrabGeo();
+  const mat = voxelMat(); // opaque
+  const cap = maxAnimalCount('crabs');
+  const mesh = makeHerdMesh(geo, mat, cap, false);
+  mesh.count = liveAnimalCount('crabs');
+  scene.add(mesh);
+
+  const crabs = [];
+  for (let i = 0; i < cap; i++) {
+    const z = (Math.random() - 0.5) * 50;
+    const side = Math.random() < 0.5 ? -1 : 1;
+    crabs.push({
+      z, x: riverXAt(z) + side * (4.5 + Math.random() * 1.8),
+      ry: Math.random() * 6.28, phase: Math.random() * 6.28,
+      speed: 0.5 + Math.random() * 0.7, scale: 0.9 + Math.random() * 0.4,
+      dir: side, _gy: 0, _gyT: Math.random() * 0.4, _rx: 0, _rxT: 0,
+    });
+  }
+
+  let t = 0;
+  function applyDensity() { mesh.count = liveAnimalCount('crabs'); }
+  function update(dt, playerPos) {
+    if (!mesh.visible || mesh.count === 0) return;
+    t += dt;
+    const n = mesh.count;
+    for (let i = 0; i < n; i++) {
+      const c = crabs[i];
+      c.z += c.dir * c.speed * dt * 0.6;
+      c.x = probeRiver(c, c.z, dt) + c.dir * 4.8 + Math.sin(t * 2 + c.phase) * 0.4;
+      const gy = probeGround(c, c.x, c.z, dt, 0.5, 0.5) + 0.09;
+      const waddle = Math.sin(t * 6 + c.phase) * 0.25;
+      const snap = Math.max(0, Math.sin(t * 1.3 + c.phase)) * 0.15;
+      _p.set(c.x, gy + snap * 0.3, c.z);
+      _e.set(0, c.ry + waddle, waddle * 0.4);
+      _q.setFromEuler(_e);
+      _s.setScalar(c.scale);
+      _m.compose(_p, _q, _s);
+      mesh.setMatrixAt(i, _m);
+      if (Math.abs(c.z - playerPos.z) > 50) {
+        c.z = playerPos.z + (Math.random() - 0.5) * 20;
+        c._rxT = 0;
+      }
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  return { mesh, update, applyDensity };
+}
+
+// ============================================================
+// BOARS — Minecraft pig: pink cube body, snout, curly tail
+// ============================================================
+function buildBoarGeo() {
+  return buildVoxelGeo([
+    [0.62, 0.48, 0.92, 0, 0.08, 0, 0xf0a0a8],      // torso (chunky pig)
+    [0.50, 0.14, 0.70, 0, -0.18, 0, 0xe08a94],     // belly shade
+    [0.42, 0.38, 0.36, 0, 0.28, 0.58, 0xf0a0a8],   // head
+    [0.22, 0.16, 0.08, 0, 0.22, 0.79, 0xd97b86],   // snout
+    [0.04, 0.04, 0.02, -0.05, 0.23, 0.835, 0x5d2a30], // nostril L
+    [0.04, 0.04, 0.02, 0.05, 0.23, 0.835, 0x5d2a30],  // nostril R
+    [0.07, 0.07, 0.02, -0.14, 0.36, 0.75, 0x1a1a1a],  // eye L
+    [0.07, 0.07, 0.02, 0.14, 0.36, 0.75, 0x1a1a1a],   // eye R
+    [0.12, 0.12, 0.06, -0.16, 0.52, 0.52, 0xe08a94],  // ear L
+    [0.12, 0.12, 0.06, 0.16, 0.52, 0.52, 0xe08a94],   // ear R
+    [0.16, 0.36, 0.16, -0.20, -0.32, -0.28, 0xc97f88], // legs
+    [0.16, 0.36, 0.16, 0.20, -0.32, -0.28, 0xc97f88],
+    [0.16, 0.36, 0.16, -0.20, -0.32, 0.28, 0xc97f88],
+    [0.16, 0.36, 0.16, 0.20, -0.32, 0.28, 0xc97f88],
+    [0.06, 0.06, 0.14, 0.08, 0.16, -0.50, 0xd97b86],  // curly tail
+    [0.06, 0.12, 0.06, 0.08, 0.22, -0.55, 0xd97b86],
+  ]);
+}
+
+export function createBoars(scene) {
+  const geo = buildBoarGeo();
+  const mat = voxelMat();
+  const cap = maxAnimalCount('boars');
+  const mesh = makeHerdMesh(geo, mat, cap, QUALITY.shadowsEnabled);
+  mesh.count = liveAnimalCount('boars');
+  scene.add(mesh);
+
+  const boars = [];
+  for (let i = 0; i < cap; i++) {
+    boars.push({
+      x: (Math.random() - 0.5) * 35, z: (Math.random() - 0.5) * 35,
+      ry: Math.random() * 6.28, speed: 0.35 + Math.random() * 0.5,
+      phase: Math.random() * 6.28, wander: Math.random() * 6.28,
+      scale: 0.95 + Math.random() * 0.25,
+      state: 'walk', idleTimer: 1, wanderTimer: 3,
+      _gy: 0, _gyT: Math.random() * 0.3,
+    });
+  }
+
+  let t = 0;
+  function applyDensity() { mesh.count = liveAnimalCount('boars'); }
+  function update(dt, playerPos) {
+    if (!mesh.visible || mesh.count === 0) return;
+    t += dt;
+    const n = mesh.count;
+    for (let i = 0; i < n; i++) {
+      const b = boars[i];
+      b.wander += dt * 0.4;
+      const walking = b.state === 'walk';
+      if (walking) {
+        const nx = b.x + Math.cos(b.wander) * b.speed * dt;
+        const nz = b.z + Math.sin(b.wander) * b.speed * dt;
+        if (Math.abs(nx - riverXAt(nz)) > 4) { b.x = nx; b.z = nz; }
+        b.ry = Math.atan2(Math.sin(b.wander), Math.cos(b.wander)) + Math.PI / 2;
+        const bdx = b.x - playerPos.x;
+        const bdz = b.z - playerPos.z;
+        if (bdx * bdx + bdz * bdz > 60 * 60) {
+          const a = Math.random() * 6.28;
+          const r = 18 + Math.random() * 12;
+          b.x = playerPos.x + Math.cos(a) * r;
+          b.z = playerPos.z + Math.sin(a) * r;
+        }
+      }
+      const gy = probeGroundState(b, b.x, b.z, dt, walking);
+      const snuffle = walking ? Math.abs(Math.sin(t * 4 + b.phase)) * 0.04 : Math.sin(t * 1.5 + b.phase) * 0.015;
+      _p.set(b.x, gy + 0.50 * b.scale + snuffle, b.z);
+      _e.set(walking ? Math.sin(t * 4 + b.phase) * 0.04 : 0, b.ry, 0);
+      _q.setFromEuler(_e);
+      _s.setScalar(b.scale);
+      _m.compose(_p, _q, _s);
+      mesh.setMatrixAt(i, _m);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  return { mesh, update, applyDensity };
+}
+
+// ============================================================
+// DRAGONFLIES — voxel dart body + 4 shimmer wings (day only)
+// ============================================================
+function buildDragonflyGeo() {
+  return buildVoxelGeo(
+    [
+      [0.09, 0.09, 0.52, 0, 0, -0.02, 0xffffff], // abdomen (tinted)
+      [0.12, 0.12, 0.20, 0, 0.01, 0.26, 0xffffff], // thorax
+      [0.10, 0.10, 0.10, 0, 0.02, 0.40, 0xffffff], // head
+      [0.04, 0.04, 0.02, -0.05, 0.04, 0.45, 0x1a2a33], // eye L
+      [0.04, 0.04, 0.02, 0.05, 0.04, 0.45, 0x1a2a33],  // eye R
+    ],
+    [
+      { p: [0, 0.05, 0.26, -0.42, 0.05, 0.18, -0.30, 0.05, 0.02], c: 0xffffff },
+      { p: [0, 0.05, 0.26, 0.42, 0.05, 0.18, 0.30, 0.05, 0.02], c: 0xffffff },
+      { p: [0, 0.05, 0.10, -0.38, 0.05, 0.02, -0.26, 0.05, -0.12], c: 0xf2fbf7 },
+      { p: [0, 0.05, 0.10, 0.38, 0.05, 0.02, 0.26, 0.05, -0.12], c: 0xf2fbf7 },
+    ],
+  );
+}
+
+export function createDragonflies(scene) {
+  const geo = buildDragonflyGeo();
+  const mat = voxelMat({ doubleSide: true, transparent: true, opacity: 0.95 });
+  const cap = maxAnimalCount('dragonflies');
+  const mesh = makeHerdMesh(geo, mat, cap, false);
+  mesh.count = liveAnimalCount('dragonflies');
+  scene.add(mesh);
+
+  const cols = [0x2de2a8, 0x3ac8ff, 0x7dff7a, 0xffd93b];
+  const df = [];
+  for (let i = 0; i < cap; i++) {
+    mesh.setColorAt(i, _c.setHex(cols[i % cols.length]));
+    const z = (Math.random() - 0.5) * 40;
+    df.push({
+      z, x: riverXAt(z) + (Math.random() - 0.5) * 2.5,
+      phase: Math.random() * 6.28, wander: Math.random() * 6.28,
+      speed: 1.1 + Math.random() * 0.9, scale: 0.9 + Math.random() * 0.5,
+      _rx: 0, _rxT: 0,
+    });
+  }
+  if (mesh.instanceColor) mesh.instanceColor.setUsage(THREE.StaticDrawUsage);
+
+  let t = 0;
+  function applyDensity() { mesh.count = liveAnimalCount('dragonflies'); }
+  function update(dt, playerPos, env) {
+    const tod = env?.timeOfDay ?? 12;
+    const weather = env?.weather ?? 'clear';
+    const want = tod >= 6 && tod < 18.5 && weather !== 'storm';
+    lerpOpacity(mat, want ? 0.95 : 0, dt, 1.2);
+    mesh.visible = mat.opacity > 0.02;
+    if (!mesh.visible || mesh.count === 0) return;
+    t += dt;
+    const n = mesh.count;
     for (let i = 0; i < n; i++) {
       const d = df[i];
       d.wander += dt * (0.9 + d.speed * 0.3);
       d.z += Math.cos(d.wander) * dt * 0.2;
-      d.x = riverXAt(d.z) + Math.sin(d.wander * 0.7 + d.phase) * 1.6;
+      d.x = probeRiver(d, d.z, dt) + Math.sin(d.wander * 0.7 + d.phase) * 1.6;
       const gy = 0.55 + Math.sin(t * 1.8 + d.phase) * 0.35;
       const flap = Math.sin(t * 18 + d.phase) * 0.6;
-      _p.set(d.x, gy, d.z); _e.set(flap, d.wander, 0); _q.setFromEuler(_e); _s.setScalar(d.scale);
-      _m.compose(_p, _q, _s); mesh.setMatrixAt(i, _m);
-      if (Math.abs(d.z - playerPos.z) > 45) d.z = playerPos.z + (Math.random() - 0.5) * 20;
+      _p.set(d.x, gy, d.z);
+      _e.set(flap, d.wander, 0);
+      _q.setFromEuler(_e);
+      _s.setScalar(d.scale);
+      _m.compose(_p, _q, _s);
+      mesh.setMatrixAt(i, _m);
+      if (Math.abs(d.z - playerPos.z) > 45) {
+        d.z = playerPos.z + (Math.random() - 0.5) * 20;
+        d._rxT = 0;
+      }
     }
     mesh.instanceMatrix.needsUpdate = true;
   }
+
   return { mesh, update, applyDensity };
 }
 
 // ============================================================
-// BATS — nocturnal erratic fliers (19-05, clear/overcast/mist)
+// BATS — voxel body + ears + scalloped wings (night only)
 // ============================================================
-const BASE_BAT_COUNT = 9;
-function batCount() {
-  const mul = QUALITY.animalsMul ?? 1;
-  const base = QUALITY.low ? 4 : BASE_BAT_COUNT;
-  return Math.max(2, Math.round(base * mul));
-}
 function buildBatGeo() {
-  const geo = new THREE.BufferGeometry();
-  const v = new Float32Array([
-    0, 0, 0,  -0.45, 0.08, 0.12,  -0.25, 0, -0.14,
-    0, 0, 0,   0.45, 0.08, 0.12,   0.25, 0, -0.14,
-    0, 0, 0,   0, 0.05, 0.22,      0, -0.04, -0.08,
-  ]);
-  geo.setAttribute('position', new THREE.BufferAttribute(v, 3));
-  geo.setIndex([0,1,2, 3,4,5, 6,7,8]);
-  geo.computeVertexNormals();
-  return geo;
+  return buildVoxelGeo(
+    [
+      [0.18, 0.16, 0.24, 0, 0, 0, 0x2a2a3e],      // body
+      [0.16, 0.14, 0.14, 0, 0.06, 0.16, 0x2a2a3e], // head
+      [0.05, 0.05, 0.02, -0.05, 0.08, 0.23, 0xff5d5d], // eye L (glow red)
+      [0.05, 0.05, 0.02, 0.05, 0.08, 0.23, 0xff5d5d],  // eye R
+      [0.07, 0.12, 0.04, -0.09, 0.18, 0.12, 0x1c1c2c], // ear L
+      [0.07, 0.12, 0.04, 0.09, 0.18, 0.12, 0x1c1c2c],  // ear R
+      [0.08, 0.06, 0.10, 0, -0.04, -0.14, 0x1c1c2c],   // tail nub
+    ],
+    [
+      { p: [0, 0.02, 0.06, -0.60, 0.02, -0.02, -0.30, 0.02, -0.22], c: 0x1a1a2e },
+      { p: [0, 0.02, 0.06, 0.60, 0.02, -0.02, 0.30, 0.02, -0.22], c: 0x1a1a2e },
+    ],
+  );
 }
+
 export function createBats(scene) {
   const geo = buildBatGeo();
-  // transparent from birth — per-frame toggling recompiles the program
-  const mat = new THREE.MeshLambertMaterial({ color: 0x1a1a2e, side: THREE.DoubleSide, transparent: true, opacity: 1 });
-  const mesh = new THREE.InstancedMesh(geo, mat, BASE_BAT_COUNT);
-  mesh.count = batCount();
-  mesh.frustumCulled = false; scene.add(mesh);
+  const mat = voxelMat({ doubleSide: true, transparent: true, opacity: 1 });
+  const cap = maxAnimalCount('bats');
+  const mesh = makeHerdMesh(geo, mat, cap, false);
+  mesh.count = liveAnimalCount('bats');
+  scene.add(mesh);
+
   const bats = [];
-  for (let i = 0; i < BASE_BAT_COUNT; i++) {
-    bats.push({ cx: (Math.random() - 0.5) * 30, cz: (Math.random() - 0.5) * 30, angle: Math.random() * 6.28, radius: 4 + Math.random() * 7, speed: 1.2 + Math.random() * 0.9, alt: 6 + Math.random() * 7, phase: Math.random() * 6.28, scale: 0.45 + Math.random() * 0.2, jitter: Math.random() * 6.28 });
+  for (let i = 0; i < cap; i++) {
+    bats.push({
+      cx: (Math.random() - 0.5) * 30, cz: (Math.random() - 0.5) * 30,
+      angle: Math.random() * 6.28, radius: 4 + Math.random() * 7,
+      speed: 1.2 + Math.random() * 0.9, alt: 6 + Math.random() * 7,
+      phase: Math.random() * 6.28, scale: 1.0 + Math.random() * 0.45,
+      jitter: Math.random() * 6.28,
+    });
   }
+
   let t = 0;
-  function applyDensity() { mesh.count = batCount(); }
+  function applyDensity() { mesh.count = liveAnimalCount('bats'); }
   function update(dt, playerPos, env) {
     const tod = env?.timeOfDay ?? 0;
     const isNight = tod >= 19 || tod < 5.5;
-    const weather = env?.weather ?? 'clear';
-    const want = isNight && weather !== 'storm';
-    const targetOpacity = want ? 1 : 0;
-    if (Math.abs((mat.opacity ?? 1) - targetOpacity) > 0.001) {
-      mat.opacity += (targetOpacity - (mat.opacity ?? 1)) * Math.min(1, dt * 1.5);
-    }
-    mesh.visible = (mat.opacity ?? 1) > 0.02;
-    if (!mesh.visible) return;
+    const want = isNight && (env?.weather ?? 'clear') !== 'storm';
+    lerpOpacity(mat, want ? 1 : 0, dt, 1.5);
+    mesh.visible = mat.opacity > 0.02;
+    if (!mesh.visible || mesh.count === 0) return;
     t += dt;
     const n = mesh.count;
     for (let i = 0; i < n; i++) {
@@ -702,125 +824,271 @@ export function createBats(scene) {
       const bz = b.cz + Math.sin(b.angle) * b.radius + Math.cos(t * 2.7 + b.phase) * 1.0;
       const by = b.alt + Math.sin(t * 4 + b.phase) * 1.1;
       const flap = Math.sin(t * 14 + b.phase) * 0.75;
-      _p.set(bx, by, bz); _e.set(flap, b.angle + Math.PI * 0.5, Math.sin(t * 5 + b.phase) * 0.25); _q.setFromEuler(_e); _s.setScalar(b.scale);
-      _m.compose(_p, _q, _s); mesh.setMatrixAt(i, _m);
-      // follow player loosely
-      const dx = playerPos.x - b.cx, dz = playerPos.z - b.cz;
+      _p.set(bx, by, bz);
+      _e.set(flap * 0.5, b.angle + Math.PI * 0.5, flap * 0.5 + Math.sin(t * 5 + b.phase) * 0.2);
+      _q.setFromEuler(_e);
+      _s.set(b.scale, b.scale * (1 + flap * 0.12), b.scale);
+      _m.compose(_p, _q, _s);
+      mesh.setMatrixAt(i, _m);
+      const dx = playerPos.x - b.cx;
+      const dz = playerPos.z - b.cz;
       if (dx * dx + dz * dz > 40 * 40) { b.cx += dx * dt * 0.05; b.cz += dz * dt * 0.05; }
     }
     mesh.instanceMatrix.needsUpdate = true;
   }
+
   return { mesh, update, applyDensity };
 }
 
 // ============================================================
-// COMBINED FACTORY — Genshin open world wildlife (vibrant lifecycle)
+// CHICKENS — NEW variable animal: iconic Minecraft chicken
+// white cube body, yellow beak, red comb, orange stick legs
 // ============================================================
-export function createAnimals(scene) {
-  const birds = createBirds(scene);
-  const deer = createDeer(scene);
-  const fish = createFish(scene);
-  const butterflies = createButterflies(scene);
-  const crabs = createCrabs(scene);
-  const boars = createBoars(scene);
-  const dragonflies = createDragonflies(scene);
-  const bats = createBats(scene);
+function buildChickenGeo() {
+  return buildVoxelGeo([
+    [0.34, 0.36, 0.40, 0, 0.10, 0, 0xffffff],        // body
+    [0.28, 0.10, 0.32, 0, -0.10, 0, 0xe8e8ee],       // belly shade
+    [0.26, 0.26, 0.26, 0, 0.40, 0.22, 0xffffff],     // head
+    [0.10, 0.08, 0.08, 0, 0.38, 0.39, 0xf2a541],     // beak
+    [0.06, 0.10, 0.16, 0, 0.56, 0.22, 0xe63946],     // comb
+    [0.08, 0.10, 0.04, 0, 0.30, 0.24, 0xe63946],     // wattle
+    [0.07, 0.07, 0.02, -0.14, 0.44, 0.30, 0x1a1a1a],  // eye L
+    [0.07, 0.07, 0.02, 0.14, 0.44, 0.30, 0x1a1a1a],   // eye R
+    [0.06, 0.06, 0.22, -0.20, 0.14, -0.02, 0xe8e8ee], // wing L
+    [0.06, 0.06, 0.22, 0.20, 0.14, -0.02, 0xe8e8ee],  // wing R
+    [0.16, 0.14, 0.08, 0, 0.18, -0.24, 0xe8e8ee],     // tail
+    [0.06, 0.22, 0.06, -0.09, -0.20, 0.02, 0xf2a541], // leg L
+    [0.06, 0.22, 0.06, 0.09, -0.20, 0.02, 0xf2a541],  // leg R
+  ]);
+}
 
-  // Throttle secondary critters on low-end/battery saver: update every other frame.
-  let frame = 0;
-  function shouldRunHeavy() {
-    if ((QUALITY.animalsMul ?? 1) > 0.6) return true;
-    return (frame & 1) === 0;
+export function createChickens(scene) {
+  const geo = buildChickenGeo();
+  const mat = voxelMat();
+  const cap = maxAnimalCount('chickens');
+  const mesh = makeHerdMesh(geo, mat, cap, false);
+  mesh.count = liveAnimalCount('chickens');
+  scene.add(mesh);
+
+  const flock = makeWalkerGeoState(cap, 30, { speed: 0.7, scale: 0.62 });
+  let t = 0;
+  function applyDensity() { mesh.count = liveAnimalCount('chickens'); }
+  function update(dt, playerPos) {
+    if (!mesh.visible || mesh.count === 0) return;
+    t += dt;
+    const n = mesh.count;
+    for (let i = 0; i < n; i++) {
+      const d = flock[i];
+      const walking = stepWander(d, dt, playerPos, true);
+      const groundY = probeGroundState(d, d.x, d.z, dt, walking);
+      // peck: pitch forward in bursts when idle
+      const peck = d.state === 'idle'
+        ? Math.max(0, Math.sin(t * 2.2 + d.phase)) ** 3 * 0.5
+        : Math.sin(t * 8 + d.phase) * 0.06;
+      const hop = walking ? Math.abs(Math.sin(t * 9 + d.phase)) * 0.05 : 0;
+      _p.set(d.x, groundY + 0.32 * d.scale + hop, d.z);
+      _e.set(peck, d.ry, walking ? Math.sin(t * 9 + d.phase) * 0.06 : 0);
+      _q.setFromEuler(_e);
+      _s.setScalar(d.scale);
+      _m.compose(_p, _q, _s);
+      mesh.setMatrixAt(i, _m);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
   }
 
-  // Lifecycle helper: returns 0..1 activity for butterflies/birds by time/weather
-  function lifecycleOpacity(kind, env) {
-    const tod = env?.timeOfDay ?? 12;
-    const w = env?.weather ?? 'clear';
-    const isDay = tod >= 6 && tod < 18.8;
-    const isNight = !isDay;
-    const isDawn = tod >= 5 && tod < 8;
-    const isDusk = tod >= 17.5 && tod < 20;
-    if (kind === 'butterfly') {
-      if (!isDay) return 0;
-      if (w === 'storm' || w === 'rain') return 0;
-      if (w === 'drizzle') return 0.35;
-      if (isDawn || isDusk) return 0.7;
-      return 1;
+  return { mesh, update, applyDensity };
+}
+
+// ============================================================
+// SHEEP — NEW variable animal: fluffy Minecraft sheep
+// stacked wool cubes, gray face, stubby dark legs
+// ============================================================
+function buildSheepGeo() {
+  return buildVoxelGeo([
+    [0.62, 0.42, 0.90, 0, 0.12, 0, 0xf2efe8],      // wool torso
+    [0.66, 0.22, 0.94, 0, 0.36, 0, 0xffffff],      // wool top (fluffy)
+    [0.40, 0.20, 0.30, 0, 0.30, 0.55, 0xf2efe8],   // wool cap over head
+    [0.34, 0.32, 0.30, 0, 0.10, 0.62, 0x9a938a],   // face (gray)
+    [0.07, 0.07, 0.02, -0.10, 0.16, 0.77, 0x1a1a1a], // eye L
+    [0.07, 0.07, 0.02, 0.10, 0.16, 0.77, 0x1a1a1a],  // eye R
+    [0.12, 0.08, 0.06, -0.22, 0.22, 0.55, 0x9a938a], // ear L
+    [0.12, 0.08, 0.06, 0.22, 0.22, 0.55, 0x9a938a],  // ear R
+    [0.14, 0.34, 0.14, -0.20, -0.26, -0.28, 0x6b6560], // legs
+    [0.14, 0.34, 0.14, 0.20, -0.26, -0.28, 0x6b6560],
+    [0.14, 0.34, 0.14, -0.20, -0.26, 0.28, 0x6b6560],
+    [0.14, 0.34, 0.14, 0.20, -0.26, 0.28, 0x6b6560],
+    [0.12, 0.12, 0.10, 0, 0.16, -0.48, 0xf2efe8],   // tail puff
+  ]);
+}
+
+export function createSheep(scene) {
+  const geo = buildSheepGeo();
+  const mat = voxelMat();
+  const cap = maxAnimalCount('sheep');
+  const mesh = makeHerdMesh(geo, mat, cap, QUALITY.shadowsEnabled);
+  mesh.count = liveAnimalCount('sheep');
+  scene.add(mesh);
+
+  const herd = makeWalkerGeoState(cap, 36, { speed: 0.4, scale: 0.85 });
+  let t = 0;
+  function applyDensity() { mesh.count = liveAnimalCount('sheep'); }
+  function update(dt, playerPos) {
+    if (!mesh.visible || mesh.count === 0) return;
+    t += dt;
+    const n = mesh.count;
+    for (let i = 0; i < n; i++) {
+      const d = herd[i];
+      const walking = stepWander(d, dt, playerPos, true);
+      const groundY = probeGroundState(d, d.x, d.z, dt, walking);
+      // graze: dip pitch when idle
+      const graze = d.state === 'idle'
+        ? Math.max(0, Math.sin(t * 0.9 + d.phase)) ** 2 * 0.35
+        : 0;
+      const bob = walking ? Math.abs(Math.sin(t * 4 + d.phase)) * 0.04 : 0;
+      _p.set(d.x, groundY + 0.44 * d.scale + bob, d.z);
+      _e.set(graze, d.ry, walking ? Math.sin(t * 4 + d.phase) * 0.03 : 0);
+      _q.setFromEuler(_e);
+      _s.setScalar(d.scale);
+      _m.compose(_p, _q, _s);
+      mesh.setMatrixAt(i, _m);
     }
-    if (kind === 'bird') {
-      if (w === 'storm') return 0.15;
-      if (w === 'rain') return 0.35;
-      if (isNight) return 0.08;
-      return 1;
-    }
-    if (kind === 'deer') {
-      if (w === 'storm') return 0.3; // hide during storm, shelter
-      if (isNight) return 0.55;
-      return 1;
-    }
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  return { mesh, update, applyDensity };
+}
+
+// ============================================================
+// COMBINED FACTORY — variable species list + lifecycle + slicing
+// kind -> factory map so callers can enable a subset:
+//   createAnimals(scene, { only: ['birds', 'chickens'] })
+// ============================================================
+const FACTORIES = {
+  birds: createBirds,
+  deer: createDeer,
+  fish: createFish,
+  butterflies: createButterflies,
+  crabs: createCrabs,
+  boars: createBoars,
+  dragonflies: createDragonflies,
+  bats: createBats,
+  chickens: createChickens,
+  sheep: createSheep,
+};
+
+/** Variable-animal entry: create any single species by name. */
+export function createAnimalByType(scene, type) {
+  const fn = FACTORIES[type];
+  if (!fn) throw new Error(`unknown animal type: ${type}`);
+  return fn(scene);
+}
+
+function lifecycleActivity(kind, env) {
+  const tod = env?.timeOfDay ?? 12;
+  const w = env?.weather ?? 'clear';
+  const isDay = tod >= 6 && tod < 18.8;
+  const isNight = !isDay;
+  const isDawn = tod >= 5 && tod < 8;
+  const isDusk = tod >= 17.5 && tod < 20;
+  if (kind === 'butterflies') {
+    if (!isDay) return 0;
+    if (w === 'storm' || w === 'rain') return 0;
+    if (w === 'drizzle') return 0.35;
+    if (isDawn || isDusk) return 0.7;
     return 1;
+  }
+  if (kind === 'birds') {
+    if (w === 'storm') return 0.15;
+    if (w === 'rain') return 0.35;
+    if (isNight) return 0.08;
+    return 1;
+  }
+  return 1;
+}
+
+export function createAnimals(scene, opts = null) {
+  const only = opts?.only ?? ANIMAL_TYPES;
+  const active = {};
+  for (const type of only) {
+    if (FACTORIES[type]) active[type] = FACTORIES[type](scene);
+  }
+  const meshes = () => Object.values(active).map((a) => a.mesh);
+
+  let frame = 0;
+  // Low-end: ground walkers run at half rate with doubled dt (same speed,
+  // half the groundHeight/riverX noise evals + matrix writes).
+  function heavyDt(dt) {
+    if ((QUALITY.animalsMul ?? 1) > 0.6) return { run: true, dt };
+    return (frame & 1) === 0 ? { run: true, dt: dt * 2 } : { run: false, dt: 0 };
   }
 
   return {
+    // exposed for UI/test hooks (variable animals)
+    types: Object.keys(active),
+    byType: active,
     update(dt, playerPos, env = null) {
       frame++;
-      // Pass env for lifecycle so individual meshes can fade
-      birds.update(dt, playerPos);
-      // lifecycle dimming for birds (opacity via material, not count).
-      // Material is transparent:true from birth — only lerp opacity so we
-      // never toggle `transparent` per frame (that recompiles the program).
-      try {
-        const bOp = lifecycleOpacity('bird', env);
-        if (birds.mesh?.material) {
-          const m = birds.mesh.material;
-          m.opacity = m.opacity === undefined ? 1 : THREE.MathUtils.lerp(m.opacity, bOp, Math.min(1, dt * 1.2));
-          birds.mesh.visible = m.opacity > 0.02;
-        }
-      } catch {}
-      fish.update(dt, playerPos);
-      // Heavy ground critters can run at half rate on low.
-      if (shouldRunHeavy() || frame % 3 === 0) {
-        deer.update(dt, playerPos);
-        boars.update(dt, playerPos);
-        // deer/boar hide during storm (fade, no transparent toggling)
-        try {
-          const dOp = lifecycleOpacity('deer', env);
-          for (const m of [deer.mesh, boars.mesh]) if (m?.material) { m.material.opacity = THREE.MathUtils.lerp(m.material.opacity ?? 1, dOp, Math.min(1, dt * 0.8)); }
-        } catch {}
-      } else {
-        deer.update(0, playerPos);
-        boars.update(0, playerPos);
+      const birds = active.birds;
+      const butterflies = active.butterflies;
+      const deer = active.deer;
+      const boars = active.boars;
+      const chickens = active.chickens;
+      const sheep = active.sheep;
+
+      birds?.update(dt, playerPos);
+      if (birds?.mesh) {
+        const target = lifecycleActivity('birds', env);
+        // Opaque material: fade by toggling visibility at extremes only,
+        // avoiding a permanent transparent pass.
+        birds.mesh.visible = target > 0.03;
+        birds.setActivity?.(target);
       }
-      if (shouldRunHeavy()) {
-        butterflies.update(dt, playerPos);
-        crabs.update(dt, playerPos);
-      } else if (frame % 2 === 0) {
-        butterflies.update(dt, playerPos);
-        crabs.update(dt, playerPos);
+
+      active.fish?.update(dt, playerPos);
+
+      // Heavy ground walkers: full rate on high, half rate on low.
+      const heavy = heavyDt(dt);
+      if (heavy.run) {
+        deer?.update(heavy.dt, playerPos);
+        boars?.update(heavy.dt, playerPos);
+        chickens?.update(heavy.dt, playerPos);
+        sheep?.update(heavy.dt, playerPos);
+        // NOTE: no per-frame opacity lerp on opaque walkers — they stay
+        // visible through storms (shelter handled by reduced wandering).
       }
-      // butterfly lifecycle: fade by time/weather (transparent fixed at creation)
-      try {
-        const bfOp = lifecycleOpacity('butterfly', env);
-        if (butterflies.mesh?.material) {
-          butterflies.mesh.material.opacity = THREE.MathUtils.lerp(butterflies.mesh.material.opacity ?? 0.95, bfOp * 0.95, Math.min(1, dt * 1.0));
-        }
-      } catch {}
-      dragonflies.update(dt, playerPos, env);
-      bats.update(dt, playerPos, env);
+      // (else: skip entirely — no update(0) ghost loop)
+
+      const light = (QUALITY.animalsMul ?? 1) > 0.6 || frame % 2 === 0;
+      if (light) {
+        const ldt = (QUALITY.animalsMul ?? 1) > 0.6 ? dt : dt * 2;
+        butterflies?.update(ldt, playerPos);
+        active.crabs?.update(ldt, playerPos);
+      }
+      if (butterflies?.mesh) {
+        const target = lifecycleActivity('butterflies', env) * 0.95;
+        butterflies.mesh.visible = target > 0.02;
+        lerpOpacity(butterflies.mesh.material, target, dt, 1.0);
+      }
+
+      active.dragonflies?.update(dt, playerPos, env);
+      active.bats?.update(dt, playerPos, env);
     },
     applyDensity() {
-      birds.applyDensity();
-      deer.applyDensity();
-      fish.applyDensity();
-      butterflies.applyDensity();
-      crabs.applyDensity();
-      boars.applyDensity();
-      dragonflies.applyDensity();
-      bats.applyDensity();
+      for (const k of Object.keys(active)) active[k].applyDensity();
     },
     setVisible(v) {
-      for (const m of [birds.mesh, deer.mesh, fish.mesh, butterflies.mesh, crabs.mesh, boars.mesh, dragonflies.mesh, bats.mesh]) m.visible = v;
+      for (const m of meshes()) m.visible = v;
+    },
+    setTypeVisible(type, v) {
+      if (active[type]?.mesh) active[type].mesh.visible = v;
+    },
+    dispose() {
+      for (const m of meshes()) {
+        m.parent?.remove(m);
+        m.geometry?.dispose?.();
+        m.material?.dispose?.();
+        m.dispose?.();
+      }
     },
   };
 }

@@ -49,6 +49,8 @@ export const ANIMALS = {
   crabCount: 10,      // new: beach crabs
   dragonflyCount: 10, // river jewel — day only, clear sky
   batCount: 9,        // nocturnal — dusk to dawn
+  chickenCount: 8,    // Minecraft-style farm chicken (variable animal)
+  sheepCount: 6,      // Minecraft-style fluffy sheep (variable animal)
 };
 
 export const LIFECYCLE = {
