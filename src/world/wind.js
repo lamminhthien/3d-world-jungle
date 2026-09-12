@@ -18,9 +18,8 @@ const _shaders = []; // { shader, material }
 
 /**
  * Per-frame wind update. Called from environment.js.
- * @param {string} weather - 'clear'|'partlyCloudy'|'overcast'|'mist'|'drizzle'|'rain'|'storm'
  */
-export function updateWind(dt, weather = 'clear') {
+export function updateWind(dt) {
   windState.time += dt;
   // Graphics toggle: wind sway off => zero strength (saves vertex ALU, still updates time).
   let swayOn = !QUALITY.low;
@@ -37,9 +36,8 @@ export function updateWind(dt, weather = 'clear') {
   _windAngle += dt * (0.00436); // 15°/60s = 0.00436 rad/s
   windState.direction.set(Math.cos(_windAngle), Math.sin(_windAngle));
 
-  // Base strength — fog removed, remaining weathers stay vibrant (mist is gentle, storm is wild)
-  const baseMap = { clear: 0.55, partlyCloudy: 0.62, overcast: 0.58, mist: 0.38, drizzle: 0.62, rain: 0.78, storm: 1.0 };
-  const base = baseMap[weather] ?? 0.55;
+  // Base strength — fixed clear-sky breeze (weather feature removed)
+  const base = 0.55;
   // Gust: low-freq noise, larger amplitude for obvious gusts + occasional sharp gust
   const gust = 0.28 * Math.sin(windState.time * 0.32) + 0.20 * Math.sin(windState.time * 0.68 + 1.3) + 0.10 * Math.sin(windState.time * 1.7 + 0.7);
   // Occasional sharp gust spike every ~8-12s

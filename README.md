@@ -1,10 +1,10 @@
 # 🌿 Jungle Stroll — Low Poly Isometric 3D
 
-Stroll through an infinite low-poly / isometric 3D jungle built with **Three.js**. Procedural terrain, winding rivers, wooden bridges, campsites, day-night cycle, and dynamic weather — playable **offline** and installable as a mobile app (PWA).
+Stroll through an infinite low-poly / isometric 3D jungle built with **Three.js**. Procedural terrain, winding rivers, wooden bridges, campsites, and day-night cycle — playable **offline** and installable as a mobile app (PWA).
 
 ![Day in the jungle](docs/screenshots/day-jungle.jpg)
 
-> All screenshots below are captured live from the current build (`npm run dev`) via `window.__env` time/weather controls — 1280×800, default `FOREST_123` spawn near river + campsite.
+> All screenshots below are captured live from the current build (`npm run dev`) via `window.__env` time controls — 1280×800, default `FOREST_123` spawn near river + campsite.
 
 ## ✨ Features
 
@@ -12,9 +12,8 @@ Stroll through an infinite low-poly / isometric 3D jungle built with **Three.js*
 - **Biomes** — jungle, desert, mountain, snow, beach, river, each with its own vegetation and rocks (`presets.js`, `trees.js`, `rocks.js`)
 - **Winding river + bridges** — carved water channel with foam, plus walkable wooden bridges (`river.js`, `bridge.js`)
 - **Day-night cycle** — 10-minute game day, orbiting sun/moon, gradient skydome, stars, moon halo (`environment.js`)
-- **Dynamic weather** — Clear / Overcast / Rain / Fog state machine with smooth ~6s crossfades, rain particles, wet surfaces
 - **Night ambience** — fireflies, moonlight, glowing campfires with flicker + embers + smoke (`fireflies.js`, `campfire.js`)
-- **Procedural audio & generative music** — multi-track cozy music box synthesized in real-time with 6 distinct procedural tracks configured via JSON instructions (`src/audio/cozy.js`, `music-tracks.json`), plus wind, rain, birds/crickets, and campfire crackle (WebAudio, zero audio assets)
+- **Procedural audio & generative music** — multi-track cozy music box synthesized in real-time with 6 distinct procedural tracks configured via JSON instructions (`src/audio/cozy.js`, `music-tracks.json`), plus wind, birds/crickets, and campfire crackle (WebAudio, zero audio assets)
 - **Player character** — low-poly walker with swing animation, circle collision, river blocking (`entities/player.js`)
 - **Seeded worlds** — share worlds via `?seed=FOREST_123`, dice button for a new world
 - **Mobile ready** — floating joystick, swipe-to-rotate, pinch zoom, sprint button, adaptive resolution
@@ -42,37 +41,30 @@ Stroll through an infinite low-poly / isometric 3D jungle built with **Three.js*
 | 🏃 button | Sprint (touch) |
 | `?seed=NAME` in URL | Load a specific world |
 
-HUD extras: pause/resume time (⏸), jump morning/night (⏭), cycle weather (🌧️), toggle music / Shift-click to skip track (🎵), toggle ambient sound (🔇).
+HUD extras: pause/resume time (⏸), jump morning/night (⏭), toggle music / Shift-click to skip track (🎵), toggle ambient sound (🔇).
 
-## 🌤️ Time & weather — try it live
+## 🌤️ Time — try it live
 
-All controls live in the **☰ menu → Time & weather** panel (see screenshot). The game runs a 10-minute day (`ENV.dayLengthSec = 600` in `src/config.js`, starts at `10:00`) with auto weather re-roll every ~75s and ~6s crossfades.
+All controls live in the **☰ menu → Time** panel (see screenshot). The game runs a 10-minute day (`ENV.dayLengthSec = 600` in `src/config.js`, starts at `10:00`).
 
 ![Time & weather menu](docs/screenshots/menu-time-weather.jpg)
 
 **Via UI (no code):**
 - Time picker → jump to any hour (e.g. `06:00` sunrise, `17:30` sunset, `00:00` night)
 - ⏸ pause / resume the day cycle, ⏭ jump morning ↔ evening
-- 🌧️ button cycles `Clear → Overcast → Rain → Fog`
 - 🎵 / 🔊 sliders for music vs ambient volume
 - 🌍 World Type buttons: Jungle / Desert / Mountain / Beach / Night (midnight start) / Random
 
 **Via devtools console (for exact screenshots / demos):**
 ```js
 // Freeze time so lighting is deterministic
-__env.state.paused = true; __env.state.weatherTimer = 9999;
+__env.state.paused = true;
 
 // Time presets used for the screenshots above
 __env.setTime(10);   // day
 __env.setTime(7);    // sunrise
 __env.setTime(17.5); // sunset
 __env.setTime(0);    // night + campfire + fireflies
-
-// Weather presets (allow ~2s for the ~6s crossfade + rain fade-in)
-__env.setWeather('clear');
-__env.setWeather('overcast');
-__env.setWeather('rain');
-__env.setWeather('fog');
 ```
 
 **Via config (`src/config.js` → `ENV`):**
@@ -80,7 +72,6 @@ __env.setWeather('fog');
 export const ENV = {
   dayLengthSec: 600,      // 1 game day = 10 real minutes
   startTime: 10.0,        // 10:00 morning spawn
-  weatherIntervalSec: 75, // auto re-roll interval
 };
 ```
 
@@ -124,7 +115,7 @@ src/
     trees.js / rocks.js / presets.js  # vegetation kits
     river.js / bridge.js    # water + wooden bridges
     clouds.js               # drifting low-poly clouds
-    environment.js          # day-night, weather, skydome, rain, audio
+    environment.js          # day-night, skydome, audio
     fireflies.js / campfire.js  # night FX + campsites
 public/
   manifest.webmanifest      # PWA manifest
@@ -140,7 +131,6 @@ docs/
 
 ## 📖 Design docs
 
-- [Day-night cycle & weather](docs/weather-day-night-cycles.md)
 - [Night ambience: fireflies, moon, clouds, campfires](docs/enhance_for_night_screen.md)
 - [Procedural random worlds](docs/generate_random_words.md)
 - [Procedural generative music engine](docs/procedural-music.md)

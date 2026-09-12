@@ -73,7 +73,7 @@ async function boot() {
   let bridgeGroups = createBridges(scene);
   const sky = createClouds(scene);
 
-  // Day-night cycle + dynamic weather (docs/weather-day-night-cycles.md).
+  // Day-night cycle.
   const env = createEnvironment(scene, {
     sun,
     hemi,
@@ -83,7 +83,6 @@ async function boot() {
     river,
     dayLengthSec: ENV.dayLengthSec,
     startTime: ENV.startTime,
-    weatherIntervalSec: ENV.weatherIntervalSec,
     fogNear: WORLD.fogNear,
     fogFar: WORLD.fogFar,
   });
@@ -699,11 +698,11 @@ async function boot() {
     river.update(dt, player.position, windState);
     sky.update(dt, player.position, clock.elapsedTime);
 
-    // Day-night + weather drive sun/fog/sky (sun follows target for shadows).
+    // Day-night drives sun/fog/sky (sun follows target for shadows).
     // Fire proximity feeds the crackle ambience + warm/cool contrast logic.
     const fire = camps.getFireProximity(player.position.x, player.position.z);
     env.update(dt, player.position, { fire });
-    animals.update(dt, player.position, { timeOfDay: env.timeOfDay, weather: env.weather, nightFactor: env.nightFactor, isNight: env.isNight });
+    animals.update(dt, player.position, { timeOfDay: env.timeOfDay, nightFactor: env.nightFactor, isNight: env.isNight });
     adventure.update(dt, player.position);
     village.update(dt, player.position, env.nightFactor);
     try { landmarks.update(dt, player.position); } catch {}
@@ -771,7 +770,7 @@ async function boot() {
       }
       // Adaptive resolution: step the pixel ratio down when the GPU can't
       // hold ~45fps, back up with headroom. Requires 2 consecutive votes in
-      // the same direction so one slow window (chunk build, weather blend,
+      // the same direction so one slow window (chunk build,
       // GC) doesn't thrash the framebuffer size every cooldown cycle —
       // setPixelRatio reallocates buffers, i.e. a hitch of its own.
       qualityCooldown += fpsT;
@@ -813,7 +812,7 @@ async function boot() {
 
   setProgress(1, 'Ready — into the jungle! 🌴');
   animate();
-  // ---- Test Mode: init overlay for scenario/weather/lifecycle/world QA ----
+  // ---- Test Mode: init overlay for scenario/lifecycle/world QA ----
   try {
     const testMode = createTestMode({
       world, env, player, camTarget, scene, coreState: state,
@@ -837,19 +836,14 @@ async function boot() {
       // Also expose inventory/questLog if adventure exposes them; otherwise try to capture
       // For testMode we lazily try to read them from __adventureInventory etc.
     }
-    // URL-driven initial state: ?time= & ?weather= & ?seed= already handled for seed,
-    // but test mode also honors ?time= and ?weather= for quick links.
+    // URL-driven initial state: ?time= & ?seed= already handled for seed,
+    // but test mode also honors ?time= for quick links.
     try {
       const sp = new URLSearchParams(location.search);
       const tParam = sp.get('time');
-      const wParam = sp.get('weather');
       if (tParam !== null && env?.setTime) {
         const tv = Number(tParam);
         if (!isNaN(tv)) env.setTime(tv);
-      }
-      if (wParam && env?.setWeather) {
-        // defer one tick so blend starts clean
-        setTimeout(() => { try { env.setWeather(wParam); } catch {} }, 50);
       }
     } catch {}
   } catch (e) { console.warn('[testMode] init failed', e); }

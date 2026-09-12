@@ -1,15 +1,13 @@
-// Dynamic day-night cycle + weather system (docs/weather-day-night-cycles.md).
+// Dynamic day-night cycle (weather feature removed — always clear sky).
 //
 // - Time: timeOfDay 0..24, 1 full day = dayLengthSec (default 600s).
 // - Sun orbit: theta = ((t - 6) / 12) * PI  => 6h horizon, 12h zenith,
 //   18h horizon, 0h nadir. Moon uses theta + PI on the same orbit.
 // - Lighting / sky / fog colors are keyframed stops lerped with THREE.Color.lerp.
-// - Weather: random state machine (clear / partlyCloudy / overcast / mist / drizzle / rain / storm) with smooth blend — fog removed for clarity.
-// - VFX: gradient skydome shader, stars, sun/moon billboards, rain particles.
-// - Audio: tiny procedural WebAudio ambience (wind / rain / birds / crickets).
+// - VFX: gradient skydome shader, stars, sun/moon billboards.
+// - Audio: tiny procedural WebAudio ambience (wind / birds / crickets).
 import * as THREE from 'three';
 import { QUALITY } from '../core/setup.js';
-import { getGraphics } from '../core/graphics.js';
 import { createCozyMusic, MUSIC_TRACKS as COZY_TRACKS } from '../audio/cozy.js';
 import { createSampledMusic, SAMPLED_TRACKS } from '../audio/sampledMusic.js';
 import { windState, updateWind } from './wind.js';
@@ -17,9 +15,9 @@ import { windState, updateWind } from './wind.js';
 // Prefer sampled jungle soundtrack if files present, else fall back to generative cozy
 const MUSIC_TRACKS = SAMPLED_TRACKS.length ? SAMPLED_TRACKS : COZY_TRACKS;
 
-export const WEATHERS = ['clear', 'partlyCloudy', 'overcast', 'mist', 'drizzle', 'rain', 'storm'];
-const WEATHER_LABEL = { clear: 'Clear', partlyCloudy: 'Partly Cloudy', overcast: 'Soft Clouds', mist: 'Misty Dawn', drizzle: 'Light Drizzle', rain: 'Rain', storm: 'Storm' };
-const WEATHER_ICON = { clear: '☀️', partlyCloudy: '⛅', overcast: '🌤️', mist: '🌄', drizzle: '🌦️', rain: '🌧️', storm: '⛈️' };
+// Weather feature removed — always clear. Kept as a constant for back-compat
+// (`window.__env.weather === 'clear'`, test hooks).
+export const WEATHERS = ['clear'];
 
 // ---- Day keyframes (lerped) ----
 // t: hour, sun: color/intensity (day star), sky top/bottom, fog, exposure, stars
@@ -41,17 +39,8 @@ const STOPS = [
   { t: 24,   sun: 0x8fb4ff, sunInt: 0.0,  hemiInt: 0.38, ambInt: 0.22, top: 0x0a1428, bot: 0x1b3350, fog: 0x16283a, exp: 0.9, stars: 1.0 },
 ];
 
-// Weather modifiers — tuned to stay vibrant, never ugly grey whiteout.
-// Fog removed per request; remaining weathers keep good visibility and warm tints.
-const WX = {
-  clear:        { sun: 1.0,  hemi: 1.02, fogNear: 1.0,  fogFar: 1.0,  fogTint: 0xffffff, cloud: 0.55, rain: 0,    fogMul: 1.0, wet: 0,    windBoost: 0 },
-  partlyCloudy: { sun: 0.92, hemi: 0.98, fogNear: 0.95, fogFar: 0.95, fogTint: 0xeef6ff, cloud: 0.78, rain: 0,    fogMul: 1.0, wet: 0.04, windBoost: 0.08 },
-  overcast:     { sun: 0.72, hemi: 0.88, fogNear: 0.88, fogFar: 0.88, fogTint: 0xdfe9f0, cloud: 0.82, rain: 0,    fogMul: 1.0, wet: 0.12, windBoost: 0.12 },
-  mist:         { sun: 0.82, hemi: 0.92, fogNear: 0.78, fogFar: 0.8,  fogTint: 0xe6f0f7, cloud: 0.55, rain: 0,    fogMul: 1.0, wet: 0.18, windBoost: 0.02 },
-  drizzle:      { sun: 0.68, hemi: 0.82, fogNear: 0.86, fogFar: 0.86, fogTint: 0xd9e9f5, cloud: 0.75, rain: 0.35, fogMul: 1.0, wet: 0.45, windBoost: 0.08 },
-  rain:         { sun: 0.58, hemi: 0.74, fogNear: 0.82, fogFar: 0.8,  fogTint: 0xcfe2f0, cloud: 0.8,  rain: 0.9,  fogMul: 1.0, wet: 0.85, windBoost: 0.18 },
-  storm:        { sun: 0.38, hemi: 0.62, fogNear: 0.75, fogFar: 0.74, fogTint: 0xb9cfe3, cloud: 0.88, rain: 1.15, fogMul: 1.0, wet: 0.95, windBoost: 0.4 },
-};
+// Fixed clear-sky modifiers (weather feature removed).
+const WX_CLEAR = { sun: 1.0, hemi: 1.02, fogNear: 1.0, fogFar: 1.0, fogTint: 0xffffff, cloud: 0.55 };
 
 const _ca = new THREE.Color();
 const _cb = new THREE.Color();
@@ -76,26 +65,7 @@ function sampleStops(t, out) {
   return out;
 }
 
-function mixWx(prev, next, blend, out) {
-  const A = WX[prev] || WX.clear;
-  const B = WX[next] || WX.clear;
-  const o = out || {};
-  for (const k of ['sun', 'hemi', 'fogNear', 'fogFar', 'cloud', 'rain', 'wet', 'windBoost']) o[k] = THREE.MathUtils.lerp(A[k], B[k], blend);
-  (o.fogTint || (o.fogTint = new THREE.Color())).set(A.fogTint).lerp(_ca.set(B.fogTint), blend);
-  return o;
-}
 
-function rollNextWeather(rng = Math.random) {
-  const r = rng();
-  // Vibrant-only distribution (fog removed). No ugly grey whiteout.
-  if (r < 0.30) return 'clear';
-  if (r < 0.46) return 'partlyCloudy';
-  if (r < 0.60) return 'overcast';
-  if (r < 0.71) return 'mist';
-  if (r < 0.82) return 'drizzle';
-  if (r < 0.92) return 'rain';
-  return 'storm';
-}
 
 // ---- Minimal procedural ambience (no assets, starts on user gesture) ----
 function createAmbience() {
@@ -201,18 +171,16 @@ function createAmbience() {
     }
   }
 
-  let thunderTimer = 5 + Math.random() * 8;
-  let frogTimer = 3 + Math.random() * 4;
   // dt-driven critter scheduler: birds by day, crickets by night,
-  // campfire crackle when the player camps nearby + frogs after rain + thunder.
-  function update(dt, { isNight, rain, fire = 0, weather = 'clear', timeOfDay = 12 }) {
+  // campfire crackle when the player camps nearby.
+  function update(dt, { isNight, fire = 0, timeOfDay = 12 } = {}) {
     if (!ctx || !enabled) return;
-    // Generative cozy music sits alongside the wind/rain/critters.
-    if (cozy) cozy.update(dt, { isNight, rain });
-    // Wind audio now follows visual windStrength + rain gust
+    // Generative cozy music sits alongside the wind/critters.
+    if (cozy) cozy.update(dt, { isNight, rain: 0 });
+    // Wind audio now follows visual windStrength
     const windBase = windState.strength * 0.07;
-    windGain.gain.value += ((rain > 0.5 ? 0.05 + windBase : 0.02 + windBase) - windGain.gain.value) * Math.min(1, dt * 2);
-    rainGain.gain.value += (rain * 0.14 - rainGain.gain.value) * Math.min(1, dt * 2);
+    windGain.gain.value += ((0.02 + windBase) - windGain.gain.value) * Math.min(1, dt * 2);
+    if (rainGain) rainGain.gain.value += (0 - rainGain.gain.value) * Math.min(1, dt * 2);
     chirpTimer -= dt;
     if (chirpTimer <= 0) {
       const t0 = ctx.currentTime + 0.05;
@@ -239,32 +207,12 @@ function createAmbience() {
         // Dusk: crickets starting + evening birds
         blip(2600, t0, 0.1, 0.035, 2100);
         chirpTimer = 1.2 + Math.random() * 2.5;
-      } else if (rain < 0.5) {
+      } else {
         const f = 2200 + Math.random() * 1200;
         blip(f, t0, 0.12, 0.05, f * 1.4);
         blip(f * 1.1, t0 + 0.16, 0.1, 0.04, f * 0.9);
         chirpTimer = 2 + Math.random() * 5;
-      } else {
-        chirpTimer = 2;
       }
-    }
-    // Frogs after rain / mist near river (especially dawn/dusk)
-    frogTimer -= dt;
-    if ((weather === 'rain' || weather === 'drizzle' || weather === 'mist') && frogTimer <= 0) {
-      const t0 = ctx.currentTime + 0.05;
-      const base = 180 + Math.random() * 80;
-      blip(base, t0, 0.25, 0.05, base * 0.85);
-      blip(base * 1.15, t0 + 0.32, 0.22, 0.04, base * 1.0);
-      frogTimer = 2.5 + Math.random() * 4;
-    } else if (frogTimer <= -10) frogTimer = 3;
-    // Thunder rumble during storm
-    thunderTimer -= dt;
-    if (weather === 'storm' && thunderTimer <= 0) {
-      const t0 = ctx.currentTime + 0.05;
-      // Low rumble: stacked sine blips at 60-120Hz
-      for (let k = 0; k < 3; k++) blip(65 + k * 22, t0 + k * 0.15, 0.9, 0.07, 45);
-      blip(140, t0 + 0.6, 0.4, 0.03, 90);
-      thunderTimer = 6 + Math.random() * 10;
     }
     // Fire crackle: short sharp pops, rate + volume scale with proximity.
     crackleTimer -= dt;
@@ -343,16 +291,15 @@ export function createEnvironment(scene, opts = {}) {
   const {
     sun = null, hemi = null, ambient = null, renderer = null,
     clouds = null, river = null,
-    dayLengthSec = 600, startTime = 10.0, weatherIntervalSec = 75,
+    dayLengthSec = 600, startTime = 10.0,
     fogNear = 80, fogFar = 160,
   } = opts;
 
   const state = {
     timeOfDay: startTime, paused: false, speed: 1,
-    weather: 'clear', prevWeather: 'clear', blend: 1,
-    weatherTimer: weatherIntervalSec, wetness: 0,
+    weather: 'clear',
     nightFactor: 0, isNight: false,
-    dayLengthSec, weatherIntervalSec, fogNear, fogFar,
+    dayLengthSec, fogNear, fogFar,
   };
 
   const sample = {
@@ -465,118 +412,17 @@ export function createEnvironment(scene, opts = {}) {
   moonLight.shadow.normalBias = 0.015;
   scene.add(moonLight); scene.add(moonLight.target);
 
-  // ---- Rain particles: STRIPPED for performance (450-point sim removed).
-  // Kept as zero-count so update guards stay valid.
-  const RAIN_N_BASE = 0;
-  const RAIN_N = (() => {
-    try { const g = getGraphics(); if (g?.rain === false) return 0; return Math.max(0, Math.round(RAIN_N_BASE * (g?.particles ?? 1))); } catch { return RAIN_N_BASE; }
-  })();
-  const RAIN_BOX = 36;
-  const RAIN_H = 18;
-  const rainPos = new Float32Array(RAIN_N * 3);
-  const rainVel = new Float32Array(RAIN_N);
-  for (let i = 0; i < RAIN_N; i++) {
-    rainPos[i * 3] = (Math.random() - 0.5) * RAIN_BOX;
-    rainPos[i * 3 + 1] = Math.random() * RAIN_H;
-    rainPos[i * 3 + 2] = (Math.random() - 0.5) * RAIN_BOX;
-    rainVel[i] = 14 + Math.random() * 8;
-  }
-  const rainGeo = new THREE.BufferGeometry();
-  rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
-  const rainMat = new THREE.PointsMaterial({
-    color: 0xaec6d8, size: 0.12, transparent: true, opacity: 0,
-    depthWrite: false,
-  });
-  const rain = new THREE.Points(rainGeo, rainMat);
-  rain.frustumCulled = false;
-  rain.visible = false;
-  scene.add(rain);
-
-  // ---- Vibrant time-specific beauties: STRIPPED (rainbow/aurora/pollen/
-  // shooting stars/dew removed for performance). Vars stay null; update()
-  // guards (`if (rainbow && ...)`) skip them at zero cost.
-  // Rainbow: thin elegant arc high in the sky, only briefly after rain + sun.
-  let rainbow = null;
-  let rainbowMat = null;
-  let rainbowTimer = 0; // seconds since rain->sun transition started
-
-  // Aurora borealis: shimmering plane at northern sky, visible on clear nights 22-03
-  let aurora = null;
-  let auroraMat = null;
-
-  // Pollen / dust motes: STRIPPED (120-point sim removed).
-  const POLLEN_N = 0;
-  const pollenPos = POLLEN_N ? new Float32Array(POLLEN_N * 3) : null;
-  const pollenPhase = POLLEN_N ? new Float32Array(POLLEN_N) : null;
-  let pollen = null; let pollenMat = null; let pollenGeo = null;
-  if (POLLEN_N && pollenPos) {
-    for (let i = 0; i < POLLEN_N; i++) {
-      pollenPos[i * 3] = (Math.random() - 0.5) * 44;
-      pollenPos[i * 3 + 1] = 1 + Math.random() * 7;
-      pollenPos[i * 3 + 2] = (Math.random() - 0.5) * 44;
-      pollenPhase[i] = Math.random() * Math.PI * 2;
-    }
-    pollenGeo = new THREE.BufferGeometry();
-    pollenGeo.setAttribute('position', new THREE.BufferAttribute(pollenPos, 3));
-    pollenMat = new THREE.PointsMaterial({ color: 0xffe9a8, size: 0.18, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
-    pollen = new THREE.Points(pollenGeo, pollenMat);
-    pollen.frustumCulled = false;
-    pollen.visible = true;
-    scene.add(pollen);
-  }
-
-  // Shooting stars: STRIPPED (trail points removed).
-  const SHOOT_N = 0;
-  let shootingStar = null; let shootingMat = null; let shootTimer = 8 + Math.random() * 10; let shootActive = 0; let shootDir = new THREE.Vector3();
-  if (SHOOT_N) {
-    const sg = new THREE.BufferGeometry();
-    const sp = new Float32Array(12 * 3); // 12 points trail
-    sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
-    shootingMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.9, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
-    shootingStar = new THREE.Points(sg, shootingMat);
-    shootingStar.frustumCulled = false;
-    shootingStar.visible = false;
-    scene.add(shootingStar);
-    shootDir.set(-0.8, -0.35, 0.15).normalize();
-  }
-
-  // Lightning flash: STRIPPED (overlay + spikes removed). Var stays null.
-  let lightningOverlay = null;
-  let lightningTimer = 3 + Math.random() * 5;
-  let lightningFlash = 0;
-
-  // Dew / mist particles at dawn: STRIPPED (80-point sim removed).
-  const DEW_N = 0;
-  const dewPos = DEW_N ? new Float32Array(DEW_N * 3) : null;
-  let dew = null; let dewMat = null; let dewGeo = null;
-  if (DEW_N && dewPos) {
-    for (let i = 0; i < DEW_N; i++) {
-      dewPos[i * 3] = (Math.random() - 0.5) * 40;
-      dewPos[i * 3 + 1] = 0.08 + Math.random() * 0.35;
-      dewPos[i * 3 + 2] = (Math.random() - 0.5) * 40;
-    }
-    dewGeo = new THREE.BufferGeometry();
-    dewGeo.setAttribute('position', new THREE.BufferAttribute(dewPos, 3));
-    dewMat = new THREE.PointsMaterial({ color: 0xcff0ff, size: 0.22, transparent: true, opacity: 0, depthWrite: false });
-    dew = new THREE.Points(dewGeo, dewMat);
-    dew.frustumCulled = false;
-    dew.visible = true;
-    scene.add(dew);
-  }
-
-  // Cloud material (shared across puffs) for overcast tinting.
+  // Cloud material (shared across puffs).
   let cloudMat = null;
   if (clouds?.clouds?.length) {
     clouds.clouds[0].traverse?.((o) => { if (!cloudMat && o.isMesh) cloudMat = o.material; });
   }
   const cloudBaseColor = cloudMat ? cloudMat.color.clone() : new THREE.Color(0xffffff);
-  const waterMat = river?.water?.material || null;
-  const waterBase = waterMat ? { color: waterMat.color.clone(), rough: waterMat.roughness, metal: waterMat.metalness } : null;
 
   const ambience = createAmbience();
 
   // ---- HUD ----
-  let barEl, timeEl, wxEl;
+  let barEl, timeEl;
   function buildHud() {
     let root = document.getElementById('envbar');
     if (!root) {
@@ -588,12 +434,10 @@ export function createEnvironment(scene, opts = {}) {
     }
     root.innerHTML = `
       <span id="env-time">☀️ 10:00</span>
-      <span id="env-wx">☀️ Clear</span>
       <div class="env-btns">
         <input type="time" id="env-time-input" style="border: 1px solid #c8e6c9; border-radius: 8px; padding: 2px 4px; font-size: 12px; font-weight: 600; color: #33691e; background: #fff; outline: none; cursor: pointer;">
         <button id="env-pause" title="Pause / resume time">⏸</button>
         <button id="env-skip" title="Jump to morning / night">⏭</button>
-        <button id="env-wxbtn" title="Change weather">🌧️</button>
         <select id="env-music-track" title="Choose music track" aria-label="Choose music track">
           ${MUSIC_TRACKS.map((track) => `<option value="${track.id}">${track.name}</option>`).join('')}
         </select>
@@ -606,11 +450,9 @@ export function createEnvironment(scene, opts = {}) {
         </div>
       </div>`;
     timeEl = root.querySelector('#env-time');
-    wxEl = root.querySelector('#env-wx');
     const timeInput = root.querySelector('#env-time-input');
     const pauseBtn = root.querySelector('#env-pause');
     const skipBtn = root.querySelector('#env-skip');
-    const wxBtn = root.querySelector('#env-wxbtn');
     const trackSelect = root.querySelector('#env-music-track');
     const nextMusicBtn = root.querySelector('#env-next-music');
     const muteBtn = root.querySelector('#env-mute');
@@ -631,10 +473,6 @@ export function createEnvironment(scene, opts = {}) {
     skipBtn.onclick = () => {
       // Jump to next 6h mark (morning <-> evening) for a quick demo.
       state.timeOfDay = state.timeOfDay < 12 ? 18.2 : 7.5;
-    };
-    wxBtn.onclick = () => {
-      const i = WEATHERS.indexOf(state.weather);
-      api.setWeather(WEATHERS[(i + 1) % WEATHERS.length]);
     };
     if (trackSelect) {
       trackSelect.onchange = (e) => {
@@ -692,7 +530,6 @@ export function createEnvironment(scene, opts = {}) {
   const sunDir = new THREE.Vector3();
   const moonDir = new THREE.Vector3();
   const focusV = new THREE.Vector3();
-  const wxMix = {};
   const moonTint = new THREE.Color(0xdce8ff);
   let hudAcc = 1;
   // Shadow depth pass over ~10k instanced veg costs every frame. At night the
@@ -702,7 +539,6 @@ export function createEnvironment(scene, opts = {}) {
   let lastIsDay = true;
   // Perf caches for DOM overlay writes (avoid style recalc every frame).
   let lastSunsetOv = null;
-  let lastLightningOv = null;
 
   const api = {
     state,
@@ -714,51 +550,23 @@ export function createEnvironment(scene, opts = {}) {
     get moonDirVec() { return moonDir.clone(); },
     get sunColorVec() { return sample.sunColor.clone(); },
     get timeOfDay() { return state.timeOfDay; },
-    get weather() { return state.weather; },
+    get weather() { return 'clear'; },
     get nightFactor() { return state.nightFactor || 0; },
     get isNight() { return !!state.isNight; },
     setTime(h) { state.timeOfDay = ((h % 24) + 24) % 24; },
-    setWeather(w) {
-      // Back-compat: old saves with 'fog' map to soft 'mist' (vibrant, not ugly)
-      if (w === 'fog') w = 'mist';
-      if (!WEATHERS.includes(w) || w === state.weather) return;
-      state.prevWeather = state.blend < 1 ? state.prevWeather : state.weather;
-      // If mid-transition, keep blending from current mix: restart blend.
-      state.weather = w;
-      state.blend = 0;
-      state.weatherTimer = state.weatherIntervalSec;
-    },
-    cycleWeather() {
-      const i = WEATHERS.indexOf(state.weather);
-      api.setWeather(WEATHERS[(i + 1) % WEATHERS.length]);
-    },
+    // Removed: setWeather / cycleWeather were deleted with the weather feature.
+    // No-op stubs kept so old console snippets / saved URLs don't throw.
+    setWeather() {},
+    cycleWeather() {},
 
     update(dt, focus, extra = {}) {
-      // Perf: single clock read per frame — reused by moon pulse, pollen,
-      // dew (was: performance.now() inside per-particle loops, 120+ syscalls).
-      const nowMs = performance.now();
-      const nowSec = nowMs * 0.001;
-      // Perf: getGraphics() is now a cached ref — read once per frame.
-      let gfxRainOff = false;
-      let gfxPartMul = 1;
-      try {
-        const g = getGraphics();
-        gfxRainOff = g?.rain === false;
-        gfxPartMul = g?.particles ?? 1;
-      } catch {}
+      const nowSec = performance.now() * 0.001;
+      const wx = WX_CLEAR;
       // Phase 5: global wind (affects foliage sway, water, clouds, audio)
-      updateWind(dt, state.weather);
-      // Debug / tuning handle (e.g. `__env.setTime(0)` in the console).      // --- advance clock + weather machine ---
+      updateWind(dt);
+      // Debug / tuning handle (e.g. `__env.setTime(0)` in the console).
+      // --- advance clock ---
       if (!state.paused) state.timeOfDay = (state.timeOfDay + (dt * state.speed * 24) / state.dayLengthSec) % 24;
-      state.blend = Math.min(1, state.blend + dt / 6); // ~6s crossfade
-      if (!state.paused) {
-        state.weatherTimer -= dt;
-        if (state.weatherTimer <= 0) {
-          api.setWeather(rollNextWeather());
-        }
-      }
-      const wx = mixWx(state.prevWeather, state.weather, state.blend, wxMix);
-      state.wetness += (wx.wet - state.wetness) * Math.min(1, dt * (wx.wet > state.wetness ? 0.5 : 0.08));
 
       if (focus) focusV.set(focus.x, 0, focus.z);
       else focusV.set(0, 0, 0);
@@ -771,7 +579,7 @@ export function createEnvironment(scene, opts = {}) {
 
       sampleStops(state.timeOfDay, sample);
 
-      // Night dimming of fog distance + weather multiplier.
+      // Night dimming of fog distance.
       const nightFogMul = THREE.MathUtils.lerp(0.9, 1.0, THREE.MathUtils.clamp(sunDir.y * 3 + 0.5, 0, 1));
 
       // --- lights ---
@@ -821,9 +629,8 @@ export function createEnvironment(scene, opts = {}) {
         renderer.toneMappingExposure = sample.exp * expMul;
       }
 
-      // --- sky / fog / background ---
-      // Ease off the fogTint lerp to avoid washing out the whole screen.
-      _cb.copy(sample.fog).lerp(wx.fogTint, state.weather === 'clear' ? 0 : 0.22);
+      // --- sky / fog / background (always clear) ---
+      _cb.copy(sample.fog);
       if (scene.fog) {
         scene.fog.color.copy(_cb);
         scene.fog.near = state.fogNear * wx.fogNear;
@@ -832,14 +639,14 @@ export function createEnvironment(scene, opts = {}) {
         if (scene.fog.far < scene.fog.near + 30) scene.fog.far = scene.fog.near + 30;
       }
       if (scene.background?.isColor) scene.background.copy(_cb);
-      skyUniforms.topColor.value.copy(sample.top).lerp(_ca.set(wx.fogTint), state.weather === 'clear' ? 0 : 0.25);
-      skyUniforms.bottomColor.value.copy(sample.bot).lerp(_ca.set(wx.fogTint), state.weather === 'clear' ? 0 : 0.25);
+      skyUniforms.topColor.value.copy(sample.top);
+      skyUniforms.bottomColor.value.copy(sample.bot);
       skyUniforms.sunDir.value.copy(isDay ? sunDir : moonDir);
       skyUniforms.sunColor.value.copy(isDay ? sample.sunColor : moonTint);
       skyUniforms.sunGlow.value = isDay ? 0.6 * wx.sun + 0.15 : 0.25;
       skydome.position.copy(focusV);
       stars.position.copy(focusV);
-      starMat.opacity = sample.stars * (1 - wx.rain * 0.75);
+      starMat.opacity = sample.stars;
 
       sunMesh.position.set(focusV.x + sunDir.x * 130, sunDir.y * 130, focusV.z + sunDir.z * 130);
       sunMesh.visible = sunDir.y > -0.08;
@@ -852,16 +659,13 @@ export function createEnvironment(scene, opts = {}) {
 
       moonMesh.position.set(focusV.x + moonDir.x * 130, moonDir.y * 130, focusV.z + moonDir.z * 130);
       moonMesh.visible = moonDir.y > -0.05;
-      // Overcast / rain veils the moon; drifting clouds cross it for an
-      // occluded-moon illusion (doc section 3: hazy veiled moon).
-      const veil = (1 - wx.rain * 0.55) * (state.weather === 'overcast' ? 0.62 : 1);
       // A restrained pulse keeps the moon from reading as a flat billboard,
       // while the actual directional light remains stable enough for shadows.
       const moonPulse = 0.94 + 0.06 * Math.sin(nowSec * 1.4);
-      moonMesh.material.opacity = THREE.MathUtils.clamp(moonDir.y * 4 + 0.3, 0, 0.9) * veil * moonPulse;
+      moonMesh.material.opacity = THREE.MathUtils.clamp(moonDir.y * 4 + 0.3, 0, 0.9) * moonPulse;
       moonHalo.position.copy(moonMesh.position);
       moonHalo.visible = moonMesh.visible;
-      moonHalo.material.opacity = nightF * (0.18 + moonPulse * 0.04) * veil;
+      moonHalo.material.opacity = nightF * (0.18 + moonPulse * 0.04);
       moonHalo.scale.setScalar(1 + (1 - moonPulse) * 0.3);
 
       // --- Sunset CSS overlay: warm orange radial glow near horizon ---
@@ -880,213 +684,23 @@ export function createEnvironment(scene, opts = {}) {
         }
       }
 
-      // --- clouds: thicker + grayer when overcast/rain, dark blue-grey at night ---
+      // --- clouds: dark blue-grey at night ---
       if (cloudMat) {
-        cloudMat.color.copy(cloudBaseColor).lerp(_ca.set(wx.fogTint), state.weather === 'clear' ? 0 : 0.35);
+        cloudMat.color.copy(cloudBaseColor);
         // Night tint (doc section 3): white/pink day -> somber blue-grey night.
         cloudMat.color.lerp(_ca.setHex(0x2e3a55), nightF * 0.78);
         cloudMat.opacity = wx.cloud;
         cloudMat.transparent = true;
       }
 
-      // --- rain ---
-      let targetRain = gfxRainOff ? 0 : wx.rain;
-      // Disable rain when graphics says off (saves CPU + overdraw on low/iPad).
-      if (RAIN_N === 0) targetRain = 0;
-      rainMat.opacity += ((targetRain * 0.55) - rainMat.opacity) * Math.min(1, dt * 2);
-      rain.visible = rainMat.opacity > 0.02 && RAIN_N > 0;
-      if (rain.visible) {
-        const p = rainGeo.attributes.position.array;
-        const slant = -1.2 * targetRain;
-        const half = RAIN_BOX / 2;
-        // On low particles, step rain every other particle to halve CPU.
-        const rainStep = gfxPartMul < 0.5 ? 2 : 1;
-        for (let i = 0; i < RAIN_N; i += rainStep) {
-          p[i * 3 + 1] -= rainVel[i] * dt;
-          p[i * 3] += slant * dt;
-          if (p[i * 3 + 1] < 0) {
-            p[i * 3 + 1] = RAIN_H + Math.random() * 2;
-            p[i * 3] = (Math.random() - 0.5) * RAIN_BOX;
-            p[i * 3 + 2] = (Math.random() - 0.5) * RAIN_BOX;
-          }
-          if (p[i * 3] < -half) p[i * 3] += RAIN_BOX;
-        }
-        // Keep untouched particles frozen (step 2) — still valid.
-        rainGeo.attributes.position.needsUpdate = true;
-        rain.position.set(focusV.x, 0, focusV.z);
-      }
-
-      // --- wet look on water (Standard only; low tier water is Lambert) ---
-      if (waterMat && waterBase && waterMat.roughness !== undefined) {
-        const w = state.wetness;
-        waterMat.roughness = THREE.MathUtils.lerp(waterBase.rough, 0.05, w);
-        waterMat.metalness = THREE.MathUtils.lerp(waterBase.metal, 0.4, w);
-        waterMat.color.copy(waterBase.color).multiplyScalar(1 - w * 0.25);
-      }
-
-      // --- ambience (birds/crickets + rain + campfire crackle + thunder/frogs) ---
-      ambience.update(dt, { isNight: !isDay, rain: targetRain, fire: extra.fire || 0, weather: state.weather, timeOfDay: state.timeOfDay });
-
-      // --- Vibrant beauties: rainbow, aurora, pollen, shooting stars, lightning, dew ---
-      const t = state.timeOfDay;
-      const isDawn = t >= 4.8 && t < 7.2;
-      const isMorning = t >= 7 && t < 11;
-      const isMidday = t >= 11 && t < 14.5;
-      const isGolden = t >= 15.5 && t < 18.6;
-      const isDusk = t >= 18.6 && t < 20.2;
-      const isNightDeep = t >= 21 || t < 4.5;
-      const isAfterRain = state.prevWeather === 'rain' || state.prevWeather === 'storm';
-
-      // Rainbow: thin elegant arc, only ~18s after rain->sun, not permanent
-      if (rainbow && rainbowMat) {
-        const justAfterRain = isAfterRain && (state.weather === 'clear' || state.weather === 'partlyCloudy') && isDay && wx.sun > 0.55;
-        // start/hold timer while conditions met, decay otherwise
-        if (justAfterRain && state.blend > 0.25 && state.blend < 1) {
-          rainbowTimer = Math.min(18, rainbowTimer + dt);
-        } else if (!justAfterRain) {
-          rainbowTimer = Math.max(0, rainbowTimer - dt * 0.7);
-        } else if (state.blend >= 1) {
-          // after transition finished, count down 18s window then hide
-          rainbowTimer = Math.max(0, rainbowTimer - dt * 0.9);
-          if (rainbowTimer <= 0.05) {
-            // clear the "after rain" flag after window expires so it doesn't retrigger until next rain
-            // keep prevWeather as is but require a new rain->clear cycle; we just wait for next weather roll
-          }
-        }
-        const wantRainbow = rainbowTimer > 0.5 && state.blend > 0.15 && wx.sun > 0.5;
-        const rainbowTarget = wantRainbow ? 0.38 : 0;
-        rainbowMat.opacity += (rainbowTarget - rainbowMat.opacity) * Math.min(1, dt * 0.45);
-        rainbow.visible = rainbowMat.opacity > 0.02;
-        if (rainbow.visible) {
-          rainbow.position.set(focusV.x, 0, focusV.z);
-          const ang = Math.atan2(sunDir.z, sunDir.x);
-          rainbow.rotation.y = -ang;
-        }
-        // auto-clear prevWeather after 18s window so rainbow doesn't stay forever on clear days
-        if (rainbowTimer <= 0 && state.blend >= 1 && isAfterRain) {
-          // don't mutate state.weather, just let next weather cycle naturally replace prevWeather
-          // but keep timer at 0 so no visible rainbow
-        }
-      }
-
-      // Aurora: clear night 22-03, fades in slow
-      if (aurora && auroraMat) {
-        const wantAurora = isNightDeep && (state.weather === 'clear' || state.weather === 'partlyCloudy') && nightF > 0.75;
-        const targetA = wantAurora ? 0.9 : 0;
-        auroraMat.uniforms.uOpacity.value += (targetA - auroraMat.uniforms.uOpacity.value) * Math.min(1, dt * 0.25);
-        auroraMat.uniforms.uTime.value += dt;
-        aurora.visible = auroraMat.uniforms.uOpacity.value > 0.02;
-        if (aurora.visible) {
-          aurora.position.set(focusV.x, 42, focusV.z - 55);
-        }
-      }
-
-      // Pollen / dust motes: golden hour + midday sunbeams, clear/partlyCloudy
-      if (pollen && pollenMat && pollenGeo) {
-        const wantPollen = (isGolden || isMidday) && (state.weather === 'clear' || state.weather === 'partlyCloudy') && isDay && wx.sun > 0.6;
-        const targetP = wantPollen ? (isGolden ? 0.85 : 0.5) : 0;
-        pollenMat.opacity += (targetP - pollenMat.opacity) * Math.min(1, dt * 0.7);
-        pollen.visible = pollenMat.opacity > 0.02;
-        if (pollen.visible) {
-          const arr = pollenGeo.attributes.position.array;
-          for (let i = 0; i < POLLEN_N; i++) {
-            arr[i * 3 + 1] += Math.sin(nowMs * 0.0005 + pollenPhase[i]) * dt * 0.12;
-            arr[i * 3] += Math.sin(nowMs * 0.0003 + pollenPhase[i] * 1.3) * dt * 0.15;
-            // wrap around focus
-            if (arr[i * 3 + 1] > 8) arr[i * 3 + 1] = 1;
-            if (arr[i * 3 + 1] < 0.5) arr[i * 3 + 1] = 7;
-            if (Math.abs(arr[i * 3] - focusV.x) > 24) arr[i * 3] = focusV.x + (Math.random() - 0.5) * 44;
-            if (Math.abs(arr[i * 3 + 2] - focusV.z) > 24) arr[i * 3 + 2] = focusV.z + (Math.random() - 0.5) * 44;
-          }
-          pollenGeo.attributes.position.needsUpdate = true;
-          pollen.position.set(0, 0, 0);
-        }
-      }
-
-      // Dew sparkle at dawn in mist/fog, low ground
-      if (dew && dewMat && dewGeo) {
-        const wantDew = isDawn && (state.weather === 'mist' || state.weather === 'drizzle');
-        const targetD = wantDew ? 0.75 : 0;
-        dewMat.opacity += (targetD - dewMat.opacity) * Math.min(1, dt * 0.5);
-        dew.visible = dewMat.opacity > 0.02;
-        if (dew.visible) {
-          dewMat.color.setHSL(0.55 + Math.sin(nowSec * 1.0) * 0.03, 0.6, 0.85);
-          const arr = dewGeo.attributes.position.array;
-          // subtle twinkle via size pulse (opacity modulation per point is via global opacity)
-          dewGeo.attributes.position.needsUpdate = false;
-          dew.position.set(focusV.x, 0, focusV.z);
-        }
-      }
-
-      // Shooting stars: rare streaks at night clear
-      if (shootingStar && shootingMat) {
-        shootTimer -= dt;
-        if (shootActive > 0) {
-          shootActive -= dt;
-          const prog = 1 - shootActive / 0.9;
-          const arr = shootingStar.geometry.attributes.position.array;
-          const headX = focusV.x + 30 - prog * 70;
-          const headY = 48 - prog * 24;
-          const headZ = focusV.z + (Math.random() - 0.5) * 10;
-          for (let i = 0; i < 12; i++) {
-            const k = i / 11;
-            arr[i * 3] = headX + k * 6 * shootDir.x;
-            arr[i * 3 + 1] = headY + k * 6 * shootDir.y;
-            arr[i * 3 + 2] = headZ + k * 6 * shootDir.z;
-          }
-          shootingStar.geometry.attributes.position.needsUpdate = true;
-          shootingMat.opacity = Math.max(0, (1 - Math.abs(prog - 0.5) * 1.8) * 0.9);
-          shootingStar.visible = true;
-          shootingStar.position.set(0, 0, 0);
-          if (shootActive <= 0) { shootingMat.opacity = 0; shootingStar.visible = false; }
-        } else {
-          shootingStar.visible = false;
-          shootingMat.opacity = 0;
-          if (shootTimer <= 0 && isNightDeep && (state.weather === 'clear' || state.weather === 'partlyCloudy') && Math.random() < 0.6) {
-            shootActive = 0.9;
-            shootTimer = 12 + Math.random() * 18;
-            // randomize direction slightly
-            shootDir.set(-0.8 - Math.random() * 0.2, -0.3 - Math.random() * 0.2, (Math.random() - 0.5) * 0.3).normalize();
-          } else if (shootTimer <= 0) {
-            shootTimer = 6 + Math.random() * 10;
-          }
-        }
-      }
-
-      // Lightning flash for storm
-      if (state.weather === 'storm') {
-        lightningTimer -= dt;
-        if (lightningTimer <= 0) {
-          lightningFlash = 0.18 + Math.random() * 0.18;
-          lightningTimer = 2.5 + Math.random() * 5.5;
-          // also spike directional light for one frame
-          if (sun) sun.intensity += 3.5;
-          if (moonLight) moonLight.intensity += 2.0;
-        }
-      } else {
-        lightningTimer = 3 + Math.random() * 5;
-      }
-      if (lightningFlash > 0) {
-        lightningFlash -= dt * 2.5;
-        const lv = Math.max(0, lightningFlash);
-        // Perf: only touch the DOM when the value actually changes.
-        const lvStr = (lv * 0.85).toFixed(2);
-        if (lightningOverlay && lvStr !== lastLightningOv) {
-          lastLightningOv = lvStr;
-          lightningOverlay.style.opacity = lvStr;
-        }
-        if (lv <= 0 && lightningOverlay && lastLightningOv !== '0') {
-          lastLightningOv = '0';
-          lightningOverlay.style.opacity = '0';
-        }
-      }
+      // --- ambience (birds/crickets + campfire crackle) ---
+      ambience.update(dt, { isNight: !isDay, fire: extra.fire || 0, timeOfDay: state.timeOfDay });
 
       // --- HUD text (throttled) ---
       hudAcc += dt;
       if (hudAcc > 0.25) {
         hudAcc = 0;
         if (timeEl) timeEl.textContent = `${phaseIcon(state.timeOfDay)} ${fmtTime(state.timeOfDay)}`;
-        if (wxEl) wxEl.textContent = `${WEATHER_ICON[state.weather]} ${WEATHER_LABEL[state.weather]}`;
       }
     },
   };

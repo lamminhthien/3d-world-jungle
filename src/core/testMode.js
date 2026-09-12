@@ -1,24 +1,20 @@
-// Test Mode — Quick access panel for every scenario / weather / lifecycle / world dimension.
+// Test Mode — Quick access panel for every scenario / lifecycle / world dimension.
 // Activated via ?test=1 / ?testMode=1 / ?debug=1, or the floating 🧪 button, or hotkey ` / F2.
 // No external deps; injects its own DOM + styles. Safe to leave bundled for prod — hidden until opened.
 
 import * as THREE from 'three';
 import { BIOMES, sampleGround, GEN } from '../world/procedural.js';
-import { LIFECYCLE, WEATHER_CONFIG, ANIMALS } from '../config.js';
+import { LIFECYCLE, ANIMALS } from '../config.js';
 import { getGraphics, getGraphicsState, setPreset, setOverride } from './graphics.js';
 import { groundHeight } from '../utils.js';
 
-const WEATHERS = ['clear', 'partlyCloudy', 'overcast', 'mist', 'drizzle', 'rain', 'storm'];
-const WEATHER_LABEL = { clear: 'Clear', partlyCloudy: 'Partly', overcast: 'Overcast', mist: 'Mist', drizzle: 'Drizzle', rain: 'Rain', storm: 'Storm' };
-const WEATHER_ICON = { clear: '☀️', partlyCloudy: '⛅', overcast: '☁️', mist: '🌄', drizzle: '🌦️', rain: '🌧️', storm: '⛈️' };
-
 const TIME_PRESETS = [
-  { label: 'Dawn', icon: '🌅', time: 5.5, desc: 'mist, dew, chorus 4.8-7.2' },
-  { label: 'Morning', icon: '🌤️', time: 9.0, desc: 'rainbow after rain 7-11' },
-  { label: 'Midday', icon: '☀️', time: 12.5, desc: 'heat haze, butterflies 11-14.5' },
-  { label: 'Golden', icon: '🌇', time: 16.5, desc: 'amber sun, pollen 15.5-18.6' },
+  { label: 'Dawn', icon: '🌅', time: 5.5, desc: 'chorus 4.8-7.2' },
+  { label: 'Morning', icon: '🌤️', time: 9.0, desc: 'clear morning 7-11' },
+  { label: 'Midday', icon: '☀️', time: 12.5, desc: 'butterflies 11-14.5' },
+  { label: 'Golden', icon: '🌇', time: 16.5, desc: 'amber sun 15.5-18.6' },
   { label: 'Dusk', icon: '🌆', time: 18.8, desc: 'bats, crickets, fireflies ignite' },
-  { label: 'Night', icon: '🌙', time: 22.0, desc: 'aurora 22-03, shooting stars' },
+  { label: 'Night', icon: '🌙', time: 22.0, desc: 'night 22-03' },
   { label: 'Midnight', icon: '🌌', time: 0.5, desc: 'deep night, moon' },
 ];
 
@@ -119,7 +115,7 @@ export function createTestMode(ctx = {}) {
     <div class="test-head">
       <div class="test-head-title">🧪 Test Mode <span id="testModeStatus" class="test-badge">idle</span></div>
       <div class="test-head-actions">
-        <button id="testCopyUrl" title="Copy URL with current seed/time/weather">🔗 Copy URL</button>
+        <button id="testCopyUrl" title="Copy URL with current seed/time">🔗 Copy URL</button>
         <button id="testClose" title="Close (∼ / F2 / Esc)">✕</button>
       </div>
     </div>
@@ -134,7 +130,6 @@ export function createTestMode(ctx = {}) {
 
   const TAB_DEFS = [
     { id: 'world', label: '🌍 World', icon: '🌍' },
-    { id: 'weather', label: '🌤️ Weather', icon: '🌤️' },
     { id: 'time', label: '⏰ Time', icon: '⏰' },
     { id: 'lifecycle', label: '✨ Lifecycle', icon: '✨' },
     { id: 'animals', label: '🦌 Animals', icon: '🦌' },
@@ -181,7 +176,6 @@ export function createTestMode(ctx = {}) {
       const url = new URL(location.href);
       if (getSeed) url.searchParams.set('seed', getSeed());
       if (env?.timeOfDay !== undefined) url.searchParams.set('time', env.timeOfDay.toFixed(2));
-      if (env?.weather) url.searchParams.set('weather', env.weather);
       url.searchParams.set('test', '1');
       const str = url.toString();
       navigator.clipboard.writeText(str).then(() => setStatus('URL copied!')).catch(() => prompt('Copy URL:', str));
@@ -219,21 +213,11 @@ export function createTestMode(ctx = {}) {
     return null;
   }
 
-  function triggerRainbow() {
-    if (!env) return;
-    // Rainbow needs: prevWeather was rain/storm, now clear+sun, and blend window
-    env.setWeather('rain');
-    setTimeout(() => {
-      env.setWeather('clear');
-      env.setTime(9);
-      if (env.state) { env.state.blend = 0.35; }
-      setStatus('Rainbow: rain → clear @ 9:00 — watch sky ~18s');
-    }, 400);
-  }
-  function triggerAurora() { if (env) { env.setTime(23); env.setWeather('clear'); setStatus('Aurora: clear night 23:00 — look north'); } }
-  function triggerPollen() { if (env) { env.setTime(16.5); env.setWeather('clear'); setStatus('Pollen: golden hour 16:30 clear'); } }
-  function triggerDew() { if (env) { env.setTime(5.5); env.setWeather('mist'); setStatus('Dew: dawn 05:30 mist — ground sparkle'); } }
-  function triggerStorm() { if (env) { env.setTime(12); env.setWeather('storm'); setStatus('Storm: lightning + thunder +  🌧️'); } }
+  function triggerRainbow() { if (env) { env.setTime(9); setStatus('Morning 09:00 — clear sky'); } }
+  function triggerAurora() { if (env) { env.setTime(23); setStatus('Night 23:00 — look north'); } }
+  function triggerPollen() { if (env) { env.setTime(16.5); setStatus('Golden hour 16:30'); } }
+  function triggerDew() { if (env) { env.setTime(5.5); setStatus('Dawn 05:30'); } }
+  function triggerStorm() { if (env) { env.setTime(12); setStatus('Midday 12:00 — clear sky'); } }
 
   // ---- Tab rendering ----
   function renderTabs() {
@@ -292,27 +276,8 @@ export function createTestMode(ctx = {}) {
     `;
   }
 
-  function renderWeather() {
-    const cur = env?.weather || 'clear';
-    const blend = env?.state?.blend ?? 1;
-    const timer = env?.state?.weatherTimer ?? 0;
-    const paused = env?.state?.paused ? '⏸ Paused' : '▶ Auto';
-    const wxButtons = WEATHERS.map(w => `<button class="test-btn sm ${w===cur?'active':''}" data-weather="${w}">${WEATHER_ICON[w]} ${WEATHER_LABEL[w]}</button>`).join('');
+  function renderWind() {
     return `
-      <div class="test-section">
-        <div class="test-section-title">🌤️ Weather <span class="test-badge">${WEATHER_ICON[cur]} ${WEATHER_LABEL[cur]} · ${Math.round(blend*100)}% blend · ${timer.toFixed(0)}s</span></div>
-        <div class="test-grid">${wxButtons}</div>
-        <div class="test-row" style="margin-top:8px">
-          <button class="test-btn sm" id="testWxCycle">Cycle →</button>
-          <button class="test-btn sm" id="testWxPause">${paused}</button>
-          <button class="test-btn sm" id="testWxRandom">🎲 Roll</button>
-          <span class="test-meta">Interval ${env?.state?.weatherIntervalSec ?? 75}s · Wind boost per weather (storm +0.4)</span>
-        </div>
-        <div style="margin-top:6px">
-          <label class="test-meta">Transition blend (0 → 1, ~6s)</label>
-          <input id="testWeatherBlend" class="test-range" type="range" min="0" max="1" step="0.02" value="${blend}">
-        </div>
-      </div>
       <div class="test-section">
         <div class="test-section-title">🍃 Wind</div>
         <div class="test-kv" id="testWindReadout"></div>
@@ -344,30 +309,30 @@ export function createTestMode(ctx = {}) {
         </div>
         <div class="test-meta">Day length ${(env?.state?.dayLengthSec ?? 600)}s = 10 min per game day. 0h = midnight, 6h = sunrise, 12h = noon, 18h = sunset. LIFECYCLE windows: dawn 4.8-7.2, morning 7-11, midday 11-14.5, golden 15.5-18.6, dusk 18.6-20.2, night 20.2-4.8.</div>
       </div>
+      ${renderWind()}
     `;
   }
 
   function renderLifecycle() {
     const nf = env?.nightFactor ?? 0;
     const isNight = env?.isNight ? '🌙 Night' : '☀️ Day';
-    const wx = env?.weather ?? 'clear';
     const t = env?.timeOfDay ?? 12;
     return `
       <div class="test-section">
-        <div class="test-section-title">✨ VFX & Lifecycle <span class="test-badge">${isNight} · nf ${nf.toFixed(2)} · ${wx} · ${fmtTime(t)}</span></div>
-        <div class="test-meta" style="margin-bottom:6px">Conditions for each beauty (weather + time + nightFactor). Buttons set the exact combo.</div>
+        <div class="test-section-title">✨ VFX & Lifecycle <span class="test-badge">${isNight} · nf ${nf.toFixed(2)} · ${fmtTime(t)}</span></div>
+        <div class="test-meta" style="margin-bottom:6px">Conditions for each beauty (time + nightFactor). Buttons jump to the matching time.</div>
         <div class="test-grid2">
-          <button class="test-btn sm" id="testTriggerRainbow">🌈 Rainbow<br><span style="font-size:9px">rain→clear 09:00, ~18s</span></button>
-          <button class="test-btn sm" id="testTriggerAurora">🌌 Aurora<br><span style="font-size:9px">clear 23:00 north</span></button>
-          <button class="test-btn sm" id="testTriggerPollen">✨ Pollen<br><span style="font-size:9px">clear 16:30 golden</span></button>
-          <button class="test-btn sm" id="testTriggerDew">💧 Dew<br><span style="font-size:9px">mist 05:30 dawn</span></button>
-          <button class="test-btn sm" id="testTriggerStorm">⛈️ Lightning<br><span style="font-size:9px">storm any time</span></button>
-          <button class="test-btn sm" id="testShootingStar">☄️ Shooting Star<br><span style="font-size:9px">clear 01:00 (random)</span></button>
+          <button class="test-btn sm" id="testTriggerRainbow">🌈 Morning<br><span style="font-size:9px">09:00</span></button>
+          <button class="test-btn sm" id="testTriggerAurora">🌌 Night<br><span style="font-size:9px">23:00 north</span></button>
+          <button class="test-btn sm" id="testTriggerPollen">✨ Golden<br><span style="font-size:9px">16:30 golden</span></button>
+          <button class="test-btn sm" id="testTriggerDew">💧 Dawn<br><span style="font-size:9px">05:30 dawn</span></button>
+          <button class="test-btn sm" id="testTriggerStorm">☀️ Midday<br><span style="font-size:9px">12:00</span></button>
+          <button class="test-btn sm" id="testShootingStar">☄️ Late night<br><span style="font-size:9px">01:00</span></button>
         </div>
         <div class="test-row" style="margin-top:8px">
           <button class="test-btn sm" id="testToggleFireflies">✨ Fireflies</button>
           <button class="test-btn sm" id="testToggleStars">⭐ Stars opacity</button>
-          <span class="test-meta">Fireflies visible 19.5-4.5 · Pollen 15.5-18.6 clear · Dew 4.8-7.2 mist · Aurora 22-03 clear · Rainbow only after rain</span>
+          <span class="test-meta">Fireflies visible 19.5-4.5 · Stars follow nightFactor. See canvas at night.</span>
         </div>
       </div>
       <div class="test-section">
@@ -380,14 +345,14 @@ export function createTestMode(ctx = {}) {
 
   function renderAnimals() {
     const rows = [
-      { id: 'birds', label: '🐦 Birds', desc: 'day mostly, storm 0.15, rain 0.35, night 0.08', count: ANIMALS.birdCount },
-      { id: 'deer', label: '🦌 Deer', desc: 'storm 0.3 shelter, night 0.55', count: ANIMALS.deerCount },
+      { id: 'birds', label: '🐦 Birds', desc: 'day mostly, night 0.08', count: ANIMALS.birdCount },
+      { id: 'deer', label: '🦌 Deer', desc: 'night 0.55', count: ANIMALS.deerCount },
       { id: 'fish', label: '🐟 Fish', desc: 'always in river', count: ANIMALS.fishCount },
-      { id: 'butterflies', label: '🦋 Butterflies', desc: 'day only, storm/rain 0, drizzle 0.35', count: ANIMALS.butterflyCount },
+      { id: 'butterflies', label: '🦋 Butterflies', desc: 'day only', count: ANIMALS.butterflyCount },
       { id: 'crabs', label: '🦀 Crabs', desc: 'beach band 4.5u from river', count: ANIMALS.crabCount },
       { id: 'boars', label: '🐗 Boars', desc: 'forest chunky deer variant', count: ANIMALS.boarCount },
-      { id: 'dragonflies', label: '✈️ Dragonflies', desc: 'day clear near river, not storm', count: ANIMALS.dragonflyCount },
-      { id: 'bats', label: '🦇 Bats', desc: '19-05 night, not storm', count: ANIMALS.batCount },
+      { id: 'dragonflies', label: '✈️ Dragonflies', desc: 'day near river', count: ANIMALS.dragonflyCount },
+      { id: 'bats', label: '🦇 Bats', desc: '19-05 night', count: ANIMALS.batCount },
     ];
     return `
       <div class="test-section">
@@ -407,7 +372,7 @@ export function createTestMode(ctx = {}) {
           <label class="test-meta">Animals density <input id="testAnimalsMul" type="range" class="test-range" style="width:110px;display:inline-block;vertical-align:middle" min="0" max="1" step="0.1"> <span id="testAnimalsMulVal"></span></label>
           <label class="test-meta">Particles <input id="testParticlesMul" type="range" class="test-range" style="width:110px;display:inline-block;vertical-align:middle" min="0" max="1" step="0.1"> <span id="testParticlesMulVal"></span></label>
         </div>
-        <div class="test-meta">Lifecycle is driven by env (timeOfDay + weather) passed to animals.update. Toggle hides mesh instantly; density scales InstancedMesh.count via Graphics overrides (live).</div>
+        <div class="test-meta">Lifecycle is driven by env timeOfDay passed to animals.update. Toggle hides mesh instantly; density scales InstancedMesh.count via Graphics overrides (live).</div>
       </div>
     `;
   }
@@ -631,23 +596,7 @@ export function createTestMode(ctx = {}) {
     } catch {}
   }
 
-  function bindWeatherEvents(root) {
-    root.querySelectorAll('[data-weather]').forEach(btn => btn.addEventListener('click', () => {
-      env?.setWeather(btn.dataset.weather);
-      setStatus(`Weather → ${btn.dataset.weather}`);
-      render();
-    }));
-    root.querySelector('#testWxCycle')?.addEventListener('click', () => { env?.cycleWeather?.(); render(); });
-    root.querySelector('#testWxPause')?.addEventListener('click', () => {
-      if (env?.state) { env.state.paused = !env.state.paused; render(); }
-    });
-    root.querySelector('#testWxRandom')?.addEventListener('click', () => {
-      const w = WEATHERS[Math.floor(Math.random()*WEATHERS.length)];
-      env?.setWeather(w); render();
-    });
-    root.querySelector('#testWeatherBlend')?.addEventListener('input', (e) => {
-      if (env?.state) env.state.blend = Number(e.target.value);
-    });
+  function bindWindEvents(root) {
     root.querySelector('#testWindGust')?.addEventListener('click', () => {
       try { window.__windGust?.(); } catch {}
       // also directly bump windState
@@ -657,7 +606,7 @@ export function createTestMode(ctx = {}) {
         ws.strength = 1.2;
         setTimeout(() => ws.strength = old, 2200);
         setStatus('Gust 1.2 (2s)');
-        bindWeatherReadout();
+        bindWindReadout();
       });
     });
     root.querySelector('#testWindOff')?.addEventListener('click', () => {
@@ -665,10 +614,10 @@ export function createTestMode(ctx = {}) {
       setOverride('windSway', cur === false ? null : false);
       setStatus(`Wind sway ${cur===false?'on':'off'}`);
     });
-    bindWeatherReadout();
+    bindWindReadout();
   }
 
-  function bindWeatherReadout() {
+  function bindWindReadout() {
     import('../world/wind.js').then(m => {
       const el = document.getElementById('testWindReadout');
       if (!el) return;
@@ -724,6 +673,7 @@ export function createTestMode(ctx = {}) {
       const active = Object.entries(LIFECYCLE).filter(([k, win]) => inWindow(win)).map(([k])=>k).join(', ') || '—';
       lcEl.textContent = `Now ${fmtTime(t)} → active windows: ${active}. Each window gates a beauty + animal visibility. See Lifecycle tab for exact triggers.`;
     }
+    bindWindEvents(root);
   }
 
   function bindLifecycleEvents(root) {
@@ -733,14 +683,14 @@ export function createTestMode(ctx = {}) {
     root.querySelector('#testTriggerDew')?.addEventListener('click', triggerDew);
     root.querySelector('#testTriggerStorm')?.addEventListener('click', triggerStorm);
     root.querySelector('#testShootingStar')?.addEventListener('click', () => {
-      env?.setTime(1); env?.setWeather('clear'); setStatus('Shooting stars are random ~12-30s — wait at 01:00 clear');
+      env?.setTime(1); setStatus('Late night 01:00');
     });
     root.querySelector('#testToggleFireflies')?.addEventListener('click', () => {
       const cur = getGraphics()?.fireflies;
       setOverride('fireflies', cur===false?null:false);
       setStatus(`Fireflies ${cur===false?'on':'off'}`);
     });
-    root.querySelector('#testToggleStars')?.addEventListener('click', () => setStatus('Stars follow nightFactor + rain. See canvas at night.'));
+    root.querySelector('#testToggleStars')?.addEventListener('click', () => setStatus('Stars follow nightFactor. See canvas at night.'));
   }
 
   function bindAnimalsEvents(root) {
@@ -994,7 +944,6 @@ export function createTestMode(ctx = {}) {
         seed: (()=>{ try{return world.stats().seed}catch{return getSeed?.()}} )(),
         time: env?.timeOfDay ?? null,
         timeFmt: env ? fmtTime(env.timeOfDay) : null,
-        weather: env?.weather ?? null,
         nightFactor: env?.nightFactor ?? null,
         pos: player ? { x: Number(player.position.x.toFixed(2)), z: Number(player.position.z.toFixed(2)), y: Number(player.position.y.toFixed(2)) } : null,
         camAzimuth: coreState?.azimuth ?? null,
@@ -1019,10 +968,10 @@ export function createTestMode(ctx = {}) {
 
   function render() {
     clearInterval(refreshTimer);
+    if (activeTab === 'weather') activeTab = 'time';
     renderTabs();
     let html = '';
     if (activeTab === 'world') html = renderWorld();
-    else if (activeTab === 'weather') html = renderWeather();
     else if (activeTab === 'time') html = renderTime();
     else if (activeTab === 'lifecycle') html = renderLifecycle();
     else if (activeTab === 'animals') html = renderAnimals();
@@ -1032,7 +981,6 @@ export function createTestMode(ctx = {}) {
     bodyEl.innerHTML = html;
     // bind after DOM insert
     if (activeTab === 'world') bindWorldEvents(bodyEl);
-    else if (activeTab === 'weather') bindWeatherEvents(bodyEl);
     else if (activeTab === 'time') bindTimeEvents(bodyEl);
     else if (activeTab === 'lifecycle') bindLifecycleEvents(bodyEl);
     else if (activeTab === 'animals') bindAnimalsEvents(bodyEl);
@@ -1043,9 +991,8 @@ export function createTestMode(ctx = {}) {
     // update status badge with live summary
     try {
       const t = env ? fmtTime(env.timeOfDay) : '--:--';
-      const w = env?.weather || '--';
       const seed = (()=>{ try{return world.stats().seed}catch{return getSeed?.()||'—'}})();
-      setStatus(`${seed} · ${t} · ${w} · ${activeTab}`);
+      setStatus(`${seed} · ${t} · ${activeTab}`);
     } catch { setStatus(activeTab); }
   }
 
@@ -1055,7 +1002,7 @@ export function createTestMode(ctx = {}) {
     get enabled() { return !panel.hidden; },
     teleportTo, findNearestBiome,
     triggerRainbow, triggerAurora, triggerPollen, triggerDew, triggerStorm,
-    BIOMES, WEATHERS, TIME_PRESETS, LIFECYCLE,
+    BIOMES, TIME_PRESETS, LIFECYCLE,
   };
   if (typeof window !== 'undefined') {
     window.__testMode = api;

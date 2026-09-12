@@ -63,12 +63,7 @@ export const LIFECYCLE = {
   night: [20.2, 4.8],     // aurora 22-03, shooting stars, owl hoots
 };
 
-export const WEATHER_CONFIG = {
-  weathers: ['clear', 'partlyCloudy', 'overcast', 'mist', 'drizzle', 'rain', 'storm'],
-  intervalSec: 75,
-  // Vibrant-only: fog removed, ugly grey whiteout gone
-  weights: { clear: 0.30, partlyCloudy: 0.16, overcast: 0.14, mist: 0.11, drizzle: 0.11, rain: 0.10, storm: 0.08 },
-};
+
 
 export const SCENE = {
   shrineDensity: 0.02,   // per chunk chance for Statue/Waypoint (Genshin waypoints)
@@ -91,11 +86,10 @@ export const WORLD = {
   duneHeight: 0.35,      // beach dune wave
 };
 
-// Day-night + weather tuning (docs/weather-day-night-cycles.md).
+// Day-night tuning.
 export const ENV = {
   dayLengthSec: 600, // 1 game day = 10 real minutes
   startTime: 10.0, // 10:00 morning
-  weatherIntervalSec: 75, // re-roll weather roughly every 75s
 };
 
 export const CAMERA = {

@@ -734,8 +734,7 @@ export function createDragonflies(scene) {
   function applyDensity() { mesh.count = liveAnimalCount('dragonflies'); }
   function update(dt, playerPos, env) {
     const tod = env?.timeOfDay ?? 12;
-    const weather = env?.weather ?? 'clear';
-    const want = tod >= 6 && tod < 18.5 && weather !== 'storm';
+    const want = tod >= 6 && tod < 18.5;
     lerpOpacity(mat, want ? 0.95 : 0, dt, 1.2);
     mesh.visible = mat.opacity > 0.02;
     if (!mesh.visible || mesh.count === 0) return;
@@ -810,7 +809,7 @@ export function createBats(scene) {
   function update(dt, playerPos, env) {
     const tod = env?.timeOfDay ?? 0;
     const isNight = tod >= 19 || tod < 5.5;
-    const want = isNight && (env?.weather ?? 'clear') !== 'storm';
+    const want = isNight;
     lerpOpacity(mat, want ? 1 : 0, dt, 1.5);
     mesh.visible = mat.opacity > 0.02;
     if (!mesh.visible || mesh.count === 0) return;
@@ -985,21 +984,16 @@ export function createAnimalByType(scene, type) {
 
 function lifecycleActivity(kind, env) {
   const tod = env?.timeOfDay ?? 12;
-  const w = env?.weather ?? 'clear';
   const isDay = tod >= 6 && tod < 18.8;
   const isNight = !isDay;
   const isDawn = tod >= 5 && tod < 8;
   const isDusk = tod >= 17.5 && tod < 20;
   if (kind === 'butterflies') {
     if (!isDay) return 0;
-    if (w === 'storm' || w === 'rain') return 0;
-    if (w === 'drizzle') return 0.35;
     if (isDawn || isDusk) return 0.7;
     return 1;
   }
   if (kind === 'birds') {
-    if (w === 'storm') return 0.15;
-    if (w === 'rain') return 0.35;
     if (isNight) return 0.08;
     return 1;
   }
