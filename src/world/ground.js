@@ -35,16 +35,18 @@ export function createGround(scene) {
   const detailMap = getGroundTexture().clone();
   detailMap.repeat.set(48, 48);
   detailMap.needsUpdate = true;
-  const detailBump = getGroundBump().clone();
-  detailBump.repeat.set(48, 48);
-  detailBump.needsUpdate = true;
+  const _bumpSrc = getGroundBump();
+  const detailBump = _bumpSrc?.clone?.() ?? null;
+  if (detailBump) {
+    detailBump.repeat.set(48, 48);
+    detailBump.needsUpdate = true;
+  }
   const ground = new THREE.Mesh(
     geo,
     new THREE.MeshStandardMaterial({
       vertexColors: true,
       map: detailMap,
-      bumpMap: detailBump,
-      bumpScale: 0.06,
+      ...(detailBump ? { bumpMap: detailBump, bumpScale: 0.06 } : {}),
       flatShading: true,
       roughness: 1,
     }),
