@@ -9,6 +9,7 @@ export default defineConfig({
         tsushimaForest: resolve(import.meta.dirname, 'tsushima-forest.html'),
         ghibliForest: resolve(import.meta.dirname, 'ghibli_anime_forest_walking_simulator.html'),
         goldenAutumn: resolve(import.meta.dirname, 'golden-autumn-sanctuary.html'),
+        battleCity: resolve(import.meta.dirname, 'battle_city_3d.html'),
       },
     },
   },

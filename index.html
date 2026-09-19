@@ -17,7 +17,7 @@
     .eyebrow { color: #dfbd7a; font-size: .7rem; font-weight: 600; letter-spacing: .25em; text-transform: uppercase; }
     h1 { max-width: 680px; margin: 14px 0 12px; font: 600 clamp(2.5rem, 6vw, 5rem)/1.03 'Cinzel', serif; letter-spacing: -.035em; }
     .intro { max-width: 520px; color: #bebdb2; font-size: 1.05rem; line-height: 1.65; }
-    .worlds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 48px; }
+    .worlds { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 48px; }
     .world { position: relative; min-height: 390px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; padding: 28px; border: 1px solid rgba(255,255,255,.14); border-radius: 22px; text-decoration: none; color: inherit; isolation: isolate; background: #152019; box-shadow: 0 20px 55px rgba(0,0,0,.28); transition: transform .3s ease, border-color .3s ease, box-shadow .3s ease; }
     .world::before, .world::after { content: ''; position: absolute; inset: 0; z-index: -1; transition: transform .5s ease; }
     .world::after { background: linear-gradient(0deg, rgba(3,8,5,.93) 3%, transparent 70%); }
@@ -26,6 +26,8 @@
     .tsushima::before { background: radial-gradient(ellipse at 48% 20%, #ffd789 0 4%, transparent 20%), linear-gradient(145deg, #74693b 0%, #a67d36 24%, #3d5730 47%, #102417 100%); }
     .ghibli::before { background: radial-gradient(ellipse at 65% 15%, #a9dbec 0 8%, transparent 27%), radial-gradient(ellipse at 45% 35%, #dc9bc0 0 2%, transparent 20%), linear-gradient(145deg, #8cbed1 0%, #497d5e 40%, #173a30 100%); }
     .autumn::before { background: radial-gradient(ellipse at 72% 12%, #ffe1a1 0 5%, transparent 22%), linear-gradient(145deg, #d09131 0%, #b54625 42%, #512116 100%); filter: saturate(.75); }
+    .battle-city { background: #17120d; }
+    .battle-city::before { background: radial-gradient(ellipse at 50% 12%, #ffdd75 0 4%, transparent 19%), linear-gradient(90deg, transparent 44%, rgba(251,191,36,.42) 45% 55%, transparent 56%), linear-gradient(0deg, #20140f 0 15%, #9f2f1e 16% 31%, #283d2c 32% 70%, #182519 71% 100%); }
     .world-label { margin-bottom: auto; align-self: flex-start; padding: 7px 10px; border: 1px solid rgba(255,255,255,.2); border-radius: 999px; background: rgba(10,16,11,.28); font-size: .7rem; font-weight: 600; letter-spacing: .11em; text-transform: uppercase; backdrop-filter: blur(8px); }
     .world h2 { margin: 0 0 9px; font: 600 1.7rem 'Cinzel', serif; }
     .world p { margin: 0; color: rgba(255,255,255,.78); line-height: 1.5; }
@@ -50,6 +52,10 @@
       <a class="world ghibli" href="ghibli_anime_forest_walking_simulator.html">
         <span class="world-label">Walking simulator</span>
         <div><h2>Ghibli Forest</h2><p>A colorful woodland journey with an animated, storybook feel.</p><span class="launch">Enter world <span>→</span></span></div>
+      </a>
+      <a class="world battle-city" href="battle_city_3d.html">
+        <span class="world-label">3D arcade combat</span>
+        <div><h2>Battle City 3D</h2><p>Defend the Eagle Base through destructible tank battles and escalating waves.</p><span class="launch">Play now <span>→</span></span></div>
       </a>
       <article class="world autumn soon" aria-label="Golden Autumn Sanctuary, coming soon">
         <span class="world-label">Coming soon</span>
