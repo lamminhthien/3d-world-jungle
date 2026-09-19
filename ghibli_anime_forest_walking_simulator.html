@@ -1,0 +1,1374 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Khu Rừng Kỳ Diệu Ghibli 3D - Bầu Trời, Mây & Cỏ Sống Động</title>
+  
+  <!-- Tailwind CSS & Google Fonts -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Three.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', 'Comfortaa', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      overflow: hidden;
+      background-color: #0d1b2a;
+    }
+    .font-anime {
+      font-family: 'Comfortaa', cursive, sans-serif;
+    }
+    .glass-dark {
+      background: rgba(15, 23, 42, 0.72);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .joystick-base {
+      width: 110px;
+      height: 110px;
+      background: rgba(255, 255, 255, 0.25);
+      backdrop-filter: blur(10px);
+      border: 2px solid rgba(255, 255, 255, 0.5);
+      border-radius: 50%;
+      position: relative;
+      touch-action: none;
+    }
+    .joystick-stick {
+      width: 45px;
+      height: 45px;
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      border-radius: 50%;
+      position: absolute;
+      top: 32.5px;
+      left: 32.5px;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen w-screen relative overflow-hidden select-none">
+
+  <!-- WebGL Canvas Container -->
+  <div id="canvas-container" class="w-full h-full absolute inset-0 cursor-grab active:cursor-grabbing"></div>
+
+  <!-- Main Game UI Overlay -->
+  <div id="ui-layer" class="relative z-10 w-full h-full flex flex-col justify-between p-4 md:p-6 pointer-events-none transition-opacity duration-300">
+    
+    <!-- Header / Top Bar -->
+    <header class="flex justify-between items-start w-full">
+      <div class="glass-dark rounded-2xl p-3 md:p-4 pointer-events-auto flex items-center gap-3 shadow-2xl border border-white/20">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-400 via-teal-300 to-amber-300 flex items-center justify-center text-slate-900 shadow-md">
+          <i data-lucide="trees" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h1 class="font-anime font-bold text-lg md:text-xl text-white tracking-wide drop-shadow">Rừng Ghibli Thần Thoại</h1>
+          <p id="season-subtitle" class="text-xs text-emerald-300 font-medium">Mùa Xuân - Hoa Anh Đào & Cỏ Xanh Tươi</p>
+        </div>
+      </div>
+
+      <!-- Controls Right -->
+      <div class="flex items-center gap-2 pointer-events-auto">
+        <a href="index.html" title="Chọn thế giới khác" aria-label="Back to world selection" class="glass-dark hover:bg-white/20 text-white p-3 rounded-2xl transition active:scale-95 shadow-lg">
+          <i data-lucide="house" class="w-5 h-5 text-emerald-300"></i>
+        </a>
+        <button id="btn-audio" title="Bật/Tắt Âm Thanh" class="glass-dark hover:bg-white/20 text-white p-3 rounded-2xl transition active:scale-95 shadow-lg flex items-center gap-2">
+          <i data-lucide="volume-2" id="icon-audio" class="w-5 h-5 text-emerald-300"></i>
+          <span class="text-xs font-semibold hidden md:inline">Nhạc & Âm Thanh</span>
+        </button>
+
+        <button id="btn-camera-mode" title="Chế Độ Chụp Ảnh" class="glass-dark hover:bg-white/20 text-white p-3 rounded-2xl transition active:scale-95 shadow-lg flex items-center gap-2">
+          <i data-lucide="camera" class="w-5 h-5 text-amber-300"></i>
+          <span class="text-xs font-semibold hidden md:inline">Chụp Ảnh</span>
+        </button>
+
+        <button id="btn-help" title="Hướng Dẫn" class="glass-dark hover:bg-white/20 text-white p-3 rounded-2xl transition active:scale-95 shadow-lg">
+          <i data-lucide="help-circle" class="w-5 h-5 text-sky-300"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Center Prompt for Rest Spot -->
+    <div id="rest-prompt" class="self-center hidden pointer-events-auto glass-dark px-6 py-3 rounded-full border border-amber-300/50 text-amber-200 text-sm font-medium animate-bounce shadow-2xl flex items-center gap-3">
+      <i data-lucide="sparkles" class="w-5 h-5 text-amber-300"></i>
+      <span>Nhấn <kbd class="px-2 py-0.5 bg-white/20 rounded font-mono text-white text-xs">E</kbd> hoặc chạm để nghỉ chân ngắm cảnh</span>
+    </div>
+
+    <!-- Bottom Navigation & Controls -->
+    <footer class="flex flex-col md:flex-row justify-between items-end md:items-center gap-4 w-full">
+      
+      <!-- Season & Time of Day Selector Buttons -->
+      <div class="flex flex-col sm:flex-row gap-2 pointer-events-auto w-full md:w-auto">
+        <!-- Season Selector Buttons -->
+        <div class="glass-dark p-2 rounded-2xl flex items-center gap-1.5 md:gap-2 shadow-2xl border border-white/10 overflow-x-auto max-w-full">
+          <button data-season="spring" class="btn-season px-3.5 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold flex items-center gap-2 transition-all bg-pink-500/80 hover:bg-pink-500 text-white shadow-md">
+            <span class="w-2.5 h-2.5 rounded-full bg-pink-200"></span>
+            <span>Mùa Xuân</span>
+          </button>
+          <button data-season="summer" class="btn-season px-3.5 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold flex items-center gap-2 transition-all hover:bg-emerald-600/70 text-emerald-100">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-300"></span>
+            <span>Mùa Hạ</span>
+          </button>
+          <button data-season="autumn" class="btn-season px-3.5 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold flex items-center gap-2 transition-all hover:bg-amber-600/70 text-amber-100">
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+            <span>Mùa Thu</span>
+          </button>
+          <button data-season="winter" class="btn-season px-3.5 py-2 md:px-4 md:py-2.5 rounded-xl text-xs md:text-sm font-bold flex items-center gap-2 transition-all hover:bg-sky-600/70 text-sky-100">
+            <span class="w-2.5 h-2.5 rounded-full bg-sky-200"></span>
+            <span>Mùa Đông</span>
+          </button>
+        </div>
+
+        <!-- Time of Day Selector Buttons -->
+        <div class="glass-dark p-2 rounded-2xl flex items-center gap-1.5 shadow-2xl border border-white/10 overflow-x-auto">
+          <button data-time="morning" class="btn-time px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all text-amber-200 hover:bg-white/20">
+            <i data-lucide="sunrise" class="w-4 h-4 text-amber-300"></i>
+            <span>Sáng</span>
+          </button>
+          <button data-time="noon" class="btn-time px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all text-amber-100 hover:bg-white/20 bg-white/25 shadow-md">
+            <i data-lucide="sun" class="w-4 h-4 text-yellow-300"></i>
+            <span>Trưa</span>
+          </button>
+          <button data-time="sunset" class="btn-time px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all text-orange-200 hover:bg-white/20">
+            <i data-lucide="sunset" class="w-4 h-4 text-orange-400"></i>
+            <span>Chiều</span>
+          </button>
+          <button data-time="night" class="btn-time px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all text-indigo-200 hover:bg-white/20">
+            <i data-lucide="moon" class="w-4 h-4 text-indigo-300"></i>
+            <span>Đêm</span>
+          </button>
+          <button id="btn-auto-time" class="px-3 py-2 rounded-xl text-xs font-bold transition-all text-emerald-300 hover:bg-white/20 flex items-center gap-1.5" title="Tự động xoay xở ngày đêm">
+            <i data-lucide="clock" class="w-4 h-4"></i>
+            <span class="hidden lg:inline">Tự Động</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Teleport -->
+      <div class="glass-dark p-2 rounded-2xl pointer-events-auto flex items-center gap-2 shadow-2xl border border-white/10">
+        <span class="text-xs text-slate-300 font-semibold px-2 hidden sm:inline">Thăm quan:</span>
+        <button id="btn-teleport-shrine" class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-medium text-slate-200 transition flex items-center gap-1.5">
+          <i data-lucide="church" class="w-3.5 h-3.5 text-amber-300"></i>
+          <span>Cổng Torii Cổ</span>
+        </button>
+        <button id="btn-teleport-lake" class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-medium text-slate-200 transition flex items-center gap-1.5">
+          <i data-lucide="waves" class="w-3.5 h-3.5 text-sky-300"></i>
+          <span>Hồ Rồng Thần</span>
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Mobile Joystick -->
+  <div id="mobile-joystick-container" class="md:hidden absolute bottom-24 left-6 z-20 pointer-events-auto opacity-80 hover:opacity-100 transition-opacity">
+    <div id="joystick-base" class="joystick-base">
+      <div id="joystick-stick" class="joystick-stick"></div>
+    </div>
+  </div>
+
+  <!-- Photo Mode Frame -->
+  <div id="photo-frame" class="absolute inset-0 z-30 pointer-events-none hidden flex flex-col justify-between p-8 border-[18px] border-white/95 shadow-2xl">
+    <div class="flex justify-between items-start">
+      <div class="bg-slate-900/80 backdrop-blur px-4 py-2 rounded-xl text-xs font-anime text-amber-200 border border-amber-300/30">
+        ✦ Studio Ghibli - Mùa Rừng Thiêng
+      </div>
+      <button id="btn-take-photo" class="pointer-events-auto bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold px-5 py-2.5 rounded-full shadow-lg flex items-center gap-2 transition active:scale-95">
+        <i data-lucide="aperture" class="w-5 h-5"></i>
+        <span>Lưu Ảnh Nghệ Thuật</span>
+      </button>
+    </div>
+    
+    <div class="flex justify-between items-end">
+      <p class="text-white/80 text-xs font-mono drop-shadow">GHIBLI FOREST WALK 3D</p>
+      <button id="btn-exit-photo" class="pointer-events-auto glass-dark text-white hover:bg-red-500/80 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+        <i data-lucide="x" class="w-4 h-4"></i>
+        <span>Thoát Chế Độ Chụp</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Instructions Modal -->
+  <div id="modal-help" class="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="glass-dark max-w-md w-full p-6 rounded-3xl border border-white/20 shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b border-white/10 pb-3">
+        <h3 class="font-anime text-lg font-bold text-amber-300 flex items-center gap-2">
+          <i data-lucide="compass" class="w-5 h-5"></i>
+          Hướng Dẫn Du Ngoạn Rừng Anime
+        </h3>
+        <button id="btn-close-help" class="text-slate-400 hover:text-white transition">
+          <i data-lucide="x" class="w-6 h-6"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-sm text-slate-200">
+        <div class="flex items-center gap-3 bg-white/5 p-2.5 rounded-xl">
+          <span class="px-2.5 py-1 bg-white/20 rounded font-mono font-bold text-xs text-amber-200">WASD / Phím Mũi Tên</span>
+          <span>Di chuyển nhân vật trong rừng</span>
+        </div>
+        <div class="flex items-center gap-3 bg-white/5 p-2.5 rounded-xl">
+          <span class="px-2.5 py-1 bg-white/20 rounded font-mono font-bold text-xs text-amber-200">Kéo Chuột / Cảm Ứng</span>
+          <span>Xoay camera 360° tự do</span>
+        </div>
+        <div class="flex items-center gap-3 bg-white/5 p-2.5 rounded-xl">
+          <span class="px-2.5 py-1 bg-white/20 rounded font-mono font-bold text-xs text-amber-200">Phím E</span>
+          <span>Ngồi nghỉ trên ghế đá/bờ suối</span>
+        </div>
+      </div>
+
+      <button id="btn-start-game" class="w-full py-3 bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-300 hover:opacity-90 text-slate-950 font-bold rounded-xl shadow-lg transition active:scale-98">
+        Khám Phá Rừng Ngay
+      </button>
+    </div>
+  </div>
+
+  <!-- Notification Toast -->
+  <div id="toast-message" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 glass-dark border border-amber-300/40 text-amber-100 px-5 py-2.5 rounded-full text-xs md:text-sm font-medium shadow-2xl opacity-0 pointer-events-none transition-all duration-300 flex items-center gap-2">
+    <i data-lucide="sparkles" class="w-4 h-4 text-amber-300"></i>
+    <span id="toast-text">Thông báo</span>
+  </div>
+
+  <script>
+    const SEASONS = {
+      spring: {
+        name: "Mùa Xuân - Cỏ Xanh & Hoa Anh Đào",
+        skyTop: 0x4a8fac,
+        skyBottom: 0xdbeeff,
+        fogColor: 0xcce3f0,
+        groundColor: 0x487535,
+        grassColor: 0x5a8c37,
+        leavesColor: 0x387639,
+        sakuraColor: 0xe8a2b8,
+        flowerColor: 0xf6d67b,
+        lightColor: 0xfff9e6,
+        ambientColor: 0xddebc9,
+        waterColor: 0x4ba3d0
+      },
+      summer: {
+        name: "Mùa Hạ - Nắng Vàng & Cỏ Xanh Rậm",
+        skyTop: 0x2b709e,
+        skyBottom: 0xb5e2eb,
+        fogColor: 0xbedfdb,
+        groundColor: 0x2b6e30,
+        grassColor: 0x3d8c40,
+        leavesColor: 0x1b5220,
+        sakuraColor: 0x459c48,
+        flowerColor: 0xe57373,
+        lightColor: 0xffe8b3,
+        ambientColor: 0xdcf2df,
+        waterColor: 0x0277bd
+      },
+      autumn: {
+        name: "Mùa Thu - Lá Phong Đỏ Rực",
+        skyTop: 0xc05621,
+        skyBottom: 0xfbd38d,
+        fogColor: 0xfbe6c2,
+        groundColor: 0x5c3d2e,
+        grassColor: 0xb8411b,
+        leavesColor: 0x9c27b0,
+        sakuraColor: 0xc65102,
+        flowerColor: 0xf6ad55,
+        lightColor: 0xffe0b2,
+        ambientColor: 0xffebd6,
+        waterColor: 0x00695c
+      },
+      winter: {
+        name: "Mùa Đông - Tuyết Phủ Trắng Rừng",
+        skyTop: 0x4a6572,
+        skyBottom: 0xc2d6dc,
+        fogColor: 0xc9dad8,
+        groundColor: 0xb0bec5,
+        grassColor: 0x829ba6,
+        leavesColor: 0x37474f,
+        sakuraColor: 0xe0e0e0,
+        flowerColor: 0x80deea,
+        lightColor: 0xe0f7fa,
+        ambientColor: 0xe8ecef,
+        waterColor: 0x26c6da
+      }
+    };
+
+    const TIMES_OF_DAY = {
+      morning: {
+        name: "Bình Minh (Buổi Sáng)",
+        skyTop: 0x3a6073,
+        skyBottom: 0xffc3a0,
+        fogColor: 0xe8c8b8,
+        lightColor: 0xffd1a4,
+        lightIntensity: 0.85,
+        ambientColor: 0xe2c7b5,
+        ambientIntensity: 0.65,
+        lightPos: [60, 30, 40],
+        showStars: false,
+        showMoon: false,
+        showFireflies: false
+      },
+      noon: {
+        name: "Buổi Trưa (Rực Rỡ)",
+        skyTop: 0x2b709e,
+        skyBottom: 0xc2e9fb,
+        fogColor: 0xcce3f0,
+        lightColor: 0xfff8e7,
+        lightIntensity: 1.0,
+        ambientColor: 0xdedede,
+        ambientIntensity: 0.75,
+        lightPos: [20, 85, 20],
+        showStars: false,
+        showMoon: false,
+        showFireflies: false
+      },
+      sunset: {
+        name: "Hoàng Hôn (Chiều Tà)",
+        skyTop: 0x4a154b,
+        skyBottom: 0xff7e5f,
+        fogColor: 0xca6f1e,
+        lightColor: 0xffa06d,
+        lightIntensity: 0.8,
+        ambientColor: 0xf5b041,
+        ambientIntensity: 0.55,
+        lightPos: [-70, 20, -30],
+        showStars: false,
+        showMoon: true,
+        showFireflies: true
+      },
+      night: {
+        name: "Ban Đêm (Huyền Diệu)",
+        skyTop: 0x050814,
+        skyBottom: 0x121d2d,
+        fogColor: 0x0d1829,
+        lightColor: 0x6495ed,
+        lightIntensity: 0.35,
+        ambientColor: 0x1b2838,
+        ambientIntensity: 0.3,
+        lightPos: [-30, 60, -50],
+        showStars: true,
+        showMoon: true,
+        showFireflies: true
+      }
+    };
+
+    let currentSeasonKey = "spring";
+    let currentTimeKey = "noon";
+    let autoTimeCycle = false;
+    let autoTimeTimer = 0;
+
+    let scene, camera, renderer, clock;
+    let player, playerPos = new THREE.Vector3(0, 0, 15), playerRotation = 0;
+    let terrainMesh, skyMesh, skyUniforms;
+    
+    // Moon & Stars
+    let moonMesh, starsMesh;
+
+    // Fireflies Particle System
+    let firefliesMesh, fireflyPositions, fireflyVelocities;
+    const FIREFLY_COUNT = 150;
+
+    // Dynamic Instanced Grass & Flowers
+    let grassMesh, grassCount = 8000;
+    let dummy = new THREE.Object3D();
+    let grassTransforms = [];
+
+    // Clouds & Water
+    let cloudGroup, waterMesh;
+
+    // Materials arrays
+    let leavesMaterials = [], sakuraMaterials = [], grassMaterial, groundMaterial;
+
+    // Kodama Spirits
+    let kodamaSpirits = [];
+
+    // Particles (Season petals/snow)
+    let particleSystem, particlePositions, particleVelocities;
+    const PARTICLE_COUNT = 600;
+
+    // Controls state
+    const keysPressed = {};
+    let cameraAngleX = 0, cameraAngleY = 0.25;
+    let isMouseDown = false, previousMousePosition = { x: 0, y: 0 };
+    let isSitting = false, activeRestSpot = null;
+    let joystickActive = false, joystickVector = { x: 0, y: 0 };
+
+    // Audio
+    let audioCtx = null, isAudioPlaying = false, ambientGainNode = null;
+
+    const restSpots = [
+      { id: "shrine", name: "Cổng Torii Cổ Thần Thoại", position: new THREE.Vector3(0, 0.5, -35) },
+      { id: "lake", name: "Hồ Rồng Thần Thơ Mộng", position: new THREE.Vector3(26, 0.5, 6) }
+    ];
+
+    function getTerrainHeight(x, z) {
+      return Math.sin(x * 0.05) * Math.cos(z * 0.05) * 3.0 + Math.sin(x * 0.02) * 3.5;
+    }
+
+    function initScene() {
+      const container = document.getElementById('canvas-container');
+      
+      scene = new THREE.Scene();
+      const season = SEASONS[currentSeasonKey];
+
+      scene.fog = new THREE.FogExp2(season.fogColor, 0.008);
+
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+      clock = new THREE.Clock();
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance", preserveDrawingBuffer: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.outputEncoding = THREE.sRGBEncoding;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 0.85;
+      container.appendChild(renderer.domElement);
+
+      // Softer, non-glare Lighting
+      const ambientLight = new THREE.AmbientLight(season.ambientColor, 0.75);
+      ambientLight.name = "ambientLight";
+      scene.add(ambientLight);
+
+      const dirLight = new THREE.DirectionalLight(season.lightColor, 0.85);
+      dirLight.name = "dirLight";
+      dirLight.position.set(40, 80, 30);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 2048;
+      dirLight.shadow.mapSize.height = 2048;
+      dirLight.shadow.camera.near = 0.5;
+      dirLight.shadow.camera.far = 180;
+      const d = 65;
+      dirLight.shadow.camera.left = -d;
+      dirLight.shadow.camera.right = d;
+      dirLight.shadow.camera.top = d;
+      dirLight.shadow.camera.bottom = -d;
+      scene.add(dirLight);
+
+      buildSkyAndClouds();
+      buildTerrain();
+      buildInstancedGrass();
+      buildForest();
+      buildFlowers();
+      buildShrineArea();
+      buildLakeArea();
+      buildPlayer();
+      buildKodamaSpirits();
+      initParticles();
+
+      window.addEventListener('resize', onWindowResize);
+      setupControls();
+
+      animate();
+    }
+
+    function buildSkyAndClouds() {
+      const vertexShader = `
+        varying vec3 vWorldPosition;
+        void main() {
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPosition.xyz;
+          gl_Position = projectionMatrix * viewMatrix * worldPosition;
+        }
+      `;
+
+      const fragmentShader = `
+        uniform vec3 topColor;
+        uniform vec3 bottomColor;
+        uniform float offset;
+        uniform float exponent;
+        varying vec3 vWorldPosition;
+        void main() {
+          float h = normalize(vWorldPosition + offset).y;
+          gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+        }
+      `;
+
+      const timeConfig = TIMES_OF_DAY[currentTimeKey];
+
+      skyUniforms = {
+        topColor: { value: new THREE.Color(timeConfig.skyTop) },
+        bottomColor: { value: new THREE.Color(timeConfig.skyBottom) },
+        offset: { value: 30 },
+        exponent: { value: 0.6 }
+      };
+
+      const skyGeo = new THREE.SphereGeometry(450, 32, 15);
+      const skyMat = new THREE.ShaderMaterial({
+        vertexShader: vertexShader,
+        fragmentShader: fragmentShader,
+        uniforms: skyUniforms,
+        side: THREE.BackSide
+      });
+
+      skyMesh = new THREE.Mesh(skyGeo, skyMat);
+      scene.add(skyMesh);
+
+      // Night Stars
+      const starGeo = new THREE.BufferGeometry();
+      const starCount = 600;
+      const starPositions = new Float32Array(starCount * 3);
+      for (let i = 0; i < starCount; i++) {
+        const u = Math.random();
+        const v = Math.random();
+        const theta = u * 2.0 * Math.PI;
+        const phi = Math.acos(2.0 * v - 1.0);
+        const r = 400;
+        starPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+        starPositions[i * 3 + 1] = Math.abs(r * Math.cos(phi)) + 20;
+        starPositions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+      }
+      starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+      const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.5, transparent: true, opacity: 0 });
+      starsMesh = new THREE.Points(starGeo, starMat);
+      scene.add(starsMesh);
+
+      // Moon
+      const moonGeo = new THREE.SphereGeometry(12, 16, 16);
+      const moonMat = new THREE.MeshBasicMaterial({ color: 0xfffde7 });
+      moonMesh = new THREE.Mesh(moonGeo, moonMat);
+      moonMesh.position.set(-180, 150, -220);
+      moonMesh.visible = false;
+      scene.add(moonMesh);
+
+      // Stylized Anime Clouds
+      cloudGroup = new THREE.Group();
+      const cloudMat = new THREE.MeshToonMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
+      const cloudPuffGeo = new THREE.DodecahedronGeometry(8, 1);
+
+      for (let i = 0; i < 18; i++) {
+        const cloud = new THREE.Group();
+        const numPuffs = 5 + Math.floor(Math.random() * 4);
+        for (let j = 0; j < numPuffs; j++) {
+          const puff = new THREE.Mesh(cloudPuffGeo, cloudMat);
+          puff.position.set(
+            (j - numPuffs / 2) * 6 + (Math.random() - 0.5) * 4,
+            (Math.random() - 0.5) * 3,
+            (Math.random() - 0.5) * 4
+          );
+          const s = 0.8 + Math.random() * 0.8;
+          puff.scale.set(s, s * 0.7, s);
+          cloud.add(puff);
+        }
+        const angle = (i / 18) * Math.PI * 2;
+        const dist = 180 + Math.random() * 60;
+        cloud.position.set(Math.cos(angle) * dist, 60 + Math.random() * 30, Math.sin(angle) * dist);
+        cloudGroup.add(cloud);
+      }
+      scene.add(cloudGroup);
+    }
+
+    function buildTerrain() {
+      const geometry = new THREE.PlaneGeometry(200, 200, 90, 90);
+      geometry.rotateX(-Math.PI / 2);
+
+      const pos = geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const z = pos.getZ(i);
+        const y = getTerrainHeight(x, z);
+        pos.setY(i, y);
+      }
+      geometry.computeVertexNormals();
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+      
+      const grad = ctx.createLinearGradient(0, 0, 1024, 1024);
+      grad.addColorStop(0, '#487535');
+      grad.addColorStop(0.5, '#56833f');
+      grad.addColorStop(1, '#325424');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 1024, 1024);
+
+      ctx.strokeStyle = '#6d4c41';
+      ctx.lineWidth = 42;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(512, 600);
+      ctx.quadraticCurveTo(512, 400, 512, 200);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(512, 500);
+      ctx.quadraticCurveTo(650, 500, 780, 520);
+      ctx.stroke();
+
+      const terrainTex = new THREE.CanvasTexture(canvas);
+      terrainTex.wrapS = THREE.ClampToEdgeWrapping;
+      terrainTex.wrapT = THREE.ClampToEdgeWrapping;
+
+      groundMaterial = new THREE.MeshToonMaterial({
+        map: terrainTex,
+        color: 0xffffff,
+        roughness: 0.9
+      });
+
+      terrainMesh = new THREE.Mesh(geometry, groundMaterial);
+      terrainMesh.receiveShadow = true;
+      scene.add(terrainMesh);
+    }
+
+    function buildInstancedGrass() {
+      const bladeGeo = new THREE.ConeGeometry(0.14, 1.0, 3);
+      bladeGeo.translate(0, 0.5, 0);
+
+      grassMaterial = new THREE.MeshToonMaterial({
+        color: SEASONS.spring.grassColor,
+        side: THREE.DoubleSide
+      });
+
+      grassMesh = new THREE.InstancedMesh(bladeGeo, grassMaterial, grassCount);
+      grassTransforms = [];
+
+      let index = 0;
+      for (let i = 0; i < grassCount; i++) {
+        const x = (Math.random() - 0.5) * 160;
+        const z = (Math.random() - 0.5) * 160;
+
+        if ((Math.abs(x) < 4 && z > -45 && z < 25) || (Math.hypot(x - 26, z - 6) < 15)) continue;
+
+        const y = getTerrainHeight(x, z);
+        const scaleY = 0.7 + Math.random() * 0.9;
+        const scaleXZ = 0.8 + Math.random() * 0.6;
+        const rotY = Math.random() * Math.PI;
+
+        dummy.position.set(x, y, z);
+        dummy.rotation.set(0, rotY, 0);
+        dummy.scale.set(scaleXZ, scaleY, scaleXZ);
+        dummy.updateMatrix();
+
+        grassMesh.setMatrixAt(index, dummy.matrix);
+        grassTransforms.push({ x, y, z, rotY, scaleXZ, scaleY });
+        index++;
+      }
+      grassMesh.instanceMatrix.needsUpdate = true;
+      grassMesh.receiveShadow = true;
+      scene.add(grassMesh);
+    }
+
+    function buildFlowers() {
+      const flowerCount = 700;
+      const flowerGeo = new THREE.DodecahedronGeometry(0.18, 1);
+      const flowerMat = new THREE.MeshToonMaterial({ color: SEASONS.spring.flowerColor });
+
+      const flowerMesh = new THREE.InstancedMesh(flowerGeo, flowerMat, flowerCount);
+      let idx = 0;
+      for (let i = 0; i < flowerCount; i++) {
+        const x = (Math.random() - 0.5) * 140;
+        const z = (Math.random() - 0.5) * 140;
+        if (Math.abs(x) < 4 && z > -40 && z < 20) continue;
+
+        const y = getTerrainHeight(x, z) + 0.35;
+        dummy.position.set(x, y, z);
+        dummy.scale.setScalar(0.8 + Math.random() * 0.7);
+        dummy.updateMatrix();
+        flowerMesh.setMatrixAt(idx++, dummy.matrix);
+      }
+      flowerMesh.instanceMatrix.needsUpdate = true;
+      scene.add(flowerMesh);
+    }
+
+    function createAnimeTree(x, z, scale = 1, isSakura = false) {
+      const treeGroup = new THREE.Group();
+
+      const trunkGeo = new THREE.CylinderGeometry(0.4 * scale, 0.7 * scale, 5.0 * scale, 8);
+      const trunkMat = new THREE.MeshToonMaterial({ color: 0x4e342e });
+      const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+      trunk.position.y = 2.5 * scale;
+      trunk.castShadow = true;
+      trunk.receiveShadow = true;
+      treeGroup.add(trunk);
+
+      const leafColor = isSakura ? SEASONS.spring.sakuraColor : SEASONS.spring.leavesColor;
+      const leafMat = new THREE.MeshToonMaterial({ color: leafColor, roughness: 0.5 });
+
+      if (isSakura) sakuraMaterials.push(leafMat);
+      else leavesMaterials.push(leafMat);
+
+      const puffs = 6;
+      for (let i = 0; i < puffs; i++) {
+        const pGeo = new THREE.DodecahedronGeometry((1.8 + Math.random() * 0.7) * scale, 1);
+        const pMesh = new THREE.Mesh(pGeo, leafMat);
+        pMesh.position.set(
+          (Math.random() - 0.5) * 1.8 * scale,
+          (4.0 + i * 0.8) * scale,
+          (Math.random() - 0.5) * 1.8 * scale
+        );
+        pMesh.castShadow = true;
+        treeGroup.add(pMesh);
+      }
+
+      treeGroup.position.set(x, getTerrainHeight(x, z), z);
+      scene.add(treeGroup);
+    }
+
+    function buildForest() {
+      for (let i = 0; i < 110; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 12 + Math.random() * 75;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+
+        if (Math.abs(x) < 8 && z > -48 && z < 28) continue;
+        if (Math.hypot(x - 26, z - 6) < 18) continue;
+
+        const isSakura = Math.random() > 0.4;
+        createAnimeTree(x, z, 0.85 + Math.random() * 0.65, isSakura);
+      }
+
+      const rockGeo = new THREE.DodecahedronGeometry(1.4, 1);
+      const rockMat = new THREE.MeshToonMaterial({ color: 0x78909c });
+      for (let i = 0; i < 40; i++) {
+        const x = (Math.random() - 0.5) * 140;
+        const z = (Math.random() - 0.5) * 140;
+        const r = new THREE.Mesh(rockGeo, rockMat);
+        const s = 0.7 + Math.random() * 1.0;
+        r.scale.set(s, s * 0.6, s);
+        r.position.set(x, getTerrainHeight(x, z) + 0.25, z);
+        r.rotation.y = Math.random() * Math.PI;
+        scene.add(r);
+      }
+    }
+
+    function buildKodamaSpirits() {
+      const kodamaMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      for (let i = 0; i < 14; i++) {
+        const spirit = new THREE.Group();
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 12), kodamaMat);
+        head.position.y = 0.55;
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.22, 0.45), kodamaMat);
+        body.position.y = 0.22;
+        spirit.add(head, body);
+
+        const x = (Math.random() - 0.5) * 70;
+        const z = (Math.random() - 0.5) * 70;
+        spirit.position.set(x, getTerrainHeight(x, z) + 0.1, z);
+        kodamaSpirits.push({ mesh: spirit, initialY: spirit.position.y, offset: Math.random() * 10 });
+        scene.add(spirit);
+      }
+    }
+
+    function buildShrineArea() {
+      const shrineGroup = new THREE.Group();
+      const pillarMat = new THREE.MeshToonMaterial({ color: 0xd32f2f });
+      const roofMat = new THREE.MeshToonMaterial({ color: 0x1a237e });
+
+      const p1 = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 6.0, 10), pillarMat);
+      p1.position.set(-3.0, 3.0, 0);
+      const p2 = p1.clone();
+      p2.position.set(3.0, 3.0, 0);
+
+      const topBeam = new THREE.Mesh(new THREE.BoxGeometry(8.0, 0.5, 0.7), pillarMat);
+      topBeam.position.set(0, 5.6, 0);
+
+      const roofBeam = new THREE.Mesh(new THREE.BoxGeometry(9.0, 0.4, 0.9), roofMat);
+      roofBeam.position.set(0, 6.1, 0);
+
+      shrineGroup.add(p1, p2, topBeam, roofBeam);
+
+      const bench = createBench();
+      bench.position.set(0, 0.35, -3.5);
+      shrineGroup.add(bench);
+
+      shrineGroup.position.set(0, getTerrainHeight(0, -35), -35);
+      scene.add(shrineGroup);
+    }
+
+    function buildLakeArea() {
+      const waterGeo = new THREE.CircleGeometry(16, 40);
+      const waterMat = new THREE.MeshToonMaterial({
+        color: SEASONS.spring.waterColor,
+        transparent: true,
+        opacity: 0.85,
+        roughness: 0.1
+      });
+      waterMesh = new THREE.Mesh(waterGeo, waterMat);
+      waterMesh.rotateX(-Math.PI / 2);
+      waterMesh.position.set(26, 0.2, 6);
+      scene.add(waterMesh);
+
+      const bench = createBench();
+      bench.position.set(12, getTerrainHeight(12, 6) + 0.35, 6);
+      bench.rotation.y = Math.PI / 2;
+      scene.add(bench);
+    }
+
+    function createBench() {
+      const g = new THREE.Group();
+      const m = new THREE.MeshToonMaterial({ color: 0x5d4037 });
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.16, 0.9), m);
+      seat.position.y = 0.55;
+      const l1 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.55, 0.8), m);
+      l1.position.set(-1.2, 0.28, 0);
+      const l2 = l1.clone();
+      l2.position.set(1.2, 0.28, 0);
+      g.add(seat, l1, l2);
+      return g;
+    }
+
+    function buildPlayer() {
+      player = new THREE.Group();
+      const bodyMat = new THREE.MeshToonMaterial({ color: 0xff7043 });
+      const skinMat = new THREE.MeshToonMaterial({ color: 0xffe0b2 });
+      const hairMat = new THREE.MeshToonMaterial({ color: 0x3e2723 });
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 16, 16), skinMat);
+      head.position.y = 1.4;
+      const hair = new THREE.Mesh(new THREE.SphereGeometry(0.49, 12, 12), hairMat);
+      hair.position.set(0, 1.5, -0.05);
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.45, 0.9, 12), bodyMat);
+      body.position.y = 0.75;
+
+      player.add(head, hair, body);
+      player.position.copy(playerPos);
+      scene.add(player);
+    }
+
+    function initParticles() {
+      const geometry = new THREE.BufferGeometry();
+      particlePositions = new Float32Array(PARTICLE_COUNT * 3);
+      particleVelocities = [];
+
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        particlePositions[i * 3] = (Math.random() - 0.5) * 100;
+        particlePositions[i * 3 + 1] = Math.random() * 25 + 1;
+        particlePositions[i * 3 + 2] = (Math.random() - 0.5) * 100;
+
+        particleVelocities.push({
+          x: (Math.random() - 0.5) * 0.05,
+          y: -0.03 - Math.random() * 0.04,
+          z: (Math.random() - 0.5) * 0.05
+        });
+      }
+
+      geometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+
+      const particleMat = new THREE.PointsMaterial({
+        color: SEASONS[currentSeasonKey].sakuraColor,
+        size: 0.4,
+        transparent: true,
+        opacity: 0.85
+      });
+
+      particleSystem = new THREE.Points(geometry, particleMat);
+      scene.add(particleSystem);
+
+      const fireflyGeo = new THREE.BufferGeometry();
+      fireflyPositions = new Float32Array(FIREFLY_COUNT * 3);
+      fireflyVelocities = [];
+
+      for (let i = 0; i < FIREFLY_COUNT; i++) {
+        fireflyPositions[i * 3] = (Math.random() - 0.5) * 100;
+        fireflyPositions[i * 3 + 1] = 0.5 + Math.random() * 6;
+        fireflyPositions[i * 3 + 2] = (Math.random() - 0.5) * 100;
+
+        fireflyVelocities.push({
+          x: (Math.random() - 0.5) * 0.02,
+          y: (Math.random() - 0.5) * 0.01,
+          z: (Math.random() - 0.5) * 0.02
+        });
+      }
+
+      fireflyGeo.setAttribute('position', new THREE.BufferAttribute(fireflyPositions, 3));
+      const fireflyMat = new THREE.PointsMaterial({
+        color: 0xa7ffeb,
+        size: 0.7,
+        transparent: true,
+        opacity: 0
+      });
+
+      firefliesMesh = new THREE.Points(fireflyGeo, fireflyMat);
+      scene.add(firefliesMesh);
+    }
+
+    function updateParticles() {
+      if (!particleSystem) return;
+      const pos = particleSystem.geometry.attributes.position.array;
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        pos[i * 3] += particleVelocities[i].x;
+        pos[i * 3 + 1] += particleVelocities[i].y;
+        pos[i * 3 + 2] += particleVelocities[i].z;
+
+        if (pos[i * 3 + 1] < 0) {
+          pos[i * 3] = (Math.random() - 0.5) * 100;
+          pos[i * 3 + 1] = 20 + Math.random() * 5;
+          pos[i * 3 + 2] = (Math.random() - 0.5) * 100;
+        }
+      }
+      particleSystem.geometry.attributes.position.needsUpdate = true;
+    }
+
+    function updateEnvironment() {
+      if (!SEASONS[currentSeasonKey] || !TIMES_OF_DAY[currentTimeKey]) return;
+      const seasonConfig = SEASONS[currentSeasonKey];
+      const timeConfig = TIMES_OF_DAY[currentTimeKey];
+
+      // Safe update for Sky Material Uniforms
+      const activeUniforms = (skyMesh && skyMesh.material && skyMesh.material.uniforms) 
+        ? skyMesh.material.uniforms 
+        : skyUniforms;
+
+      if (activeUniforms) {
+        if (activeUniforms.topColor && activeUniforms.topColor.value) {
+          activeUniforms.topColor.value.setHex(timeConfig.skyTop);
+        }
+        if (activeUniforms.bottomColor && activeUniforms.bottomColor.value) {
+          activeUniforms.bottomColor.value.setHex(timeConfig.skyBottom);
+        }
+      }
+
+      if (scene && scene.fog) {
+        scene.fog.color.setHex(timeConfig.fogColor);
+      }
+
+      const ambLight = scene ? scene.getObjectByName("ambientLight") : null;
+      if (ambLight) {
+        ambLight.color.setHex(timeConfig.ambientColor);
+        ambLight.intensity = timeConfig.ambientIntensity;
+      }
+
+      const dirLight = scene ? scene.getObjectByName("dirLight") : null;
+      if (dirLight) {
+        dirLight.color.setHex(timeConfig.lightColor);
+        dirLight.intensity = timeConfig.lightIntensity;
+        if (timeConfig.lightPos) {
+          dirLight.position.set(...timeConfig.lightPos);
+        }
+      }
+
+      if (starsMesh && starsMesh.material) starsMesh.material.opacity = timeConfig.showStars ? 0.85 : 0;
+      if (moonMesh) moonMesh.visible = timeConfig.showMoon;
+      if (firefliesMesh && firefliesMesh.material) firefliesMesh.material.opacity = timeConfig.showFireflies ? 0.85 : 0;
+
+      if (grassMaterial && grassMaterial.color) grassMaterial.color.setHex(seasonConfig.grassColor);
+      if (waterMesh && waterMesh.material && waterMesh.material.color) waterMesh.material.color.setHex(seasonConfig.waterColor);
+
+      if (Array.isArray(leavesMaterials)) {
+        leavesMaterials.forEach(m => m && m.color && m.color.setHex(seasonConfig.leavesColor));
+      }
+      if (Array.isArray(sakuraMaterials)) {
+        sakuraMaterials.forEach(m => m && m.color && m.color.setHex(seasonConfig.sakuraColor));
+      }
+
+      if (particleSystem && particleSystem.material && particleSystem.material.color) {
+        particleSystem.material.color.setHex(seasonConfig.sakuraColor);
+      }
+    }
+
+    function setSeason(seasonKey) {
+      if (!SEASONS[seasonKey]) return;
+      currentSeasonKey = seasonKey;
+      document.getElementById('season-subtitle').textContent = SEASONS[seasonKey].name;
+      updateEnvironment();
+
+      document.querySelectorAll('.btn-season').forEach(btn => {
+        if (btn.getAttribute('data-season') === seasonKey) {
+          btn.classList.add('bg-white/30', 'scale-105');
+        } else {
+          btn.classList.remove('bg-white/30', 'scale-105');
+        }
+      });
+
+      showToast(`Chuyển sang ${SEASONS[seasonKey].name}`);
+    }
+
+    function setTimeOfDay(timeKey) {
+      if (!TIMES_OF_DAY[timeKey]) return;
+      currentTimeKey = timeKey;
+      updateEnvironment();
+
+      document.querySelectorAll('.btn-time').forEach(btn => {
+        if (btn.getAttribute('data-time') === timeKey) {
+          btn.classList.add('bg-white/25', 'shadow-md');
+        } else {
+          btn.classList.remove('bg-white/25', 'shadow-md');
+        }
+      });
+
+      showToast(`Chuyển sang ${TIMES_OF_DAY[timeKey].name}`);
+    }
+
+    function setupControls() {
+      window.addEventListener('keydown', (e) => {
+        keysPressed[e.key.toLowerCase()] = true;
+        if (e.key.toLowerCase() === 'e') toggleSitRest();
+      });
+      window.addEventListener('keyup', (e) => keysPressed[e.key.toLowerCase()] = false);
+
+      const container = document.getElementById('canvas-container');
+      container.addEventListener('mousedown', (e) => {
+        isMouseDown = true;
+        previousMousePosition = { x: e.clientX, y: e.clientY };
+      });
+      window.addEventListener('mouseup', () => isMouseDown = false);
+      container.addEventListener('mousemove', (e) => {
+        if (!isMouseDown) return;
+        const deltaX = e.clientX - previousMousePosition.x;
+        const deltaY = e.clientY - previousMousePosition.y;
+
+        cameraAngleX -= deltaX * 0.005;
+        cameraAngleY = Math.max(0.05, Math.min(Math.PI / 2.5, cameraAngleY + deltaY * 0.005));
+
+        previousMousePosition = { x: e.clientX, y: e.clientY };
+      });
+
+      container.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+          isMouseDown = true;
+          previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        }
+      }, { passive: true });
+
+      container.addEventListener('touchmove', (e) => {
+        if (!isMouseDown || e.touches.length !== 1) return;
+        const deltaX = e.touches[0].clientX - previousMousePosition.x;
+        const deltaY = e.touches[0].clientY - previousMousePosition.y;
+
+        cameraAngleX -= deltaX * 0.006;
+        cameraAngleY = Math.max(0.05, Math.min(Math.PI / 2.5, cameraAngleY + deltaY * 0.006));
+
+        previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      }, { passive: true });
+
+      container.addEventListener('touchend', () => isMouseDown = false);
+
+      setupMobileJoystick();
+
+      document.querySelectorAll('.btn-season').forEach(btn => {
+        btn.addEventListener('click', () => setSeason(btn.getAttribute('data-season')));
+      });
+
+      document.querySelectorAll('.btn-time').forEach(btn => {
+        btn.addEventListener('click', () => {
+          autoTimeCycle = false;
+          document.getElementById('btn-auto-time').classList.remove('bg-emerald-500/40', 'text-white');
+          setTimeOfDay(btn.getAttribute('data-time'));
+        });
+      });
+
+      document.getElementById('btn-auto-time').addEventListener('click', () => {
+        autoTimeCycle = !autoTimeCycle;
+        const btn = document.getElementById('btn-auto-time');
+        if (autoTimeCycle) {
+          btn.classList.add('bg-emerald-500/40', 'text-white');
+          showToast("Đã bật Tự động xoay xở Ngày/Đêm");
+        } else {
+          btn.classList.remove('bg-emerald-500/40', 'text-white');
+          showToast("Đã tắt Tự động xoay xở Ngày/Đêm");
+        }
+      });
+
+      document.getElementById('btn-teleport-shrine').addEventListener('click', () => teleportTo(restSpots[0]));
+      document.getElementById('btn-teleport-lake').addEventListener('click', () => teleportTo(restSpots[1]));
+
+      document.getElementById('btn-audio').addEventListener('click', toggleAudio);
+      document.getElementById('btn-help').addEventListener('click', () => {
+        document.getElementById('modal-help').classList.remove('hidden');
+      });
+      document.getElementById('btn-close-help').addEventListener('click', () => {
+        document.getElementById('modal-help').classList.add('hidden');
+      });
+      document.getElementById('btn-start-game').addEventListener('click', () => {
+        document.getElementById('modal-help').classList.add('hidden');
+        if (!audioCtx) initAudio();
+      });
+
+      document.getElementById('btn-camera-mode').addEventListener('click', enterPhotoMode);
+      document.getElementById('btn-exit-photo').addEventListener('click', exitPhotoMode);
+      document.getElementById('btn-take-photo').addEventListener('click', captureScreenshot);
+
+      document.getElementById('rest-prompt').addEventListener('click', toggleSitRest);
+    }
+
+    function setupMobileJoystick() {
+      const base = document.getElementById('joystick-base');
+      const stick = document.getElementById('joystick-stick');
+      if (!base) return;
+
+      const maxDistance = 35;
+      const handleTouch = (clientX, clientY) => {
+        const rect = base.getBoundingClientRect();
+        let deltaX = clientX - (rect.left + rect.width / 2);
+        let deltaY = clientY - (rect.top + rect.height / 2);
+        const distance = Math.hypot(deltaX, deltaY);
+
+        if (distance > maxDistance) {
+          deltaX = (deltaX / distance) * maxDistance;
+          deltaY = (deltaY / distance) * maxDistance;
+        }
+
+        stick.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+        joystickVector = { x: deltaX / maxDistance, y: deltaY / maxDistance };
+      };
+
+      base.addEventListener('touchstart', (e) => {
+        joystickActive = true;
+        handleTouch(e.touches[0].clientX, e.touches[0].clientY);
+      }, { passive: true });
+
+      window.addEventListener('touchmove', (e) => {
+        if (joystickActive) handleTouch(e.touches[0].clientX, e.touches[0].clientY);
+      }, { passive: true });
+
+      const reset = () => {
+        joystickActive = false;
+        joystickVector = { x: 0, y: 0 };
+        stick.style.transform = `translate(0px, 0px)`;
+      };
+      window.addEventListener('touchend', reset);
+    }
+
+    function initAudio() {
+      if (audioCtx) return;
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AudioContext();
+
+      const bufferSize = audioCtx.sampleRate * 2;
+      const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) output[i] = Math.random() * 2 - 1;
+
+      const whiteNoise = audioCtx.createBufferSource();
+      whiteNoise.buffer = noiseBuffer;
+      whiteNoise.loop = true;
+
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(380, audioCtx.currentTime);
+
+      ambientGainNode = audioCtx.createGain();
+      ambientGainNode.gain.setValueAtTime(0.08, audioCtx.currentTime);
+
+      whiteNoise.connect(filter);
+      filter.connect(ambientGainNode);
+      ambientGainNode.connect(audioCtx.destination);
+      whiteNoise.start();
+
+      startLofiMusic();
+    }
+
+    function playNote(freq, duration = 1.4) {
+      if (!audioCtx || !isAudioPlaying) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        g.gain.setValueAtTime(0, audioCtx.currentTime);
+        g.gain.linearRampToValueAtTime(0.05, audioCtx.currentTime + 0.1);
+        g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+
+        osc.connect(g);
+        g.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch(e){}
+    }
+
+    function startLofiMusic() {
+      const pentatonic = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33];
+      setInterval(() => {
+        if (!isAudioPlaying) return;
+        const note = pentatonic[Math.floor(Math.random() * pentatonic.length)];
+        playNote(note, 2.0);
+      }, 2200);
+    }
+
+    function toggleAudio() {
+      if (!audioCtx) initAudio();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+
+      isAudioPlaying = !isAudioPlaying;
+      const icon = document.getElementById('icon-audio');
+      if (isAudioPlaying) {
+        if (ambientGainNode) ambientGainNode.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        icon.setAttribute('data-lucide', 'volume-2');
+        showToast("Đã bật âm thanh & nhạc Lofi");
+      } else {
+        if (ambientGainNode) ambientGainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+        icon.setAttribute('data-lucide', 'volume-x');
+        showToast("Đã tắt âm thanh");
+      }
+      lucide.createIcons();
+    }
+
+    function teleportTo(spot) {
+      playerPos.copy(spot.position);
+      showToast(`Đã đến ${spot.name}`);
+    }
+
+    function checkRestSpotProximity() {
+      const prompt = document.getElementById('rest-prompt');
+      let near = false;
+
+      for (let spot of restSpots) {
+        if (playerPos.distanceTo(spot.position) < 5.0) {
+          near = true;
+          activeRestSpot = spot;
+          break;
+        }
+      }
+
+      if (near) prompt.classList.remove('hidden');
+      else {
+        prompt.classList.add('hidden');
+        if (isSitting) isSitting = false;
+      }
+    }
+
+    function toggleSitRest() {
+      if (!activeRestSpot) return;
+      isSitting = !isSitting;
+      showToast(isSitting ? `Thư giãn tại ${activeRestSpot.name}` : `Đã đứng dậy`);
+    }
+
+    function enterPhotoMode() {
+      document.getElementById('ui-layer').classList.add('opacity-0', 'pointer-events-none');
+      document.getElementById('photo-frame').classList.remove('hidden');
+      showToast("Chế Độ Chụp Ảnh Nghệ Thuật");
+    }
+
+    function exitPhotoMode() {
+      document.getElementById('ui-layer').classList.remove('opacity-0', 'pointer-events-none');
+      document.getElementById('photo-frame').classList.add('hidden');
+    }
+
+    function captureScreenshot() {
+      renderer.render(scene, camera);
+      const dataURL = renderer.domElement.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = `Ghibli_Forest_${currentSeasonKey}.png`;
+      link.href = dataURL;
+      link.click();
+      showToast("Đã lưu ảnh!");
+    }
+
+    function showToast(text) {
+      const toast = document.getElementById('toast-message');
+      document.getElementById('toast-text').textContent = text;
+      toast.classList.remove('opacity-0');
+      setTimeout(() => toast.classList.add('opacity-0'), 2500);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const delta = clock.getDelta();
+      const time = clock.getElapsedTime();
+
+      if (autoTimeCycle) {
+        autoTimeTimer += delta;
+        if (autoTimeTimer > 12) {
+          autoTimeTimer = 0;
+          const timeKeys = Object.keys(TIMES_OF_DAY);
+          const nextIndex = (timeKeys.indexOf(currentTimeKey) + 1) % timeKeys.length;
+          setTimeOfDay(timeKeys[nextIndex]);
+        }
+      }
+
+      if (cloudGroup) cloudGroup.rotation.y = time * 0.012;
+
+      kodamaSpirits.forEach(k => {
+        k.mesh.position.y = k.initialY + Math.sin(time * 2 + k.offset) * 0.15;
+        k.mesh.rotation.y = time * 0.5;
+      });
+
+      if (firefliesMesh && firefliesMesh.material && firefliesMesh.material.opacity > 0) {
+        const pos = firefliesMesh.geometry.attributes.position.array;
+        for (let i = 0; i < FIREFLY_COUNT; i++) {
+          pos[i * 3] += fireflyVelocities[i].x + Math.sin(time + i) * 0.01;
+          pos[i * 3 + 1] += fireflyVelocities[i].y + Math.cos(time * 1.5 + i) * 0.008;
+          pos[i * 3 + 2] += fireflyVelocities[i].z + Math.cos(time + i) * 0.01;
+
+          if (pos[i * 3 + 1] < 0.2 || pos[i * 3 + 1] > 8) fireflyVelocities[i].y *= -1;
+        }
+        firefliesMesh.geometry.attributes.position.needsUpdate = true;
+      }
+
+      // Player Movement
+      let moveX = 0, moveZ = 0;
+      if (keysPressed['w'] || keysPressed['arrowup']) moveZ -= 1;
+      if (keysPressed['s'] || keysPressed['arrowdown']) moveZ += 1;
+      if (keysPressed['a'] || keysPressed['arrowleft']) moveX -= 1;
+      if (keysPressed['d'] || keysPressed['arrowright']) moveX += 1;
+
+      if (joystickActive) {
+        moveX = joystickVector.x;
+        moveZ = joystickVector.y;
+      }
+
+      const isMoving = (Math.abs(moveX) > 0.1 || Math.abs(moveZ) > 0.1) && !isSitting;
+
+      if (isMoving) {
+        const moveVector = new THREE.Vector3(moveX, 0, moveZ).normalize();
+        const speed = 8.0 * delta;
+
+        const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), cameraAngleX);
+        const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), cameraAngleX);
+
+        const moveDir = new THREE.Vector3()
+          .addScaledVector(right, moveVector.x)
+          .addScaledVector(forward, -moveVector.z)
+          .normalize();
+
+        playerPos.addScaledVector(moveDir, speed);
+        playerPos.x = Math.max(-75, Math.min(75, playerPos.x));
+        playerPos.z = Math.max(-75, Math.min(75, playerPos.z));
+
+        playerRotation = Math.atan2(moveDir.x, moveDir.z);
+      }
+
+      const targetY = getTerrainHeight(playerPos.x, playerPos.z);
+      playerPos.y = THREE.MathUtils.lerp(playerPos.y, targetY, 0.2);
+
+      if (player) {
+        player.position.copy(playerPos);
+        player.rotation.y = THREE.MathUtils.lerp(player.rotation.y, playerRotation, 0.2);
+
+        if (isMoving) {
+          player.position.y += Math.sin(time * 14) * 0.09;
+        } else if (isSitting) {
+          player.position.y = targetY - 0.2;
+        }
+      }
+
+      // Camera Follow
+      const camDistance = isSitting ? 5.5 : 9.0;
+      const camTargetX = playerPos.x + Math.sin(cameraAngleX) * Math.cos(cameraAngleY) * camDistance;
+      const camTargetY = playerPos.y + Math.sin(cameraAngleY) * camDistance + 1.8;
+      const camTargetZ = playerPos.z + Math.cos(cameraAngleX) * Math.cos(cameraAngleY) * camDistance;
+
+      camera.position.x = THREE.MathUtils.lerp(camera.position.x, camTargetX, 0.08);
+      camera.position.y = THREE.MathUtils.lerp(camera.position.y, camTargetY, 0.08);
+      camera.position.z = THREE.MathUtils.lerp(camera.position.z, camTargetZ, 0.08);
+
+      camera.lookAt(playerPos.x, playerPos.y + 1.2, playerPos.z);
+
+      checkRestSpotProximity();
+      updateParticles();
+
+      renderer.render(scene, camera);
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    window.onload = () => {
+      initScene();
+      lucide.createIcons();
+      setTimeout(() => {
+        document.getElementById('modal-help').classList.remove('hidden');
+      }, 300);
+    };
+  </script>
+</body>
+</html>
